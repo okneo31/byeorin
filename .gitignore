@@ -1,0 +1,29 @@
+node_modules/
+dist/
+build/
+.turbo/
+.next/
+.cache/
+.tsbuildinfo
+*.tsbuildinfo
+coverage/
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+*.log
+.pnpm-store/
+
+# Secrets / keys — NEVER commit
+*.pem
+*.key
+*.keystore
+mnemonic.txt
+seed.txt
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.shared.json
+.idea/

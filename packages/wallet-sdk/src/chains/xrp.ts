@@ -1,0 +1,41 @@
+import type { Address, TransferIntent, TxHash } from '../types.js';
+import type { ChainAdapter, TxContext } from './chain.js';
+
+const TODO = (m: string): never => {
+  throw new Error(`xrp: ${m} not implemented (Task #1 P0 — Adapter 구현 예정)`);
+};
+
+export class XrpAdapter implements ChainAdapter {
+  readonly id = 'xrp:mainnet';
+  readonly displayName = 'XRP Ledger';
+  readonly curve = 'secp256k1' as const;
+  readonly coinType = 144;
+
+  derivationPath(account = 0, index = 0): string {
+    return `m/44'/${this.coinType}'/${account}'/0/${index}`;
+  }
+
+  pubkeyToAddress(_pubkey: Uint8Array): Address {
+    return TODO('pubkeyToAddress (base58 r-address)');
+  }
+
+  async getBalance(_address: Address): Promise<bigint> {
+    return TODO('getBalance');
+  }
+
+  async buildTransfer(_intent: TransferIntent, _ctx: TxContext): Promise<unknown> {
+    return TODO('buildTransfer (Payment tx)');
+  }
+
+  async serializeForSigning(_tx: unknown): Promise<Uint8Array> {
+    return TODO('serializeForSigning');
+  }
+
+  async applySignature(_tx: unknown, _signature: Uint8Array): Promise<unknown> {
+    return TODO('applySignature');
+  }
+
+  async broadcast(_tx: unknown): Promise<TxHash> {
+    return TODO('broadcast (submit_blob)');
+  }
+}
