@@ -8,8 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Wallet } from '@nodong/wallet-sdk';
-import { getAccount, getWallet } from '../store';
+import { walletStore } from '../store';
 import { colors, radius, spacing } from '../theme';
 import { parseTtl } from '../units';
 
@@ -27,9 +26,7 @@ export function Send({ onBack }: Props) {
   const onSubmit = async () => {
     setError(null);
     setTxHash(null);
-    const account = getAccount();
-    const wallet = getWallet();
-    if (!account || !wallet) {
+    if (!walletStore.isUnlocked()) {
       setError('지갑이 잠겨 있습니다.');
       return;
     }
@@ -51,10 +48,7 @@ export function Send({ onBack }: Props) {
 
     setBusy(true);
     try {
-      const hash = await (wallet as Wallet).transfer(account, {
-        to: to.trim(),
-        amount: value,
-      });
+      const hash = await walletStore.transfer({ to: to.trim(), amount: value });
       setTxHash(hash);
     } catch (e) {
       setError(e instanceof Error ? e.message : '전송 실패');

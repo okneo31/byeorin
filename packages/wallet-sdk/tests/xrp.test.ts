@@ -72,7 +72,7 @@ describe('XrpAdapter (offline)', () => {
     ).rejects.toThrow(/amount must be >= 0/);
   });
 
-  it('rejects non-65-byte signatures in applySignature', async () => {
+  it('rejects non-65-byte signatures in applySignatures', async () => {
     const xrp = new XrpAdapter();
     const fakeTx = {
       tx: {
@@ -85,7 +85,7 @@ describe('XrpAdapter (offline)', () => {
         Sequence: 1,
       },
     };
-    await expect(xrp.applySignature(fakeTx, new Uint8Array(32))).rejects.toThrow(
+    await expect(xrp.applySignatures(fakeTx, [new Uint8Array(32)])).rejects.toThrow(
       /signature must be 65 bytes/,
     );
   });

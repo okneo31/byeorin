@@ -10,7 +10,7 @@ import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha512 } from '@noble/hashes/sha512';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import type { Address, TransferIntent, TxHash } from '../types.js';
-import type { ChainAdapter, TxContext } from './chain.js';
+import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
 
 export type XrpNetwork = 'mainnet' | 'testnet';
 
@@ -89,22 +89,26 @@ export class XrpAdapter implements ChainAdapter<XrpUnsignedTx, XrpSignedTx> {
     return { tx };
   }
 
-  async serializeForSigning(tx: XrpUnsignedTx): Promise<Uint8Array> {
+  async signRequests(tx: XrpUnsignedTx): Promise<SignRequest[]> {
     // XRPL ECDSA-secp256k1 signs `SHA512(encodeForSigning)[:32]` (the "half"
     // SHA-512 used by rippled). Our SoftSigner does NOT prehash, so this
     // method must return the 32-byte digest, not the raw signing pre-image.
     const hex = encodeForSigning(tx.tx);
     const pre = hexToBytes(hex);
-    return sha512(pre).slice(0, 32);
+    return [{ message: sha512(pre).slice(0, 32), prehashed: true }];
   }
 
-  async applySignature(tx: XrpUnsignedTx, signature: Uint8Array): Promise<XrpSignedTx> {
+  async applySignatures(tx: XrpUnsignedTx, signatures: Uint8Array[]): Promise<XrpSignedTx> {
+    if (signatures.length !== 1) {
+      throw new Error(`xrp: expected 1 signature, got ${signatures.length}`);
+    }
+    const signature = signatures[0]!;
     if (signature.length !== 65) {
       throw new Error(`xrp: signature must be 65 bytes (r||s||recovery), got ${signature.length}`);
     }
     const signerPubKey = tx.tx.SigningPubKey;
     if (!signerPubKey) {
-      throw new Error('xrp: SigningPubKey missing from tx; set it before applySignature');
+      throw new Error('xrp: SigningPubKey missing from tx; set it before applySignatures');
     }
     const r = bytesToBigInt(signature.subarray(0, 32));
     const s = bytesToBigInt(signature.subarray(32, 64));
@@ -153,7 +157,7 @@ export class XrpAdapter implements ChainAdapter<XrpUnsignedTx, XrpSignedTx> {
 
   /**
    * Helper for callers that need to set the SigningPubKey on a built tx
-   * before calling serializeForSigning. The XRPL serialization includes
+   * before calling signRequests. The XRPL serialization includes
    * SigningPubKey, so it must be present in both signing and final blobs.
    */
   attachSigningPubKey(tx: XrpUnsignedTx, pubkey: Uint8Array): XrpUnsignedTx {

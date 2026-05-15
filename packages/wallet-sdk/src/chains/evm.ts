@@ -17,7 +17,7 @@ import {
 import { publicKeyToAddress } from 'viem/accounts';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import type { Address, TransferIntent, TxHash } from '../types.js';
-import type { ChainAdapter, TxContext } from './chain.js';
+import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
 
 export type EvmUnsignedTx =
   | (TransactionSerializableLegacy & { type: 'legacy' })
@@ -102,12 +102,16 @@ export class EvmAdapter implements ChainAdapter<EvmUnsignedTx, EvmSignedTx> {
     };
   }
 
-  async serializeForSigning(tx: EvmUnsignedTx): Promise<Uint8Array> {
+  async signRequests(tx: EvmUnsignedTx): Promise<SignRequest[]> {
     const serialized = serializeTransaction(tx);
-    return hexToBytes(keccak256(serialized));
+    return [{ message: hexToBytes(keccak256(serialized)), prehashed: true }];
   }
 
-  async applySignature(tx: EvmUnsignedTx, signature: Uint8Array): Promise<EvmSignedTx> {
+  async applySignatures(tx: EvmUnsignedTx, signatures: Uint8Array[]): Promise<EvmSignedTx> {
+    if (signatures.length !== 1) {
+      throw new Error(`evm: expected 1 signature, got ${signatures.length}`);
+    }
+    const signature = signatures[0]!;
     if (signature.length !== 65) {
       throw new Error(`evm: signature must be 65 bytes, got ${signature.length}`);
     }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { WalletAccount } from '@nodong/wallet-sdk';
 import { AmountDisplay, Button, Card } from '@nodong/design-system';
-import { getAccount, getAdapter } from '../wallet-store.js';
+import { walletStore } from '../wallet-store.js';
 
 interface Props {
   unlocked: boolean;
@@ -31,7 +31,21 @@ const ASSETS: readonly AssetCard[] = [
 ];
 
 export function Portfolio({ unlocked }: Props) {
-  const account: WalletAccount | null = unlocked ? getAccount() : null;
+  const [account, setAccount] = useState<WalletAccount | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!unlocked || !walletStore.isUnlocked()) {
+      setAccount(null);
+      return;
+    }
+    void walletStore.getAccount().then((a) => {
+      if (!cancelled) setAccount(a);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [unlocked]);
 
   return (
     <div className="nd-view">
@@ -87,7 +101,8 @@ function LiveTtlBalance({ address, decimals }: { address: string; decimals: numb
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getAdapter()
+    walletStore
+      .getDefaultAdapter()
       .getBalance(address)
       .then((b) => {
         if (cancelled) return;

@@ -11,7 +11,7 @@ import {
 } from '@cosmjs/proto-signing';
 import { defaultRegistryTypes, StargateClient } from '@cosmjs/stargate';
 import type { Address, TransferIntent, TxHash } from '../types.js';
-import type { ChainAdapter, TxContext } from './chain.js';
+import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
 
 export interface CosmosAdapterOptions {
   /** Bech32 chain id, e.g. 'cosmoshub-4', 'osmosis-1', 'celestia', 'pacific-1', 'injective-1'. */
@@ -208,9 +208,9 @@ export class CosmosAdapter
    * Hardware signers that follow the same "sign whatever I'm given" contract
    * will produce a correct signature for Cosmos thanks to this pre-hash.
    */
-  async serializeForSigning(tx: CosmosUnsignedTx): Promise<Uint8Array> {
+  async signRequests(tx: CosmosUnsignedTx): Promise<SignRequest[]> {
     const signBytes = makeSignBytes(tx.signDoc);
-    return sha256(signBytes);
+    return [{ message: sha256(signBytes), prehashed: true }];
   }
 
   /**
@@ -219,10 +219,14 @@ export class CosmosAdapter
    * to low-S — Cosmos chains reject high-S sigs. noble already gives lowS by
    * default, but we defend-in-depth for HW signers.
    */
-  async applySignature(
+  async applySignatures(
     tx: CosmosUnsignedTx,
-    signature: Uint8Array,
+    signatures: Uint8Array[],
   ): Promise<CosmosSignedTx> {
+    if (signatures.length !== 1) {
+      throw new Error(`cosmos: expected 1 signature, got ${signatures.length}`);
+    }
+    const signature = signatures[0]!;
     let sig64: Uint8Array;
     if (signature.length === 65) {
       sig64 = signature.slice(0, 64);

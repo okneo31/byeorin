@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
+import type { WalletAccount } from '@nodong/wallet-sdk';
 import { AddressDisplay, AmountDisplay, Button, Card } from '@nodong/design-system';
-import { getAccount, getAdapter } from '../wallet-store.js';
+import { walletStore } from '../wallet-store.js';
 
 interface Props {
   onSend: () => void;
@@ -9,26 +10,35 @@ interface Props {
 }
 
 export function Account({ onSend, onLock }: Props) {
-  const account = getAccount();
+  const [account, setAccount] = useState<WalletAccount | null>(null);
   const [balance, setBalance] = useState<bigint | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!account) {
+    let cancelled = false;
+    if (!walletStore.isUnlocked()) {
       onLock();
       return;
     }
-    let cancelled = false;
     setLoading(true);
     setError(null);
 
     void (async () => {
       try {
-        const adapter = getAdapter();
-        const bal = await adapter.getBalance(account.address);
+        const acc = await walletStore.getAccount();
+        if (cancelled) return;
+        setAccount(acc);
+        const bal = await walletStore.getDefaultAdapter().getBalance(acc.address);
         if (!cancelled) setBalance(bal);
+
+        const url = await QRCode.toDataURL(acc.address, {
+          margin: 1,
+          width: 240,
+          color: { dark: '#0a0a0a', light: '#ffffff' },
+        });
+        if (!cancelled) setQrDataUrl(url);
       } catch (e) {
         if (!cancelled) {
           setError(
@@ -40,22 +50,10 @@ export function Account({ onSend, onLock }: Props) {
       }
     })();
 
-    void QRCode.toDataURL(account.address, {
-      margin: 1,
-      width: 240,
-      color: { dark: '#0a0a0a', light: '#ffffff' },
-    })
-      .then((url) => {
-        if (!cancelled) setQrDataUrl(url);
-      })
-      .catch(() => {
-        /* ignore QR errors */
-      });
-
     return () => {
       cancelled = true;
     };
-  }, [account, onLock]);
+  }, [onLock]);
 
   if (!account) return null;
 

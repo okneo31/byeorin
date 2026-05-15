@@ -107,7 +107,7 @@ describe('CosmosAdapter — offline', () => {
     );
   });
 
-  it('serializeForSigning returns a 32-byte sha256 digest', async () => {
+  it('signRequests returns a single 32-byte prehashed sha256 digest', async () => {
     // We can build a SignDoc-shaped tx directly; we don't need a live RPC here.
     // Synthesise minimal bodyBytes / authInfoBytes / signDoc via private path:
     // simpler — just smoke-test the hash size via a forged unsigned tx.
@@ -121,7 +121,7 @@ describe('CosmosAdapter — offline', () => {
         authInfoBytes: new Uint8Array([4, 5, 6]),
         chainId: 'cosmoshub-4',
         accountNumber: 0n,
-      } as unknown as Parameters<typeof cosmosHub.serializeForSigning>[0]['signDoc'],
+      } as unknown as Parameters<typeof cosmosHub.signRequests>[0]['signDoc'],
       bodyBytes: new Uint8Array([1, 2, 3]),
       authInfoBytes: new Uint8Array([4, 5, 6]),
       chainId: 'cosmoshub-4',
@@ -129,15 +129,17 @@ describe('CosmosAdapter — offline', () => {
       signerInfo: { pubKey: acc.publicKey, address: acc.address },
     };
 
-    const digest = await cosmosHub.serializeForSigning(forged);
-    expect(digest).toBeInstanceOf(Uint8Array);
-    expect(digest.length).toBe(32);
+    const requests = await cosmosHub.signRequests(forged);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.message).toBeInstanceOf(Uint8Array);
+    expect(requests[0]!.message.length).toBe(32);
+    expect(requests[0]!.prehashed).toBe(true);
   });
 
-  it('applySignature builds a TxRaw and uppercase-hex sha256 hash', async () => {
+  it('applySignatures builds a TxRaw and uppercase-hex sha256 hash', async () => {
     const fakeUnsigned = {
       signDoc: {} as unknown as Parameters<
-        typeof cosmosHub.applySignature
+        typeof cosmosHub.applySignatures
       >[0]['signDoc'],
       bodyBytes: new Uint8Array([10, 20, 30]),
       authInfoBytes: new Uint8Array([40, 50, 60]),
@@ -152,7 +154,7 @@ describe('CosmosAdapter — offline', () => {
     sig[63] = 1;
     sig[64] = 0;
 
-    const signed = await cosmosHub.applySignature(fakeUnsigned, sig);
+    const signed = await cosmosHub.applySignatures(fakeUnsigned, [sig]);
     expect(signed.txBytes).toBeInstanceOf(Uint8Array);
     expect(signed.txBytes.length).toBeGreaterThan(
       fakeUnsigned.bodyBytes.length + fakeUnsigned.authInfoBytes.length,
@@ -160,10 +162,10 @@ describe('CosmosAdapter — offline', () => {
     expect(signed.hash).toMatch(/^[0-9A-F]{64}$/);
   });
 
-  it('applySignature rejects non-64/65-byte signatures', async () => {
+  it('applySignatures rejects non-64/65-byte signatures', async () => {
     const fakeUnsigned = {
       signDoc: {} as unknown as Parameters<
-        typeof cosmosHub.applySignature
+        typeof cosmosHub.applySignatures
       >[0]['signDoc'],
       bodyBytes: new Uint8Array([1]),
       authInfoBytes: new Uint8Array([2]),
@@ -172,7 +174,7 @@ describe('CosmosAdapter — offline', () => {
       signerInfo: { pubKey: new Uint8Array(33), address: 'cosmos1...' },
     };
     await expect(
-      cosmosHub.applySignature(fakeUnsigned, new Uint8Array(32)),
+      cosmosHub.applySignatures(fakeUnsigned, [new Uint8Array(32)]),
     ).rejects.toThrow(/signature must be 64 or 65 bytes/);
   });
 });

@@ -115,18 +115,16 @@ describe('BtcAdapter — buildTransfer with fixture UTXOs', () => {
       expect(unsigned.inputUtxos).toHaveLength(1);
       expect(unsigned.inputUtxos[0]!.value).toBe(150_000n);
 
-      // signingDigests should produce one 32-byte digest matching serializeForSigning().
-      const digests = adapter.signingDigests(unsigned);
-      expect(digests).toHaveLength(1);
-      expect(digests[0]!).toBeInstanceOf(Uint8Array);
-      expect(digests[0]!.length).toBe(32);
+      // signRequests should produce one 32-byte prehashed digest.
+      const requests = await adapter.signRequests(unsigned);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]!.message).toBeInstanceOf(Uint8Array);
+      expect(requests[0]!.message.length).toBe(32);
+      expect(requests[0]!.prehashed).toBe(true);
 
-      const single = await adapter.serializeForSigning(unsigned);
-      expect(single).toEqual(digests[0]);
-
-      // Sign and apply via the standard single-input path.
-      const sig = await signer.sign(single);
-      const signed = await adapter.applySignature(unsigned, sig);
+      // Sign and apply via the unified multi-signature path.
+      const sig = await signer.sign(requests[0]!.message);
+      const signed = await adapter.applySignatures(unsigned, [sig]);
       expect(signed.txid).toMatch(/^[0-9a-f]{64}$/);
       expect(signed.hex).toMatch(/^[0-9a-f]+$/);
     } finally {
@@ -137,7 +135,7 @@ describe('BtcAdapter — buildTransfer with fixture UTXOs', () => {
     }
   });
 
-  it('serializeForSigning throws for multi-input txs', async () => {
+  it('multi-input transfers work via signRequests/applySignatures', async () => {
     const adapter = new BtcAdapter();
     const seed = mnemonicToSeed(KNOWN_MNEMONIC);
     const { privateKey, publicKey } = deriveSecp256k1(seed, "m/84'/0'/0'/0/0");
@@ -163,16 +161,78 @@ describe('BtcAdapter — buildTransfer with fixture UTXOs', () => {
       { sender, signer },
     );
     expect(unsigned.tx.inputsLength).toBeGreaterThan(1);
-    await expect(adapter.serializeForSigning(unsigned)).rejects.toThrow(/multi-input/);
-    await expect(adapter.applySignature(unsigned, new Uint8Array(65))).rejects.toThrow(
-      /applySignatures/,
-    );
 
-    // Multi-input applySignatures path works.
-    const digests = adapter.signingDigests(unsigned);
-    const sigs = await Promise.all(digests.map((d) => signer.sign(d)));
+    // signRequests must emit one request per input (no throw on multi-input).
+    const requests = await adapter.signRequests(unsigned);
+    expect(requests.length).toBe(unsigned.tx.inputsLength);
+    expect(requests.length).toBeGreaterThan(1);
+    for (const req of requests) {
+      expect(req.message).toBeInstanceOf(Uint8Array);
+      expect(req.message.length).toBe(32);
+      expect(req.prehashed).toBe(true);
+    }
+
+    // Sign each request and feed them as an ordered array — same shape
+    // Wallet.transfer takes.
+    const sigs = await Promise.all(requests.map((r) => signer.sign(r.message)));
     const signed = await adapter.applySignatures(unsigned, sigs);
     expect(signed.txid).toMatch(/^[0-9a-f]{64}$/);
+    expect(signed.hex).toMatch(/^[0-9a-f]+$/);
+
+    // Mismatched signature count must be rejected.
+    await expect(
+      adapter.applySignatures(unsigned, sigs.slice(0, 1)),
+    ).rejects.toThrow(/signature count/);
+  });
+
+  it('Wallet.transfer-shaped flow signs and finalises a multi-input tx end-to-end', async () => {
+    // Mirrors what Wallet.transfer does (build -> signRequests -> sign each
+    // -> applySignatures), without broadcast. Proves BTC multi-input is
+    // no longer broken through the public API.
+    const adapter = new BtcAdapter();
+    const seed = mnemonicToSeed(KNOWN_MNEMONIC);
+    const { privateKey, publicKey } = deriveSecp256k1(seed, "m/84'/0'/0'/0/0");
+    const signer = new SoftSigner({ curve: 'secp256k1', privateKey });
+    const sender = adapter.pubkeyToAddress(publicKey);
+
+    const { p2wpkh, NETWORK } = await import('@scure/btc-signer');
+    const scriptHex = Buffer.from(p2wpkh(publicKey, NETWORK).script).toString('hex');
+
+    // Two equal-sized UTXOs neither of which can cover the spend alone.
+    const fixture = [
+      { txid: 'ab'.repeat(32), vout: 0, value: 40_000n, scriptPubKey: scriptHex },
+      { txid: 'cd'.repeat(32), vout: 1, value: 40_000n, scriptPubKey: scriptHex },
+    ];
+    (adapter as unknown as { fetchUtxos: typeof adapter.fetchUtxos }).fetchUtxos =
+      async () => fixture;
+    (adapter as unknown as { fetchFeeRate: typeof adapter.fetchFeeRate }).fetchFeeRate =
+      async () => 5;
+
+    // 1. build
+    const unsigned = await adapter.buildTransfer(
+      { to: 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu', amount: 60_000n },
+      { sender, signer },
+    );
+    expect(unsigned.tx.inputsLength).toBe(2);
+
+    // 2. signRequests — one per input, each prehashed sighash.
+    const requests = await adapter.signRequests(unsigned);
+    expect(requests.length).toBe(2);
+    expect(new Set(requests.map((r) => Buffer.from(r.message).toString('hex'))).size).toBe(2);
+
+    // 3. sign each in order (this is exactly Wallet.transfer's loop).
+    const signatures: Uint8Array[] = [];
+    for (const req of requests) {
+      signatures.push(await signer.sign(req.message));
+    }
+
+    // 4. applySignatures produces a finalised tx with hex + txid.
+    const signed = await adapter.applySignatures(unsigned, signatures);
+    expect(signed.hex).toMatch(/^[0-9a-f]+$/);
+    expect(signed.txid).toMatch(/^[0-9a-f]{64}$/);
+    // Witness data must be embedded — signed hex strictly longer than the unsigned
+    // pre-witness form.
+    expect(signed.hex.length).toBeGreaterThan(200);
   });
 
   it('p2tr buildTransfer is not implemented in v0.1', async () => {

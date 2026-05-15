@@ -1,0 +1,30 @@
+{
+  "name": "@nodong/shell-core",
+  "version": "0.0.1",
+  "description": "노동자의 지갑 — 앱 셸 공용 코어 (월릿 라이프사이클 + 세션 스토어)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist .turbo .tsbuildinfo"
+  },
+  "dependencies": {
+    "@nodong/wallet-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.1",
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.3"
+  }
+}

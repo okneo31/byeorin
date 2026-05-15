@@ -8,7 +8,7 @@ import {
 } from '@solana/web3.js';
 import { base58 } from '@scure/base';
 import type { Address, TransferIntent, TxHash } from '../types.js';
-import type { ChainAdapter, TxContext } from './chain.js';
+import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
 
 export type SolanaNetwork = 'mainnet-beta' | 'devnet' | 'testnet';
 
@@ -98,16 +98,23 @@ export class SolanaAdapter
     return { tx };
   }
 
-  async serializeForSigning(tx: SolanaUnsignedTx): Promise<Uint8Array> {
+  async signRequests(tx: SolanaUnsignedTx): Promise<SignRequest[]> {
     // The Ed25519 signature target is the compiled message bytes,
-    // not the full serialized transaction.
-    return new Uint8Array(tx.tx.serializeMessage());
+    // not the full serialized transaction. Ed25519 hashes internally
+    // (prehashed=false), so we hand over the raw message.
+    return [
+      { message: new Uint8Array(tx.tx.serializeMessage()), prehashed: false },
+    ];
   }
 
-  async applySignature(
+  async applySignatures(
     tx: SolanaUnsignedTx,
-    signature: Uint8Array,
+    signatures: Uint8Array[],
   ): Promise<SolanaSignedTx> {
+    if (signatures.length !== 1) {
+      throw new Error(`solana: expected 1 signature, got ${signatures.length}`);
+    }
+    const signature = signatures[0]!;
     if (signature.length !== 64) {
       throw new Error(
         `solana: ed25519 signature must be 64 bytes, got ${signature.length}`,

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { WalletAccount } from '@nodong/wallet-sdk';
 import { AddressDisplay, Button, Card, Input } from '@nodong/design-system';
-import { getAccount } from '../wallet-store.js';
+import { walletStore } from '../wallet-store.js';
 
 interface Props {
   unlocked: boolean;
@@ -8,7 +9,7 @@ interface Props {
 }
 
 export function Send({ unlocked, onGoWallet }: Props) {
-  const account = getAccount();
+  const [account, setAccount] = useState<WalletAccount | null>(null);
   const [to, setTo] = useState('');
   const [amount, setAmount] = useState('');
   const [toError, setToError] = useState<string | null>(null);
@@ -16,6 +17,20 @@ export function Send({ unlocked, onGoWallet }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!unlocked || !walletStore.isUnlocked()) {
+      setAccount(null);
+      return;
+    }
+    void walletStore.getAccount().then((a) => {
+      if (!cancelled) setAccount(a);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [unlocked]);
 
   if (!unlocked || !account) {
     return (
@@ -56,15 +71,7 @@ export function Send({ unlocked, onGoWallet }: Props) {
     }
     setSending(true);
     try {
-      const acc = account;
-      const unsigned = await acc.adapter.buildTransfer(
-        { to: to.trim(), amount: value },
-        { sender: acc.address, signer: acc.signer },
-      );
-      const hash = await acc.adapter.serializeForSigning(unsigned);
-      const sig = await acc.signer.sign(hash);
-      const signed = await acc.adapter.applySignature(unsigned, sig);
-      const finalHash = await acc.adapter.broadcast(signed);
+      const finalHash = await walletStore.transfer({ to: to.trim(), amount: value });
       setTxHash(finalHash);
       setAmount('');
     } catch (e) {

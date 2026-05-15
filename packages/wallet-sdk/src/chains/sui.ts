@@ -3,7 +3,7 @@ import { Transaction } from '@mysten/sui/transactions';
 import { messageWithIntent } from '@mysten/sui/cryptography';
 import { blake2b } from '@noble/hashes/blake2b';
 import type { Address, TransferIntent, TxHash } from '../types.js';
-import type { ChainAdapter, TxContext } from './chain.js';
+import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
 
 export type SuiNetwork = 'mainnet' | 'testnet' | 'devnet';
 
@@ -98,17 +98,24 @@ export class SuiAdapter implements ChainAdapter<SuiUnsignedTx, SuiSignedTx> {
     return { txBytes, pubkey };
   }
 
-  async serializeForSigning(tx: SuiUnsignedTx): Promise<Uint8Array> {
+  async signRequests(tx: SuiUnsignedTx): Promise<SignRequest[]> {
     // Wrap TransactionData with Sui's IntentMessage(scope='TransactionData',
     // version=V0, app=Sui), then blake2b256-hash for the Ed25519 message.
+    // The 32-byte blake2b digest is the Ed25519 message — flagged
+    // prehashed=true for consistency (informational only; Ed25519's internal
+    // hash of a 32-byte digest is harmless).
     const intentMsg = messageWithIntent('TransactionData', tx.txBytes);
-    return blake2b(intentMsg, { dkLen: 32 });
+    return [{ message: blake2b(intentMsg, { dkLen: 32 }), prehashed: true }];
   }
 
-  async applySignature(
+  async applySignatures(
     tx: SuiUnsignedTx,
-    signature: Uint8Array,
+    signatures: Uint8Array[],
   ): Promise<SuiSignedTx> {
+    if (signatures.length !== 1) {
+      throw new Error(`sui: expected 1 signature, got ${signatures.length}`);
+    }
+    const signature = signatures[0]!;
     if (signature.length !== 64) {
       throw new Error(
         `sui: ed25519 signature must be 64 bytes, got ${signature.length}`,

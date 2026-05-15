@@ -1,17 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  EvmAdapter,
-  TTL_CHAIN,
-  Wallet,
-  createMnemonic,
-  isValidMnemonic,
-} from '@nodong/wallet-sdk';
-import {
-  clearSession,
-  readSession,
-  writeSession,
-  type SessionState,
-} from '../../src/lib/session.js';
+import { createMnemonic } from '@nodong/wallet-sdk';
+import { walletStore } from '../../src/lib/wallet-service.js';
 import {
   listApprovedOrigins,
   revokeOrigin,
@@ -20,61 +9,62 @@ import {
 
 // 노동자의 지갑 — 확장 팝업.
 // 셸 수준: 없음 → 생성/복구 → 상태표시 → 로그아웃.
-// v0.1 은 평문 니모닉을 chrome.storage.session(휘발) 에만 저장.
+// v0.1: 평문 니모닉을 chrome.storage.session(휘발) 에만 저장 — 모든 라이프사이클은
+//       @nodong/shell-core 의 WalletStore 가 담당.
 // TODO(v0.2): passphrase + scrypt + AES-GCM keystore 도입.
 
 type Mode = 'home' | 'create' | 'restore';
 
 export function App() {
-  const [session, setSession] = useState<SessionState | null>(null);
+  const [address, setAddress] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>('home');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 부팅 시 chrome.storage.session 으로부터 자동 복원 시도(extension 은 허용).
   useEffect(() => {
-    readSession().then((s) => {
-      setSession(s);
-      setLoading(false);
-    });
+    let cancelled = false;
+    void (async () => {
+      await walletStore.tryAutoRestore();
+      if (walletStore.isUnlocked()) {
+        const acc = await walletStore.getAccount();
+        if (!cancelled) setAddress(acc.address);
+      }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  async function handleCreate() {
+  async function handleCreate(): Promise<void> {
     setError(null);
     try {
       const mnemonic = createMnemonic(128, 'english');
-      const acc = Wallet.fromMnemonic({ mnemonic }).account(new EvmAdapter({ chain: TTL_CHAIN }));
-      const next: SessionState = { mnemonic, address: acc.address };
-      await writeSession(next);
-      setSession(next);
+      await walletStore.unlock(mnemonic);
+      const acc = await walletStore.getAccount();
+      setAddress(acc.address);
       setMode('home');
     } catch (e) {
       setError((e as Error).message);
     }
   }
 
-  async function handleRestore(mnemonic: string) {
+  async function handleRestore(mnemonic: string): Promise<void> {
     setError(null);
     try {
-      const trimmed = mnemonic.trim().replace(/\s+/g, ' ');
-      if (!isValidMnemonic(trimmed, 'english')) {
-        setError('유효하지 않은 니모닉입니다');
-        return;
-      }
-      const acc = Wallet.fromMnemonic({ mnemonic: trimmed }).account(
-        new EvmAdapter({ chain: TTL_CHAIN }),
-      );
-      const next: SessionState = { mnemonic: trimmed, address: acc.address };
-      await writeSession(next);
-      setSession(next);
+      await walletStore.unlock(mnemonic);
+      const acc = await walletStore.getAccount();
+      setAddress(acc.address);
       setMode('home');
     } catch (e) {
       setError((e as Error).message);
     }
   }
 
-  async function handleLogout() {
-    await clearSession();
-    setSession(null);
+  async function handleLogout(): Promise<void> {
+    await walletStore.lock();
+    setAddress(null);
     setMode('home');
   }
 
@@ -91,11 +81,11 @@ export function App() {
     <main className="popup">
       <header className="brand">노동자의 지갑</header>
 
-      {session ? (
+      {address ? (
         <>
           <section className="card">
             <p className="muted small">TTL · chainId 7777</p>
-            <p className="addr" title={session.address}>{shortenAddress(session.address)}</p>
+            <p className="addr" title={address}>{shortenAddress(address)}</p>
             <button className="btn-ghost" onClick={handleLogout}>
               로그아웃
             </button>
@@ -108,7 +98,7 @@ export function App() {
       ) : mode === 'home' ? (
         <section className="card">
           <p>지갑이 없습니다.</p>
-          <button className="btn-primary" onClick={() => setMode('create')}>
+          <button className="btn-primary" onClick={handleCreate}>
             새 지갑 만들기
           </button>
           <button className="btn-ghost" onClick={() => setMode('restore')}>

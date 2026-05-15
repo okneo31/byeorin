@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { createMnemonic } from '@nodong/wallet-sdk';
-import { setMnemonic } from '../store';
+import { walletStore } from '../store';
 import { colors, radius, spacing } from '../theme';
 
 type Mode = 'choose' | 'create' | 'recover';
@@ -47,12 +47,14 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
   const [error, setError] = useState<string | null>(null);
 
   const onConfirm = () => {
-    try {
-      setMnemonic(mnemonic);
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '지갑 생성에 실패했습니다.');
-    }
+    void (async () => {
+      try {
+        await walletStore.unlock(mnemonic);
+        onDone();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : '지갑 생성에 실패했습니다.');
+      }
+    })();
   };
 
   return (
@@ -101,12 +103,14 @@ function RecoverFlow({ onDone, onBack }: { onDone: () => void; onBack: () => voi
 
   const onSubmit = () => {
     setError(null);
-    try {
-      setMnemonic(input);
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '복구에 실패했습니다.');
-    }
+    void (async () => {
+      try {
+        await walletStore.unlock(input);
+        onDone();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : '복구에 실패했습니다.');
+      }
+    })();
   };
 
   const wordCount = input.trim().split(/\s+/).filter(Boolean).length;

@@ -11,7 +11,7 @@ import {
 } from '@aptos-labs/ts-sdk';
 import { sha3_256 } from '@noble/hashes/sha3';
 import type { Address, TransferIntent, TxHash } from '../types.js';
-import type { ChainAdapter, TxContext } from './chain.js';
+import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
 
 export type AptosNetwork = 'mainnet' | 'testnet' | 'devnet';
 
@@ -123,17 +123,27 @@ export class AptosAdapter implements ChainAdapter<AptosUnsignedTx, AptosSignedTx
     return { rawTxn, senderPubkey };
   }
 
-  async serializeForSigning(tx: AptosUnsignedTx): Promise<Uint8Array> {
-    // generateSigningMessageForTransaction returns the bytes that Ed25519
-    // signs directly (Aptos applies sha3-256 inside its TX prehash; the
-    // returned blob includes the `APTOS::RawTransaction` domain separator).
-    return generateSigningMessageForTransaction(tx.rawTxn);
+  async signRequests(tx: AptosUnsignedTx): Promise<SignRequest[]> {
+    // generateSigningMessageForTransaction returns the domain-prefixed bytes
+    // that Ed25519 signs directly (Aptos applies sha3-256 inside its TX
+    // prehash; the returned blob includes the `APTOS::RawTransaction`
+    // domain separator). Ed25519 hashes internally — prehashed=false.
+    return [
+      {
+        message: generateSigningMessageForTransaction(tx.rawTxn),
+        prehashed: false,
+      },
+    ];
   }
 
-  async applySignature(
+  async applySignatures(
     tx: AptosUnsignedTx,
-    signature: Uint8Array,
+    signatures: Uint8Array[],
   ): Promise<AptosSignedTx> {
+    if (signatures.length !== 1) {
+      throw new Error(`aptos: expected 1 signature, got ${signatures.length}`);
+    }
+    const signature = signatures[0]!;
     if (signature.length !== 64) {
       throw new Error(
         `aptos: ed25519 signature must be 64 bytes, got ${signature.length}`,

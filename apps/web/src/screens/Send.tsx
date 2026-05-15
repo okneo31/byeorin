@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { parseUnits } from 'viem';
 import { Button, Card, Input } from '@nodong/design-system';
-import { getAccount, getWallet } from '../wallet-store.js';
+import { walletStore } from '../wallet-store.js';
 
 interface Props {
   onBack: () => void;
@@ -28,11 +28,20 @@ export function Send({ onBack }: Props) {
   const [to, setTo] = useState('');
   const [amount, setAmount] = useState('');
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
+  const [senderAddress, setSenderAddress] = useState<string | null>(null);
 
-  const account = getAccount();
-  const wallet = getWallet();
+  useEffect(() => {
+    let cancelled = false;
+    if (!walletStore.isUnlocked()) return;
+    void walletStore.getAccount().then((acc) => {
+      if (!cancelled) setSenderAddress(acc.address);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  if (!account || !wallet) {
+  if (!walletStore.isUnlocked()) {
     return (
       <div>
         <h1 className="nd-h1">송금</h1>
@@ -73,7 +82,7 @@ export function Send({ onBack }: Props) {
 
     setStatus({ kind: 'pending' });
     try {
-      const hash = await wallet.transfer(account, {
+      const hash = await walletStore.transfer({
         to: trimmedTo,
         amount: value,
       });
@@ -85,6 +94,9 @@ export function Send({ onBack }: Props) {
       });
     }
   };
+
+  // senderAddress 는 송신자 표시용일 뿐 송금 실행에는 walletStore.transfer 가 자체 사용한다.
+  void senderAddress;
 
   return (
     <div>

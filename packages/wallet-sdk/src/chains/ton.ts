@@ -12,7 +12,7 @@ import {
   type MessageRelaxed,
 } from '@ton/ton';
 import type { Address, TransferIntent, TxHash } from '../types.js';
-import type { ChainAdapter, TxContext } from './chain.js';
+import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
 
 export type TonNetwork = 'mainnet' | 'testnet';
 
@@ -162,15 +162,23 @@ export class TonAdapter implements ChainAdapter<TonUnsignedTx, TonSignedTx> {
     return { signingMessage, pubkey, seqno };
   }
 
-  async serializeForSigning(tx: TonUnsignedTx): Promise<Uint8Array> {
+  async signRequests(tx: TonUnsignedTx): Promise<SignRequest[]> {
     // TON signs the 32-byte Cell representation hash (sha256 over Cell repr).
-    return new Uint8Array(tx.signingMessage.hash());
+    // The 32-byte hash is itself the Ed25519 message — Ed25519 hashes it again
+    // internally per RFC 8032, which TON's verifier mirrors. Flagging
+    // prehashed=true is consistent with secp256k1 convention and informational
+    // only for SoftSigner.
+    return [{ message: new Uint8Array(tx.signingMessage.hash()), prehashed: true }];
   }
 
-  async applySignature(
+  async applySignatures(
     tx: TonUnsignedTx,
-    signature: Uint8Array,
+    signatures: Uint8Array[],
   ): Promise<TonSignedTx> {
+    if (signatures.length !== 1) {
+      throw new Error(`ton: expected 1 signature, got ${signatures.length}`);
+    }
+    const signature = signatures[0]!;
     if (signature.length !== 64) {
       throw new Error(
         `ton: ed25519 signature must be 64 bytes, got ${signature.length}`,

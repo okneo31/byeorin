@@ -55,9 +55,12 @@ export class Wallet {
       sender: acc.address,
       signer: acc.signer,
     });
-    const hash = await acc.adapter.serializeForSigning(unsigned);
-    const sig = await acc.signer.sign(hash);
-    const signed = await acc.adapter.applySignature(unsigned, sig);
+    const requests = await acc.adapter.signRequests(unsigned);
+    const signatures: Uint8Array[] = [];
+    for (const req of requests) {
+      signatures.push(await acc.signer.sign(req.message));
+    }
+    const signed = await acc.adapter.applySignatures(unsigned, signatures);
     return acc.adapter.broadcast(signed);
   }
 }

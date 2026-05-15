@@ -1,6 +1,6 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
 import type { Address, TransferIntent, TxHash } from '../types.js';
-import type { ChainAdapter, TxContext } from './chain.js';
+import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
 
 // TronWeb v6 ships dual ESM/CJS but its types are loose.
 // Use a typed dynamic import via createRequire-style namespace import
@@ -96,20 +96,24 @@ export class TronAdapter
     return { tx };
   }
 
-  async serializeForSigning(tx: TronUnsignedTx): Promise<Uint8Array> {
+  async signRequests(tx: TronUnsignedTx): Promise<SignRequest[]> {
     // The signing target is sha256(raw_data_hex), which Tron precomputes
     // and exposes as `txID`. Convert hex → bytes.
     const txid: string = tx.tx.txID;
     if (typeof txid !== 'string' || txid.length !== 64) {
       throw new Error('tron: malformed unsigned tx (missing/bad txID)');
     }
-    return hexToBytes(txid);
+    return [{ message: hexToBytes(txid), prehashed: true }];
   }
 
-  async applySignature(
+  async applySignatures(
     tx: TronUnsignedTx,
-    signature: Uint8Array,
+    signatures: Uint8Array[],
   ): Promise<TronSignedTx> {
+    if (signatures.length !== 1) {
+      throw new Error(`tron: expected 1 signature, got ${signatures.length}`);
+    }
+    const signature = signatures[0]!;
     if (signature.length !== 65) {
       throw new Error(
         `tron: secp256k1 signature must be 65 bytes (r||s||v), got ${signature.length}`,

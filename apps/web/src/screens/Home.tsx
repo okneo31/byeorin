@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { createMnemonic } from '@nodong/wallet-sdk';
 import { Button, Card } from '@nodong/design-system';
-import { setMnemonic } from '../wallet-store.js';
+import { walletStore } from '../wallet-store.js';
 
 type Mode = 'choose' | 'create' | 'recover';
 
@@ -66,12 +66,14 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
   };
 
   const onConfirm = () => {
-    try {
-      setMnemonic(mnemonic);
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '지갑 생성에 실패했습니다.');
-    }
+    void (async () => {
+      try {
+        await walletStore.unlock(mnemonic);
+        onDone();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : '지갑 생성에 실패했습니다.');
+      }
+    })();
   };
 
   return (
@@ -135,12 +137,14 @@ function RecoverFlow({ onDone, onBack }: { onDone: () => void; onBack: () => voi
 
   const onSubmit = () => {
     setError(null);
-    try {
-      setMnemonic(input);
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '복구에 실패했습니다.');
-    }
+    void (async () => {
+      try {
+        await walletStore.unlock(input);
+        onDone();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : '복구에 실패했습니다.');
+      }
+    })();
   };
 
   return (

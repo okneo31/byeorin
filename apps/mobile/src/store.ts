@@ -1,68 +1,19 @@
 /**
- * Mobile wallet store.
+ * Mobile wallet store — 셸 공용 코어의 모바일 인스턴스.
  *
- * v0.1: mnemonic is held in module-scope memory only. The app process
- * dying = the session ending. This is deliberate — losing the in-memory
- * mnemonic is safer than persisting it before secure storage is wired.
+ * v0.1: mnemonic 은 MemorySessionStore 가 모듈-스코프 메모리에만 보관한다.
+ * 앱 프로세스 종료 = 세션 종료. 키체인 도입 전까지 안전한 기본값.
  *
  * TODO(keychain): persist (and reload) the mnemonic via react-native-keychain
  *   with `accessControl: BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE` and
  *   `accessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY`.
- * TODO(biometric): gate `loadFromKeychain()` behind a biometric prompt before
- *   reading the secret.
+ *   키체인 도입 시 새 SessionStore 구현체(예: KeychainSessionStore) 를 추가하고
+ *   autoRestoreAllowed 는 생체 인증 게이팅 정책에 맞춰 결정한다.
  */
-import {
-  EvmAdapter,
-  TTL_CHAIN,
-  Wallet,
-  isValidMnemonic,
-  type WalletAccount,
-  type WordlistName,
-} from '@nodong/wallet-sdk';
+import { EvmAdapter, TTL_CHAIN } from '@nodong/wallet-sdk';
+import { createWalletStore, MemorySessionStore } from '@nodong/shell-core';
 
-let wallet: Wallet | null = null;
-let account: WalletAccount | null = null;
-let adapter: EvmAdapter | null = null;
-
-function ensureAdapter(): EvmAdapter {
-  if (!adapter) {
-    adapter = new EvmAdapter({ chain: TTL_CHAIN });
-  }
-  return adapter;
-}
-
-function detectWordlist(mnemonic: string): WordlistName {
-  return /[가-힯]/.test(mnemonic) ? 'korean' : 'english';
-}
-
-export function setMnemonic(mnemonic: string): WalletAccount {
-  const trimmed = mnemonic.trim().replace(/\s+/g, ' ');
-  const wordlist = detectWordlist(trimmed);
-  if (!isValidMnemonic(trimmed, wordlist)) {
-    throw new Error('유효하지 않은 복구 문구입니다.');
-  }
-  wallet = Wallet.fromMnemonic({ mnemonic: trimmed, wordlist });
-  account = wallet.account(ensureAdapter());
-  return account;
-}
-
-export function getAccount(): WalletAccount | null {
-  return account;
-}
-
-export function getWallet(): Wallet | null {
-  return wallet;
-}
-
-export function getAdapter(): EvmAdapter {
-  return ensureAdapter();
-}
-
-export function clear(): void {
-  wallet = null;
-  account = null;
-}
-
-export function hasSession(): boolean {
-  return account != null;
-}
+export const walletStore = createWalletStore({
+  defaultAdapter: new EvmAdapter({ chain: TTL_CHAIN }),
+  session: new MemorySessionStore(),
+});

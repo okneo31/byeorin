@@ -9,7 +9,7 @@ export {
   type MnemonicStrength,
 } from './crypto/seed.js';
 export { deriveSecp256k1, deriveEd25519, type DerivedKey } from './crypto/hdkey.js';
-export type { ChainAdapter, TxContext } from './chains/chain.js';
+export type { ChainAdapter, TxContext, SignRequest } from './chains/chain.js';
 export {
   TTL_CHAIN,
   EVM_CHAINS,

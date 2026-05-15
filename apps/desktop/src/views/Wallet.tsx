@@ -6,7 +6,7 @@ import {
   Button,
   Card,
 } from '@nodong/design-system';
-import { clear, getAccount, getAdapter, setMnemonic } from '../wallet-store.js';
+import { walletStore } from '../wallet-store.js';
 
 interface Props {
   unlocked: boolean;
@@ -17,7 +17,7 @@ interface Props {
 type Mode = 'idle' | 'create' | 'recover';
 
 export function Wallet({ unlocked, onReady, onLock }: Props) {
-  const [account, setAccount] = useState<WalletAccount | null>(() => getAccount());
+  const [account, setAccount] = useState<WalletAccount | null>(null);
   const [mode, setMode] = useState<Mode>('idle');
   const [draft, setDraft] = useState<string>('');
   const [input, setInput] = useState<string>('');
@@ -30,11 +30,20 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
   const [loadingBalance, setLoadingBalance] = useState<boolean>(false);
   const [reloadKey, setReloadKey] = useState<number>(0);
 
+  // unlocked 상태 변화에 따라 account 를 비동기로 동기화.
   useEffect(() => {
-    if (unlocked && !account) {
-      setAccount(getAccount());
+    let cancelled = false;
+    if (!unlocked || !walletStore.isUnlocked()) {
+      setAccount(null);
+      return;
     }
-  }, [unlocked, account]);
+    void walletStore.getAccount().then((a) => {
+      if (!cancelled) setAccount(a);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [unlocked]);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,7 +55,8 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
     }
     setLoadingBalance(true);
     setBalanceError(null);
-    getAdapter()
+    walletStore
+      .getDefaultAdapter()
       .getBalance(account.address)
       .then((b) => {
         if (cancelled) return;
@@ -82,31 +92,37 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
   };
 
   const confirmCreate = () => {
-    try {
-      const acc = setMnemonic(draft);
-      setAccount(acc);
-      setMode('idle');
-      setDraft('');
-      onReady();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
+    void (async () => {
+      try {
+        await walletStore.unlock(draft);
+        const acc = await walletStore.getAccount();
+        setAccount(acc);
+        setMode('idle');
+        setDraft('');
+        onReady();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    })();
   };
 
   const confirmRecover = () => {
-    try {
-      const acc = setMnemonic(input);
-      setAccount(acc);
-      setMode('idle');
-      setInput('');
-      onReady();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
+    void (async () => {
+      try {
+        await walletStore.unlock(input);
+        const acc = await walletStore.getAccount();
+        setAccount(acc);
+        setMode('idle');
+        setInput('');
+        onReady();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    })();
   };
 
   const lock = () => {
-    clear();
+    void walletStore.lock();
     setAccount(null);
     setMode('idle');
     setBalance(null);

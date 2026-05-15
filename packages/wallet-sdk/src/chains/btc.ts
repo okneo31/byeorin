@@ -11,7 +11,7 @@ import {
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils';
 import type { Address, TransferIntent, TxHash } from '../types.js';
-import type { ChainAdapter, TxContext } from './chain.js';
+import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
 
 export type BtcNetwork = 'mainnet' | 'testnet';
 export type BtcAddressType = 'p2wpkh' | 'p2tr';
@@ -38,7 +38,7 @@ export interface Utxo {
 }
 
 export interface BtcUnsignedTx {
-  /** The in-progress @scure/btc-signer Transaction; mutated in place by applySignature(s). */
+  /** The in-progress @scure/btc-signer Transaction; mutated in place by applySignatures. */
   tx: Transaction;
   /** UTXOs spent by this transaction, ordered to match tx inputs. */
   inputUtxos: Utxo[];
@@ -203,10 +203,19 @@ export class BtcAdapter implements ChainAdapter<BtcUnsignedTx, BtcSignedTx> {
   }
 
   /**
-   * Returns the per-input sighash digests (sha256d preimage as produced by
-   * `Transaction.preimageWitnessV0`). One 32-byte digest per input.
+   * Returns one SignRequest per input (BTC's per-input sighash digest as
+   * produced by `Transaction.preimageWitnessV0`). The result of
+   * `applySignatures` must consume the signatures in the same order.
    */
-  signingDigests(tx: BtcUnsignedTx): Uint8Array[] {
+  async signRequests(tx: BtcUnsignedTx): Promise<SignRequest[]> {
+    return this.computeSigningDigests(tx).map((digest) => ({
+      message: digest,
+      prehashed: true,
+    }));
+  }
+
+  /** Internal: per-input 32-byte sighash digests. */
+  private computeSigningDigests(tx: BtcUnsignedTx): Uint8Array[] {
     const digests: Uint8Array[] = [];
     for (let i = 0; i < tx.inputUtxos.length; i++) {
       const u = tx.inputUtxos[i]!;
@@ -214,21 +223,6 @@ export class BtcAdapter implements ChainAdapter<BtcUnsignedTx, BtcSignedTx> {
       digests.push(tx.tx.preimageWitnessV0(i, script, SigHash.ALL, u.value));
     }
     return digests;
-  }
-
-  async serializeForSigning(tx: BtcUnsignedTx): Promise<Uint8Array> {
-    const digests = this.signingDigests(tx);
-    if (digests.length === 1) return digests[0]!;
-    throw new Error('btc: multi-input signing requires applySignatures(tx, sigs[])');
-  }
-
-  async applySignature(tx: BtcUnsignedTx, signature: Uint8Array): Promise<BtcSignedTx> {
-    if (tx.inputUtxos.length !== 1) {
-      throw new Error(
-        `btc: applySignature is single-input only; use applySignatures for ${tx.inputUtxos.length} inputs`,
-      );
-    }
-    return this.applySignatures(tx, [signature]);
   }
 
   /**

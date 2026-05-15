@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Pressable,
   SafeAreaView,
@@ -10,16 +10,25 @@ import {
 import { Home } from './src/screens/Home';
 import { Account } from './src/screens/Account';
 import { Send } from './src/screens/Send';
-import { clear, hasSession } from './src/store';
+import { walletStore } from './src/store';
 import { colors, spacing } from './src/theme';
 
 export type Screen = 'home' | 'account' | 'send';
 
 function App(): React.JSX.Element {
-  const [screen, setScreen] = useState<Screen>(() => (hasSession() ? 'account' : 'home'));
+  // H1: mobile(MemorySessionStore) 은 자동 복원이 허용되지 않는다.
+  // 부팅 시점에는 항상 home 으로 시작한다.
+  const [screen, setScreen] = useState<Screen>('home');
+
+  useEffect(() => {
+    // 자동 복원이 허용되는 환경에서만 동작. mobile 은 사실상 no-op.
+    void walletStore.tryAutoRestore().then((restored) => {
+      if (restored) setScreen('account');
+    });
+  }, []);
 
   const onLock = () => {
-    clear();
+    void walletStore.lock();
     setScreen('home');
   };
 

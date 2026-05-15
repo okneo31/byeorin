@@ -4,7 +4,7 @@ import { Wallet } from './views/Wallet.js';
 import { Send } from './views/Send.js';
 import { Portfolio } from './views/Portfolio.js';
 import { Settings } from './views/Settings.js';
-import { clear, hasSession } from './wallet-store.js';
+import { walletStore } from './wallet-store.js';
 
 export type View = 'wallet' | 'send' | 'portfolio' | 'settings';
 
@@ -23,14 +23,18 @@ const NAV: readonly NavItem[] = [
 
 export function App() {
   const [view, setView] = useState<View>('wallet');
-  const [unlocked, setUnlocked] = useState<boolean>(() => hasSession());
+  // H1: desktop(Tauri webview) 환경은 자동 복원을 허용하지 않는다.
+  const [unlocked, setUnlocked] = useState<boolean>(false);
 
   useEffect(() => {
     document.title = '노동자의 지갑';
+    void walletStore.tryAutoRestore().then((restored) => {
+      if (restored) setUnlocked(true);
+    });
   }, []);
 
   const onLock = () => {
-    clear();
+    void walletStore.lock();
     setUnlocked(false);
     setView('wallet');
   };

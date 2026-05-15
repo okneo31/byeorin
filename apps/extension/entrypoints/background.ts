@@ -1,6 +1,5 @@
 import { defineBackground } from 'wxt/sandbox';
 import { TTL_CHAIN } from '@nodong/wallet-sdk';
-import { readSession } from '../src/lib/session.js';
 import { getActiveAccount, getTtlAdapter } from '../src/lib/wallet-service.js';
 import {
   RPC_ERRORS,
@@ -119,11 +118,12 @@ async function handleRpc(
     case 'eth_accounts': {
       // EIP-1193: 미연결/잠금 상태에서는 에러가 아니라 빈 배열을 반환.
       const origin = senderOrigin(sender);
-      const session = await readSession();
-      if (!session || !origin) return ok([]);
+      if (!origin) return ok([]);
+      const acc = await getActiveAccount();
+      if (!acc) return ok([]);
       const approved = await isOriginApproved(origin);
       if (!approved) return ok([]);
-      return ok([session.address]);
+      return ok([acc.address]);
     }
 
     case 'eth_blockNumber': {

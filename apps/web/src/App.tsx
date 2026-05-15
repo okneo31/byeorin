@@ -3,20 +3,26 @@ import { Logo } from '@nodong/design-system';
 import { Home } from './screens/Home.js';
 import { Account } from './screens/Account.js';
 import { Send } from './screens/Send.js';
-import { clear, hasSession } from './wallet-store.js';
+import { walletStore } from './wallet-store.js';
 
 export type Screen = 'home' | 'account' | 'send';
 
 export function App() {
-  const [screen, setScreen] = useState<Screen>(() => (hasSession() ? 'account' : 'home'));
+  // H1: web 환경은 자동 복원을 허용하지 않는다(WebSessionStore.autoRestoreAllowed=false).
+  // 부팅 시점에는 항상 잠금 상태에서 시작한다.
+  const [screen, setScreen] = useState<Screen>('home');
 
   useEffect(() => {
-    // keep title fresh
     document.title = '노동자의 지갑';
+    // 자동 복원이 허용되는 환경(extension 등)에서만 효과가 있는 호출.
+    // web 에서는 사실상 no-op 이지만 인터페이스 일관성을 위해 둔다.
+    void walletStore.tryAutoRestore().then((restored) => {
+      if (restored) setScreen('account');
+    });
   }, []);
 
   const onLock = () => {
-    clear();
+    void walletStore.lock();
     setScreen('home');
   };
 

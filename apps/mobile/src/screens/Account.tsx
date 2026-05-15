@@ -8,7 +8,8 @@ import {
   View,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
-import { getAccount, getAdapter } from '../store';
+import type { WalletAccount } from '@nodong/wallet-sdk';
+import { walletStore } from '../store';
 import { colors, radius, spacing } from '../theme';
 import { formatTtl } from '../units';
 
@@ -18,17 +19,31 @@ interface Props {
 }
 
 export function Account({ onSend, onLock }: Props) {
-  const account = getAccount();
+  const [account, setAccount] = useState<WalletAccount | null>(null);
   const [balance, setBalance] = useState<bigint | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!walletStore.isUnlocked()) {
+      setAccount(null);
+      return;
+    }
+    void walletStore.getAccount().then((a) => {
+      if (!cancelled) setAccount(a);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
     if (!account) return;
     setLoading(true);
     setError(null);
     try {
-      const bal = await getAdapter().getBalance(account.address);
+      const bal = await walletStore.getDefaultAdapter().getBalance(account.address);
       setBalance(bal);
     } catch (e) {
       setError(e instanceof Error ? e.message : '잔액 조회 실패');
