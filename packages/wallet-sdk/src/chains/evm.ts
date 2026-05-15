@@ -76,10 +76,21 @@ export class EvmAdapter implements ChainAdapter<EvmUnsignedTx, EvmSignedTx> {
     const nonce = await this.client.getTransactionCount({ address: sender, blockTag: 'pending' });
     const useEip1559 = await this.shouldUseEip1559();
 
+    // calldata 전파: '0x' / 빈 문자열 / undefined 는 native 전송으로 취급. 그 외는
+    // estimateGas 와 직렬화에 모두 calldata 를 포함시킨다 — gas 추정이 native 와
+    // 크게 다르므로 누락하면 transfer 가 OOG 로 실패한다.
+    const dataField: Hex | undefined =
+      intent.data && intent.data !== '0x' ? (intent.data as Hex) : undefined;
+
     if (useEip1559) {
       const fees = await this.client.estimateFeesPerGas();
-      const gas = await this.client.estimateGas({ account: sender, to, value: intent.amount });
-      return {
+      const gas = await this.client.estimateGas({
+        account: sender,
+        to,
+        value: intent.amount,
+        ...(dataField ? { data: dataField } : {}),
+      });
+      const base: TransactionSerializableEIP1559 & { type: 'eip1559' } = {
         type: 'eip1559',
         chainId: this.chain.id,
         nonce,
@@ -89,11 +100,18 @@ export class EvmAdapter implements ChainAdapter<EvmUnsignedTx, EvmSignedTx> {
         maxFeePerGas: fees.maxFeePerGas,
         maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
       };
+      if (dataField) base.data = dataField;
+      return base;
     }
 
     const gasPrice = await this.client.getGasPrice();
-    const gas = await this.client.estimateGas({ account: sender, to, value: intent.amount });
-    return {
+    const gas = await this.client.estimateGas({
+      account: sender,
+      to,
+      value: intent.amount,
+      ...(dataField ? { data: dataField } : {}),
+    });
+    const base: TransactionSerializableLegacy & { type: 'legacy' } = {
       type: 'legacy',
       chainId: this.chain.id,
       nonce,
@@ -102,6 +120,8 @@ export class EvmAdapter implements ChainAdapter<EvmUnsignedTx, EvmSignedTx> {
       gas,
       gasPrice,
     };
+    if (dataField) base.data = dataField;
+    return base;
   }
 
   async signRequests(tx: EvmUnsignedTx): Promise<SignRequest[]> {

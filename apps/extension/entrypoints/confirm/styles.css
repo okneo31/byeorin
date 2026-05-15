@@ -197,3 +197,41 @@ button:hover {
   color: var(--fg);
   border-color: var(--border);
 }
+
+.btn-sm {
+  padding: 6px 10px;
+  font-size: 12px;
+  align-self: flex-start;
+}
+
+/* "1시간 자동 승인" 체크박스 행 — RememberToggle. */
+.remember-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #0d0d0d;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.remember-row input[type='checkbox'] {
+  accent-color: var(--red);
+  width: 16px;
+  height: 16px;
+}
+
+.remember-text {
+  font-size: 12px;
+  color: var(--paper);
+}
+
+/* SignTypedDataView 의 펼치기/접기 row 헤더. */
+.label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}

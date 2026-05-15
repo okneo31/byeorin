@@ -7,11 +7,30 @@
 
 import { EvmAdapter, TTL_CHAIN, type WalletAccount } from '@nodong/wallet-sdk';
 import { createWalletStore, ExtensionSessionStore } from '@nodong/shell-core';
+import { clearAllGrants } from './grants.js';
 
-export const walletStore = createWalletStore({
+const innerStore = createWalletStore({
   defaultAdapter: new EvmAdapter({ chain: TTL_CHAIN }),
   session: new ExtensionSessionStore(),
 });
+
+// lock() 을 한 곳에서 가로채 origin+method 자동승인 grant 를 함께 비운다.
+// shell-core 의 ExtensionSessionStore.clear() 는 니모닉 키만 제거하므로,
+// 'nd:method-grants' 는 본 래퍼가 명시적으로 지워야 한다.
+//
+// 패턴: 원본 lock 을 .bind 로 묶어둔 뒤 자체 lock 으로 교체. 그러면 background 든
+// popup 이든 어디서 walletStore.lock() 을 호출하더라도 grants 가 같이 청소된다.
+const originalLock = innerStore.lock.bind(innerStore);
+innerStore.lock = async function patchedLock(): Promise<void> {
+  try {
+    await clearAllGrants();
+  } catch {
+    // session storage 가 잠시 비가용해도 lock 자체는 진행해야 한다 — 보안 우선.
+  }
+  await originalLock();
+};
+
+export const walletStore = innerStore;
 
 /** TTL 어댑터 (기존 코드 호환용). */
 export function getTtlAdapter(): EvmAdapter {

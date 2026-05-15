@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatUnits, hexToString, hexToBytes, hexToNumber, isHex, type Hex } from 'viem';
 import type { BackgroundMessage, ConfirmContext } from '../../src/lib/rpc.js';
+import { decode4Byte, SELECTOR_TABLE } from '../../src/lib/selectors.js';
 
 // 노동자의 지갑 — 서명/전송 확인 popup.
 //
@@ -17,6 +18,13 @@ type State =
   | { kind: 'ready'; ctx: ConfirmContext }
   | { kind: 'error'; message: string }
   | { kind: 'submitted'; decision: 'approve' | 'reject' };
+
+// 메서드 라벨 — "1시간 기억" 체크박스 문구에 사용.
+const METHOD_LABEL: Record<ConfirmContext['method'], string> = {
+  personal_sign: '메시지 서명',
+  eth_sendTransaction: '트랜잭션 전송',
+  eth_signTypedData_v4: 'EIP-712 서명',
+};
 
 const TTL_EXPLORER = 'https://scan.ttl1.top';
 
@@ -133,11 +141,18 @@ export function App() {
     });
   }, []);
 
-  function send(decision: 'approve' | 'reject'): void {
+  function send(decision: 'approve' | 'reject', rememberFor1h = false): void {
     const requestId = getRequestIdFromUrl();
     const nonce = getNonceFromUrl();
     if (!requestId || !nonce) return;
-    const msg: BackgroundMessage = { type: 'confirm-result', requestId, nonce, decision };
+    const msg: BackgroundMessage = {
+      type: 'confirm-result',
+      requestId,
+      nonce,
+      decision,
+      // grant 는 approve 일 때만 의미가 있다. reject 에는 항상 false 송신.
+      rememberFor1h: decision === 'approve' ? rememberFor1h : false,
+    };
     chrome.runtime.sendMessage(msg, () => {
       setState({ kind: 'submitted', decision });
       // background 가 popup window 를 닫지만, 안전망으로 자체 close.
@@ -185,7 +200,40 @@ export function App() {
 
   const { ctx } = state;
   if (ctx.method === 'personal_sign') return <PersonalSignView ctx={ctx} onDecision={send} />;
+  if (ctx.method === 'eth_signTypedData_v4')
+    return <SignTypedDataView ctx={ctx} onDecision={send} />;
   return <SendTxView ctx={ctx} onDecision={send} />;
+}
+
+// "이 사이트에서 1시간 동안 자동 승인" 체크박스 (공통 UI).
+//
+// 정책 강조:
+//  - 본 옵션은 origin + 메서드(personal_sign 등) 조합으로만 grant 를 발급한다.
+//  - grant 는 chrome.storage.session 에만 — 브라우저 종료/잠금 시 즉시 무효.
+//  - 메시지 내용 자체에는 묶이지 않으므로, 1시간 내 임의 서명을 자동 통과시킬 수 있음을
+//    사용자에게 명확히 경고한다.
+function RememberToggle({
+  method,
+  checked,
+  onChange,
+}: {
+  method: ConfirmContext['method'];
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const label = METHOD_LABEL[method];
+  return (
+    <label className="remember-row">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span className="remember-text">
+        이 사이트({label})에서 1시간 동안 자동 승인
+      </span>
+    </label>
+  );
 }
 
 // ── personal_sign 프리뷰 ─────────────────────────────────────────────
@@ -194,10 +242,11 @@ function PersonalSignView({
   onDecision,
 }: {
   ctx: Extract<ConfirmContext, { method: 'personal_sign' }>;
-  onDecision: (d: 'approve' | 'reject') => void;
+  onDecision: (d: 'approve' | 'reject', rememberFor1h?: boolean) => void;
 }) {
   const readable = useMemo(() => tryHexToReadable(ctx.message), [ctx.message]);
   const byteLen = useMemo(() => messageBytesLen(ctx.message), [ctx.message]);
+  const [remember, setRemember] = useState(false);
 
   return (
     <main className="confirm">
@@ -240,11 +289,13 @@ function PersonalSignView({
           사용합니다.
         </p>
 
+        <RememberToggle method={ctx.method} checked={remember} onChange={setRemember} />
+
         <div className="actions">
           <button className="btn-ghost" onClick={() => onDecision('reject')}>
             거부
           </button>
-          <button className="btn-primary" onClick={() => onDecision('approve')}>
+          <button className="btn-primary" onClick={() => onDecision('approve', remember)}>
             승인
           </button>
         </div>
@@ -254,16 +305,31 @@ function PersonalSignView({
 }
 
 // ── eth_sendTransaction 프리뷰 ────────────────────────────────────────
+const CALLDATA_TRUNC_AT = 256;
+
 function SendTxView({
   ctx,
   onDecision,
 }: {
   ctx: Extract<ConfirmContext, { method: 'eth_sendTransaction' }>;
-  onDecision: (d: 'approve' | 'reject') => void;
+  onDecision: (d: 'approve' | 'reject', rememberFor1h?: boolean) => void;
 }) {
   const valueFormatted = useMemo(() => formatTtl(ctx.value), [ctx.value]);
   const gasFormatted = useMemo(() => formatGasUnits(ctx.gas), [ctx.gas]);
-  const dataNonEmpty = ctx.data && ctx.data !== '0x' && ctx.data !== '';
+  const dataNonEmpty = !!(ctx.data && ctx.data !== '0x' && ctx.data !== '');
+  const decoded = useMemo(() => (dataNonEmpty ? decode4Byte(ctx.data) : null), [
+    ctx.data,
+    dataNonEmpty,
+  ]);
+  const [showFullData, setShowFullData] = useState(false);
+  const [remember, setRemember] = useState(false);
+
+  const dataDisplay = useMemo(() => {
+    if (!ctx.data) return '';
+    if (showFullData) return ctx.data;
+    if (ctx.data.length <= CALLDATA_TRUNC_AT) return ctx.data;
+    return ctx.data.slice(0, CALLDATA_TRUNC_AT) + '…';
+  }, [ctx.data, showFullData]);
 
   return (
     <main className="confirm">
@@ -290,7 +356,7 @@ function SendTxView({
         </div>
 
         <div className="row">
-          <span className="label">받는 주소</span>
+          <span className="label">{dataNonEmpty ? '대상 계약' : '받는 주소'}</span>
           <a
             className="addr-link"
             href={`${TTL_EXPLORER}/address/${ctx.to}`}
@@ -303,7 +369,7 @@ function SendTxView({
         </div>
 
         <div className="row">
-          <span className="label">금액</span>
+          <span className="label">{dataNonEmpty ? '함께 전송할 native 값' : '금액'}</span>
           <span className="value">{valueFormatted} TTL</span>
           <span className="value-sub">{ctx.value} wei</span>
         </div>
@@ -315,12 +381,35 @@ function SendTxView({
           </div>
         ) : null}
 
+        {dataNonEmpty && decoded ? (
+          <div className="row">
+            <span className="label">함수 호출 (4-byte 셀렉터)</span>
+            <span className="origin">
+              <strong>{decoded.selector}</strong>
+              {decoded.signature ? (
+                <> — {decoded.signature}</>
+              ) : (
+                <> — <em>(알 수 없는 함수 호출)</em></>
+              )}
+            </span>
+          </div>
+        ) : null}
+
         {dataNonEmpty ? (
           <div className="row">
-            <span className="label">데이터 (계약 호출)</span>
-            <div className="msg-block hex">{ctx.data}</div>
+            <span className="label">Raw calldata</span>
+            <div className="msg-block hex">{dataDisplay}</div>
+            {ctx.data.length > CALLDATA_TRUNC_AT ? (
+              <button
+                className="btn-ghost btn-sm"
+                onClick={() => setShowFullData((v) => !v)}
+              >
+                {showFullData ? '접기' : '더 보기'}
+              </button>
+            ) : null}
             <span className="warn small">
-              ※ 계약 호출은 v0.3 에서 지원됩니다. 현재는 단순 전송만 가능합니다.
+              ※ 계약 호출은 자산 이동/권한 부여(approve) 등 부수효과가 있을 수 있습니다.
+              함수 시그니처와 대상 계약을 반드시 확인하세요.
             </span>
           </div>
         ) : null}
@@ -330,11 +419,133 @@ function SendTxView({
           없습니다.
         </p>
 
+        <RememberToggle method={ctx.method} checked={remember} onChange={setRemember} />
+
         <div className="actions">
           <button className="btn-ghost" onClick={() => onDecision('reject')}>
             거부
           </button>
-          <button className="btn-primary" onClick={() => onDecision('approve')}>
+          <button className="btn-primary" onClick={() => onDecision('approve', remember)}>
+            승인
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+// ── eth_signTypedData_v4 프리뷰 ───────────────────────────────────────
+function SignTypedDataView({
+  ctx,
+  onDecision,
+}: {
+  ctx: Extract<ConfirmContext, { method: 'eth_signTypedData_v4' }>;
+  onDecision: (d: 'approve' | 'reject', rememberFor1h?: boolean) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [remember, setRemember] = useState(false);
+
+  const chainIdLabel = useMemo(() => {
+    if (ctx.domain.chainId === undefined || ctx.domain.chainId === null) return null;
+    return String(ctx.domain.chainId);
+  }, [ctx.domain.chainId]);
+
+  return (
+    <main className="confirm">
+      <header className="brand">노동자의 지갑</header>
+      <section className="card">
+        <h2>
+          EIP-712 서명 요청
+          <span className="hex-tag">eth_signTypedData_v4</span>
+        </h2>
+        <p className="muted small">
+          아래 사이트가 구조화된(typed) 데이터를 서명해 달라고 요청합니다.
+        </p>
+
+        <div className="row">
+          <span className="label">사이트</span>
+          <span className="origin" title={ctx.origin}>
+            {ctx.origin}
+          </span>
+        </div>
+
+        <div className="row">
+          <span className="label">서명자</span>
+          <span className="addr" title={ctx.address}>
+            {shorten(ctx.address)}
+          </span>
+        </div>
+
+        <div className="row">
+          <span className="label">서명 대상 타입(primaryType)</span>
+          <span className="origin">{ctx.primaryType}</span>
+        </div>
+
+        {ctx.domain.name ? (
+          <div className="row">
+            <span className="label">도메인 이름</span>
+            <span className="origin">{ctx.domain.name}</span>
+          </div>
+        ) : null}
+
+        {chainIdLabel ? (
+          <div className="row">
+            <span className="label">chainId</span>
+            <span className="origin">{chainIdLabel}</span>
+          </div>
+        ) : null}
+
+        {ctx.domain.verifyingContract ? (
+          <div className="row">
+            <span className="label">verifyingContract</span>
+            <a
+              className="addr-link"
+              href={`${TTL_EXPLORER}/address/${ctx.domain.verifyingContract}`}
+              target="_blank"
+              rel="noreferrer noopener"
+              title={ctx.domain.verifyingContract}
+            >
+              {ctx.domain.verifyingContract}
+            </a>
+          </div>
+        ) : null}
+
+        <div className="row">
+          <span className="label">서명 다이제스트 (EIP-712 hash)</span>
+          <div className="msg-block hex">{ctx.digest}</div>
+        </div>
+
+        <div className="row">
+          <div className="label-row">
+            <span className="label">메시지 내용</span>
+            <button
+              className="btn-ghost btn-sm"
+              onClick={() => setExpanded((v) => !v)}
+            >
+              {expanded ? '접기' : '펼치기'}
+            </button>
+          </div>
+          {expanded ? (
+            <div className="msg-block">{ctx.messageJson}</div>
+          ) : (
+            <span className="muted small">
+              펼쳐서 dApp 이 서명을 요청한 데이터 전체를 확인하세요.
+            </span>
+          )}
+        </div>
+
+        <p className="warn small">
+          ※ EIP-712 서명은 자산 이동/권한 부여(예: Permit, Seaport 주문) 의 인증 수단으로
+          쓰일 수 있습니다. 도메인과 메시지 내용을 반드시 확인하세요.
+        </p>
+
+        <RememberToggle method={ctx.method} checked={remember} onChange={setRemember} />
+
+        <div className="actions">
+          <button className="btn-ghost" onClick={() => onDecision('reject')}>
+            거부
+          </button>
+          <button className="btn-primary" onClick={() => onDecision('approve', remember)}>
             승인
           </button>
         </div>

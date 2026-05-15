@@ -1,14 +1,12 @@
 import { defineBackground } from 'wxt/sandbox';
 import {
   bytesToHex,
-  concat,
+  hashTypedData,
   hexToBytes,
   isHex,
-  keccak256,
-  stringToBytes,
   type Hex,
 } from 'viem';
-import { TTL_CHAIN } from '@nodong/wallet-sdk';
+import { signEvmMessage, TTL_CHAIN } from '@nodong/wallet-sdk';
 import { getActiveAccount, getTtlAdapter, walletStore } from '../src/lib/wallet-service.js';
 import {
   RPC_ERRORS,
@@ -19,12 +17,15 @@ import {
   type JsonRpcResponse,
   type PersonalSignConfirmContext,
   type SendTxConfirmContext,
+  type SignTypedDataConfirmContext,
+  type EIP712Domain,
 } from '../src/lib/rpc.js';
 import {
   approveOrigin,
   isOriginApproved,
   normalizeOrigin,
 } from '../src/lib/origins.js';
+import { addGrant, hasGrant, type GrantMethod } from '../src/lib/grants.js';
 
 // 노동자의 지갑 백그라운드 서비스 워커.
 // dApp 으로부터 들어오는 EIP-1193 RPC 를 SDK 로 라우팅한다.
@@ -51,11 +52,13 @@ const pendingConnects = new Map<string, PendingConnect>();
 const CONNECT_TIMEOUT_MS = 2 * 60 * 1000;
 
 // 서명/전송 확인 popup 슬롯. ConfirmContext 자체를 들고 있고, 결과만 Promise 로 해소.
+type ConfirmDecision = { decision: 'approve' | 'reject'; rememberFor1h: boolean };
+
 type PendingConfirm = {
   context: ConfirmContext;
   // 보안: connect 와 동일한 nonce 검증 메커니즘.
   nonce: string;
-  resolve: (decision: 'approve' | 'reject') => void;
+  resolve: (d: ConfirmDecision) => void;
   windowId?: number;
   timeout: ReturnType<typeof setTimeout>;
 };
@@ -118,7 +121,7 @@ export default defineBackground({
           return false;
         }
         if (bm.type === 'confirm-result') {
-          handleConfirmResult(bm.requestId, bm.nonce, bm.decision);
+          handleConfirmResult(bm.requestId, bm.nonce, bm.decision, bm.rememberFor1h === true);
           sendResponse({ ok: true });
           return false;
         }
@@ -333,25 +336,19 @@ async function handleRpc(
         return fail(RPC_ERRORS.USER_REJECTED.code, RPC_ERRORS.USER_REJECTED.message);
       }
 
-      // EIP-191: keccak256("\x19Ethereum Signed Message:\n" + len + message)
-      const msgBytes = hexToBytes(messageHex as Hex);
-      const prefix = stringToBytes(`\x19Ethereum Signed Message:\n${msgBytes.length}`);
-      const digestHex = keccak256(concat([prefix, msgBytes]));
-      const sig = await acc.signer.sign(hexToBytes(digestHex));
-      if (sig.length !== 65) {
-        return fail(RPC_ERRORS.INTERNAL.code, '서명 길이 오류');
+      // EIP-191 prefix + keccak + recovery 정규화는 SDK 의 signEvmMessage 에 위임.
+      // 본 분기는 dApp 이 보낸 hex 를 raw bytes 로 디코드해 전달한다 — 헬퍼가 길이
+      // 프리픽스를 알아서 붙인다.
+      try {
+        const sigHex = await signEvmMessage(
+          acc.signer,
+          acc.address,
+          hexToBytes(messageHex as Hex),
+        );
+        return ok(sigHex);
+      } catch (err) {
+        return fail(RPC_ERRORS.INTERNAL.code, `서명 실패: ${(err as Error)?.message ?? err}`);
       }
-      // SoftSigner 출력: r(32) || s(32) || recovery(1)  →  EIP-191 은 v ∈ {27, 28}.
-      const r = sig.subarray(0, 32);
-      const s = sig.subarray(32, 64);
-      const recovery = sig[64]!;
-      const v = recovery + 27;
-      const sigHex =
-        '0x' +
-        bytesToHex(r).slice(2) +
-        bytesToHex(s).slice(2) +
-        v.toString(16).padStart(2, '0');
-      return ok(sigHex);
     }
 
     case 'eth_sendTransaction': {
@@ -403,10 +400,16 @@ async function handleRpc(
         }
       }
 
-      // 계약 호출(0x 이외의 data) 은 v0.3 으로 연기.
-      const dataHex = tx.data ?? '0x';
-      if (dataHex !== '0x' && dataHex !== '') {
-        return fail(RPC_ERRORS.UNSUPPORTED.code, '계약 호출(data)은 v0.3 예정');
+      // 계약 호출(data ≠ '0x') 도 v0.3 부터 지원. SDK 측 TransferIntent.data 를 통해
+      // unsigned tx 의 data 필드로 그대로 전파한다. 빈 data 는 native 전송과 동일 경로.
+      const dataHexRaw = tx.data ?? '0x';
+      const dataHex: Hex = dataHexRaw === '' ? '0x' : (dataHexRaw as Hex);
+      if (!isHex(dataHex)) {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, '잘못된 data hex');
+      }
+      // hex 길이는 0x + 짝수 자리. 셀렉터만 있어도(4바이트=8자) 허용.
+      if (dataHex !== '0x' && dataHex.length % 2 !== 0) {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, 'data hex 길이 홀수');
       }
 
       const valueHex = tx.value ?? '0x0';
@@ -441,7 +444,14 @@ async function handleRpc(
       }
 
       try {
-        const txHash = await walletStore.transfer({ to: tx.to, amount: valueWei });
+        // calldata 가 있으면 TransferIntent.data 로 SDK 에 전파. 어댑터가 가스 추정
+        // 시점에 data 를 반영하므로 contract-call 의 OOG 위험은 native 와 동일하게
+        // 어댑터 내부에서 처리된다.
+        const intent =
+          dataHex === '0x'
+            ? { to: tx.to, amount: valueWei }
+            : { to: tx.to, amount: valueWei, data: dataHex };
+        const txHash = await walletStore.transfer(intent);
         return ok(txHash);
       } catch (err) {
         return fail(RPC_ERRORS.INTERNAL.code, `전송 실패: ${(err as Error)?.message ?? err}`);
@@ -449,7 +459,146 @@ async function handleRpc(
     }
 
     case 'eth_signTypedData_v4': {
-      return fail(RPC_ERRORS.UNSUPPORTED.code, 'eth_signTypedData_v4 미구현');
+      // EIP-712 typed-data 서명.
+      // params 형식: [address, typedData] — typedData 는 JSON 문자열 또는 객체.
+      const params = Array.isArray(req.params) ? req.params : [];
+      const a = params[0];
+      const b = params[1];
+      if (typeof a !== 'string') {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, '주소 누락');
+      }
+      if (b === undefined || b === null) {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, 'typedData 누락');
+      }
+
+      let typedData: {
+        domain?: EIP712Domain;
+        types?: Record<string, Array<{ name: string; type: string }>>;
+        primaryType?: string;
+        message?: Record<string, unknown>;
+      };
+      try {
+        typedData = typeof b === 'string' ? JSON.parse(b) : (b as typeof typedData);
+      } catch (err) {
+        return fail(
+          RPC_ERRORS.INVALID_PARAMS.code,
+          `typedData JSON 파싱 실패: ${(err as Error)?.message ?? err}`,
+        );
+      }
+      if (
+        !typedData ||
+        typeof typedData !== 'object' ||
+        !typedData.types ||
+        !typedData.primaryType ||
+        !typedData.message
+      ) {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, 'typedData 구조 불완전');
+      }
+
+      const domain: EIP712Domain = typedData.domain ?? {};
+      // chainId 가드 — 명시되었으면 TTL(7777) 이어야 한다.
+      if (domain.chainId !== undefined && domain.chainId !== null) {
+        let cid: number;
+        if (typeof domain.chainId === 'number') {
+          cid = domain.chainId;
+        } else if (typeof domain.chainId === 'string') {
+          try {
+            // hex(0x..) 또는 10진 모두 허용.
+            cid = domain.chainId.startsWith('0x')
+              ? parseInt(domain.chainId, 16)
+              : parseInt(domain.chainId, 10);
+          } catch {
+            return fail(RPC_ERRORS.INVALID_PARAMS.code, `잘못된 domain.chainId: ${domain.chainId}`);
+          }
+        } else {
+          return fail(RPC_ERRORS.INVALID_PARAMS.code, 'domain.chainId 타입 오류');
+        }
+        if (!Number.isFinite(cid) || cid !== TTL_CHAIN.id) {
+          return fail(
+            RPC_ERRORS.INVALID_PARAMS.code,
+            `지원하지 않는 chainId: ${domain.chainId} (TTL=${TTL_CHAIN.id})`,
+          );
+        }
+      }
+
+      const origin = senderOrigin(sender);
+      if (!origin || !(await isOriginApproved(origin))) {
+        return fail(RPC_ERRORS.UNAUTHORIZED.code, '연결되지 않은 dApp');
+      }
+      const acc = await getActiveAccount();
+      if (!acc) return fail(RPC_ERRORS.UNAUTHORIZED.code, '지갑 잠금 상태입니다');
+      if (a.toLowerCase() !== acc.address.toLowerCase()) {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, '주소 불일치');
+      }
+
+      // viem.hashTypedData 는 EIP-712 의 keccak256 digest(32B)를 반환. 본 digest 를
+      // raw 로 서명하면 ecrecover 가능 한 65바이트 시그니처가 나온다.
+      // 동적 입력이라 abitype 의 정밀 제네릭을 만족시킬 수 없어 인자 통째로 캐스팅한다 —
+      // viem 내부의 ValidateTypedData 가 런타임 검증을 수행하므로 안전성은 보장된다.
+      let digest: Hex;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        digest = hashTypedData({
+          domain,
+          types: typedData.types,
+          primaryType: typedData.primaryType,
+          message: typedData.message,
+        } as unknown as Parameters<typeof hashTypedData>[0]);
+      } catch (err) {
+        return fail(
+          RPC_ERRORS.INVALID_PARAMS.code,
+          `typedData 해시 실패: ${(err as Error)?.message ?? err}`,
+        );
+      }
+
+      // pretty-print — popup 의 JSON preview 용. 직렬화 불가(BigInt 등) 시 안전한 폴백.
+      const safeStringify = (v: unknown): string => {
+        try {
+          return JSON.stringify(
+            v,
+            (_k, val) => (typeof val === 'bigint' ? val.toString() : val),
+            2,
+          );
+        } catch {
+          return String(v);
+        }
+      };
+
+      const context: SignTypedDataConfirmContext = {
+        requestId: '',
+        method: 'eth_signTypedData_v4',
+        origin,
+        address: acc.address,
+        domain,
+        primaryType: typedData.primaryType,
+        typesJson: safeStringify(typedData.types),
+        messageJson: safeStringify(typedData.message),
+        digest,
+      };
+
+      const decision = await openConfirm(context);
+      if (decision !== 'approve') {
+        return fail(RPC_ERRORS.USER_REJECTED.code, RPC_ERRORS.USER_REJECTED.message);
+      }
+
+      // digest 를 raw 로 서명 → 65바이트 (r||s||recovery). recovery 0|1 → v 27|28.
+      try {
+        const sig = await acc.signer.sign(hexToBytes(digest));
+        if (sig.length !== 65) {
+          return fail(RPC_ERRORS.INTERNAL.code, '서명 길이 오류');
+        }
+        const recovery = sig[64] as number;
+        let v: number;
+        if (recovery === 0 || recovery === 1) v = recovery + 27;
+        else if (recovery === 27 || recovery === 28) v = recovery;
+        else return fail(RPC_ERRORS.INTERNAL.code, `잘못된 recovery byte: ${recovery}`);
+        const out = new Uint8Array(65);
+        out.set(sig.subarray(0, 64), 0);
+        out[64] = v;
+        return ok(bytesToHex(out));
+      } catch (err) {
+        return fail(RPC_ERRORS.INTERNAL.code, `서명 실패: ${(err as Error)?.message ?? err}`);
+      }
     }
 
     default:
@@ -513,7 +662,7 @@ function rejectAllPending(reason: string): void {
     } catch {
       /* noop */
     }
-    slot.resolve('reject');
+    slot.resolve({ decision: 'reject', rememberFor1h: false });
   }
   pendingConfirms.clear();
   // 명시적으로 reason 을 로깅(개발자 도구) — 외부에 노출되지 않음.
@@ -602,54 +751,89 @@ function handleConnectResult(
 //  - "1시간 기억" 같은 origin 별 자동 승인은 제공하지 않는다(악용 방지). 매 호출마다 사용자 동의.
 //  - timeout(2분) 경과 시 또는 사용자가 popup 을 직접 닫으면 자동 reject.
 
+/**
+ * 사용자 동의 popup 흐름.
+ *
+ * v0.3 정책: origin+method 별 "1시간 자동 승인" grant 가 존재하면 popup 을 띄우지
+ * 않고 즉시 'approve' 로 통과. grant 발급 자체는 사용자가 popup 의 체크박스를
+ * 켰을 때만 일어나며, 본 함수가 그 결과(rememberFor1h)를 받아 storage 에 기록한다.
+ *
+ * 보안 메모:
+ *  - grant 는 chrome.storage.session 에만 — 브라우저 재시작/잠금 시 자동 무효화.
+ *  - grant 가 있어도 origin 자체가 미승인(=isOriginApproved false) 이면 어차피
+ *    상위 분기에서 거절되므로, grant 는 보조 게이트일 뿐 권한 격상이 아니다.
+ *  - grant 는 메서드 호출 자체를 자동승인할 뿐 서명 대상(메시지 내용)에 묶이지 않음.
+ *    UX 상 사용자에게 "임의 메시지 자동 서명 가능" 임을 popup 에 명시 경고.
+ */
 function openConfirm(ctxInput: ConfirmContext): Promise<'approve' | 'reject'> {
   return new Promise<'approve' | 'reject'>((resolve) => {
     const requestId = makeRequestId();
     const nonce = makeNonce();
     const context: ConfirmContext = { ...ctxInput, requestId };
 
-    const timeout = setTimeout(() => {
-      const slot = pendingConfirms.get(requestId);
-      if (!slot) return;
-      pendingConfirms.delete(requestId);
+    // 자동 승인 path: origin+method 유효 grant 가 있으면 popup 건너뛰고 즉시 통과.
+    // grant 체크 자체는 async — 비동기로 검사한 뒤, 결과에 따라 popup 을 띄울지 결정.
+    void (async () => {
       try {
-        if (slot.windowId != null) chrome.windows.remove(slot.windowId);
-      } catch {
-        /* noop */
-      }
-      resolve('reject');
-    }, CONFIRM_TIMEOUT_MS);
-
-    const slot: PendingConfirm = { context, nonce, resolve, timeout };
-    pendingConfirms.set(requestId, slot);
-
-    const url =
-      chrome.runtime.getURL('confirm.html') +
-      '?requestId=' + encodeURIComponent(requestId) +
-      '&nonce=' + encodeURIComponent(nonce);
-
-    chrome.windows.create(
-      { url, type: 'popup', width: 420, height: 640 },
-      (win) => {
-        if (chrome.runtime.lastError || !win) {
-          clearTimeout(timeout);
-          pendingConfirms.delete(requestId);
-          resolve('reject');
+        const ok = await hasGrant(ctxInput.origin, ctxInput.method as GrantMethod);
+        if (ok) {
+          resolve('approve');
           return;
         }
-        slot.windowId = win.id;
-      },
-    );
+      } catch {
+        // storage 조회 실패는 보수적으로 popup 으로 폴백.
+      }
 
-    const onRemoved = (winId: number): void => {
-      const cur = pendingConfirms.get(requestId);
-      if (!cur || cur.windowId !== winId) return;
-      pendingConfirms.delete(requestId);
-      clearTimeout(cur.timeout);
-      chrome.windows.onRemoved.removeListener(onRemoved);
-      resolve('reject');
-    };
-    chrome.windows.onRemoved.addListener(onRemoved);
+      const timeout = setTimeout(() => {
+        const slot = pendingConfirms.get(requestId);
+        if (!slot) return;
+        pendingConfirms.delete(requestId);
+        try {
+          if (slot.windowId != null) chrome.windows.remove(slot.windowId);
+        } catch {
+          /* noop */
+        }
+        resolve('reject');
+      }, CONFIRM_TIMEOUT_MS);
+
+      const slotResolve = (d: ConfirmDecision): void => {
+        // grant 발급은 approve 이고 rememberFor1h 가 true 인 경우에만.
+        if (d.decision === 'approve' && d.rememberFor1h) {
+          void addGrant(ctxInput.origin, ctxInput.method as GrantMethod);
+        }
+        resolve(d.decision);
+      };
+      const slot: PendingConfirm = { context, nonce, resolve: slotResolve, timeout };
+      pendingConfirms.set(requestId, slot);
+
+      const url =
+        chrome.runtime.getURL('confirm.html') +
+        '?requestId=' + encodeURIComponent(requestId) +
+        '&nonce=' + encodeURIComponent(nonce);
+
+      chrome.windows.create(
+        { url, type: 'popup', width: 420, height: 640 },
+        (win) => {
+          if (chrome.runtime.lastError || !win) {
+            clearTimeout(timeout);
+            pendingConfirms.delete(requestId);
+            resolve('reject');
+            return;
+          }
+          slot.windowId = win.id;
+        },
+      );
+
+      const onRemoved = (winId: number): void => {
+        const cur = pendingConfirms.get(requestId);
+        if (!cur || cur.windowId !== winId) return;
+        pendingConfirms.delete(requestId);
+        clearTimeout(cur.timeout);
+        chrome.windows.onRemoved.removeListener(onRemoved);
+        resolve('reject');
+      };
+      chrome.windows.onRemoved.addListener(onRemoved);
+    })();
   });
 }
 
@@ -657,6 +841,7 @@ function handleConfirmResult(
   requestId: string,
   nonce: string,
   decision: 'approve' | 'reject',
+  rememberFor1h: boolean,
 ): void {
   const slot = pendingConfirms.get(requestId);
   if (!slot) return;
@@ -670,5 +855,5 @@ function handleConfirmResult(
       /* noop */
     }
   }
-  slot.resolve(decision);
+  slot.resolve({ decision, rememberFor1h });
 }

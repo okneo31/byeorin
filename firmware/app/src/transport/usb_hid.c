@@ -3,6 +3,34 @@
  * SECURITY-CRITICAL: changes require security review.
  * 노동자의 지갑 Cold — USB-HID transport (Ledger-style framing).
  *
+ * Protocol summary (mirrors transport/usb_hid.h):
+ *
+ *   Each HID OUT/IN report is exactly HID_REPORT_LEN (CONFIG_NODONG_USB_HID_REPORT_LEN,
+ *   default 64) bytes. Inside each report:
+ *
+ *     Byte 0..1 : channel ID, big-endian, fixed 0x0101
+ *     Byte 2    : tag, fixed 0x05 (APDU)
+ *     Byte 3..4 : sequence index, big-endian (0 == first fragment)
+ *     If seq == 0:
+ *       Byte 5..6 : total APDU length, big-endian
+ *       Byte 7..  : payload
+ *     Else:
+ *       Byte 5..  : payload
+ *
+ *   Responses use the same framing in reverse.
+ *
+ * Zephyr USB-HID glue:
+ *
+ *   We register a single vendor-defined HID interface (HID_0) with one
+ *   IN endpoint and one OUT endpoint, both carrying 64-byte reports.
+ *   On RX (host → device) the class driver invokes set_report (legacy
+ *   stack) or on_int_out_ready, depending on which path the build picks
+ *   up — both paths funnel into hid_on_report_out() which feeds the
+ *   reassembler above.
+ *
+ *   On TX (device → host) we use hid_int_ep_write() which copies into
+ *   the class's IN-endpoint buffer and triggers the SIE.
+ *
  * State machine:
  *
  *  +---------------+    first-fragment    +---------------+
@@ -23,13 +51,30 @@
 
 #include <errno.h>
 #include <string.h>
+
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/device.h>
+#include <zephyr/usb/usb_device.h>
+#include <zephyr/usb/class/usb_hid.h>
 
 LOG_MODULE_REGISTER(nodong_usb, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define HID_REPORT_LEN  CONFIG_NODONG_USB_HID_REPORT_LEN
 #define MAX_APDU_LEN    CONFIG_NODONG_MAX_APDU_LEN
+
+/*
+ * Compile-time sanity: the Ledger framing uses an 8-bit-aligned 64-byte
+ * report. We accept anything in [32..1024] (Kconfig range) but the IN-endpoint
+ * write path below assumes the report fits in a single bulk transfer. If a
+ * board ever needs a smaller MTU we want a build break, not silent truncation.
+ */
+BUILD_ASSERT(HID_REPORT_LEN >= 32 && HID_REPORT_LEN <= 1024,
+	     "HID report length out of supported range");
+BUILD_ASSERT(MAX_APDU_LEN >= HID_REPORT_LEN,
+	     "MAX_APDU_LEN must fit at least one HID report");
+
+/* ----------------------- RX reassembly ---------------------------------- */
 
 enum rx_state {
 	RX_IDLE,
@@ -46,6 +91,11 @@ struct rx_ctx {
 
 static struct rx_ctx           m_rx;
 static nodong_apdu_inbound_cb  m_inbound_cb;
+
+/* USB HID device handle + ready flag for write path. */
+static const struct device *m_hdev;
+static atomic_t             m_in_ready = ATOMIC_INIT(1);
+static bool                 m_started;
 
 /*
  * Defence in depth: when we return to IDLE — whether because we
@@ -68,31 +118,50 @@ void nodong_usb_hid_register_apdu_cb(nodong_apdu_inbound_cb cb)
 	m_inbound_cb = cb;
 }
 
-int nodong_usb_hid_init(void)
-{
-	rx_reset();
-	/* TODO: usb_enable(), bind HID class with our report descriptor,
-	 *       register the OUT endpoint callback that funnels into
-	 *       hid_on_report_out() below. */
-	ND_LOG_INF("usb_hid_init (stub)");
-	return 0;
-}
-
-int nodong_usb_hid_start(void)
-{
-	/* TODO: usb_enable(NULL); pull-up DP. */
-	return 0;
-}
-
-void nodong_usb_hid_stop(void)
-{
-	/* TODO: usb_disable(); */
-}
+/* ----------------------- HID report descriptor -------------------------- */
 
 /*
- * Called by the HID class glue (TODO) for every 64-byte report received
- * on our OUT endpoint. Kept static so we can unit-test by exposing a
- * test-only wrapper later.
+ * Vendor-defined HID interface, Ledger-compatible:
+ *   Usage Page : 0xFFA0 (vendor)
+ *   Usage      : 0x0001
+ *   1 input report  : 64 * 8-bit values
+ *   1 output report : 64 * 8-bit values
+ *
+ * No report ID byte (single in/out report).
+ */
+static const uint8_t hid_report_desc[] = {
+	/*
+	 * Usage Page (Vendor-Defined 0xFFA0). The Zephyr HID_USAGE_PAGE
+	 * macro emits the 1-byte-data short form `0x05, p`, which can
+	 * only carry an 8-bit page index. 0xFFA0 needs the 2-byte-data
+	 * short form `0x06, lo, hi`, so we emit it raw.
+	 */
+	0x06, 0xA0, 0xFF,
+	HID_USAGE(0x01),
+	HID_COLLECTION(HID_COLLECTION_APPLICATION),
+		HID_USAGE(0x01),
+		HID_LOGICAL_MIN8(0x00),
+		HID_LOGICAL_MAX16(0xFF, 0x00),
+		HID_REPORT_SIZE(8),
+		HID_REPORT_COUNT(HID_REPORT_LEN),
+		/* Data, Variable, Absolute */
+		HID_INPUT(0x02),
+
+		HID_USAGE(0x01),
+		HID_LOGICAL_MIN8(0x00),
+		HID_LOGICAL_MAX16(0xFF, 0x00),
+		HID_REPORT_SIZE(8),
+		HID_REPORT_COUNT(HID_REPORT_LEN),
+		/* Data, Variable, Absolute */
+		HID_OUTPUT(0x02),
+	HID_END_COLLECTION,
+};
+
+/* ----------------------- RX path: report → reassembler ------------------ */
+
+/*
+ * Called by the HID class for every report we receive on the OUT endpoint.
+ * Kept static so we can unit-test by exposing a test-only wrapper later.
  */
 static void hid_on_report_out(const uint8_t *report, size_t len)
 {
@@ -157,15 +226,189 @@ static void hid_on_report_out(const uint8_t *report, size_t len)
 	}
 }
 
+/* ----------------------- Zephyr HID class callbacks --------------------- */
+
+/*
+ * SET_REPORT path (control transfers). Some hosts (Windows, some Chrome HID)
+ * deliver OUT reports here even when an interrupt-OUT endpoint exists. We
+ * handle both for compatibility.
+ */
+static int on_set_report(const struct device *dev,
+			 struct usb_setup_packet *setup,
+			 int32_t *len, uint8_t **data)
+{
+	(void)dev; (void)setup;
+
+	if (!len || !data || !*data || *len <= 0) {
+		return -EINVAL;
+	}
+	if ((size_t)*len != HID_REPORT_LEN) {
+		ND_LOG_WRN("hid set_report unexpected len=%d", *len);
+		return -EINVAL;
+	}
+	hid_on_report_out(*data, (size_t)*len);
+	return 0;
+}
+
+/*
+ * Interrupt-OUT endpoint ready path. Zephyr signals "the host wrote a
+ * report" via this callback; the buffer is owned by the class driver and
+ * is pulled with hid_int_ep_read(). Kept compatible across NCS 2.7 — if
+ * the symbol name diverges on a particular Zephyr branch, see the
+ * "API drift" note at the bottom of this file.
+ */
+static void on_int_out_ready(const struct device *dev)
+{
+	uint8_t buf[HID_REPORT_LEN];
+	uint32_t got = 0;
+
+#if defined(CONFIG_ENABLE_HID_INT_OUT_EP)
+	int rc = hid_int_ep_read(dev, buf, sizeof(buf), &got);
+	if (rc < 0) {
+		ND_LOG_WRN("hid_int_ep_read rc=%d", rc);
+		return;
+	}
+	if (got != HID_REPORT_LEN) {
+		ND_LOG_WRN("hid: short int-out read got=%u", got);
+		return;
+	}
+	hid_on_report_out(buf, got);
+#else
+	/* No interrupt-OUT endpoint configured; SET_REPORT path is used. */
+	(void)dev; (void)buf; (void)got;
+#endif
+}
+
+/* IN-endpoint completion: mark the endpoint ready for the next write. */
+static void on_int_in_ready(const struct device *dev)
+{
+	(void)dev;
+	atomic_set(&m_in_ready, 1);
+}
+
+static const struct hid_ops m_ops = {
+	.get_report   = NULL,
+	.set_report   = on_set_report,
+	.int_in_ready = on_int_in_ready,
+#if defined(CONFIG_ENABLE_HID_INT_OUT_EP)
+	.int_out_ready = on_int_out_ready,
+#endif
+	.on_idle      = NULL,
+	.protocol_change = NULL,
+};
+
+/* ----------------------- Lifecycle -------------------------------------- */
+
+int nodong_usb_hid_init(void)
+{
+	rx_reset();
+
+	/*
+	 * In Zephyr v3.7 the legacy USB device stack still exposes HID
+	 * instances by name (HID_0, HID_1, ...). The new device_next stack
+	 * uses DEVICE_DT_GET(); for now we stick to the legacy API because
+	 * CONFIG_USB_DEVICE_STACK is enabled in prj.conf.
+	 */
+	m_hdev = device_get_binding("HID_0");
+	if (!m_hdev) {
+		ND_LOG_ERR("usb_hid: no HID_0 device binding");
+		return -ENODEV;
+	}
+
+	usb_hid_register_device(m_hdev, hid_report_desc,
+				sizeof(hid_report_desc), &m_ops);
+
+	int rc = usb_hid_init(m_hdev);
+	if (rc) {
+		ND_LOG_ERR("usb_hid_init rc=%d", rc);
+		return rc;
+	}
+
+	atomic_set(&m_in_ready, 1);
+	m_started = false;
+	ND_LOG_INF("usb_hid: HID class registered, %u-byte reports",
+		   (unsigned)HID_REPORT_LEN);
+	return 0;
+}
+
+int nodong_usb_hid_start(void)
+{
+	if (!m_hdev) {
+		return -EINVAL;
+	}
+	if (m_started) {
+		return 0;
+	}
+
+	/*
+	 * usb_enable() drives the SIE pull-up. NULL passes the default
+	 * status callback. We could pass a custom one to react to
+	 * SUSPEND/RESUME but for a cold wallet the only signal we need
+	 * is "host wrote a report" (handled via hid_ops).
+	 */
+	int rc = usb_enable(NULL);
+	if (rc == -EALREADY) {
+		/* Idempotent: someone else (e.g. USB DFU) already enabled. */
+		rc = 0;
+	}
+	if (rc) {
+		ND_LOG_ERR("usb_enable rc=%d", rc);
+		return rc;
+	}
+
+	m_started = true;
+	ND_LOG_INF("usb_hid: started");
+	return 0;
+}
+
+void nodong_usb_hid_stop(void)
+{
+	if (!m_started) {
+		return;
+	}
+	int rc = usb_disable();
+	if (rc) {
+		ND_LOG_WRN("usb_disable rc=%d", rc);
+	}
+	m_started = false;
+	rx_reset();
+}
+
+/* ----------------------- TX: outbound APDU → reports -------------------- */
+
+/*
+ * Wait briefly for the IN endpoint to become ready again after the previous
+ * write. The host should drain reports at the configured poll interval
+ * (1 ms by default, see CONFIG_USB_HID_POLL_INTERVAL_MS). 50 ms is a
+ * generous slack; if it expires we treat the link as stalled.
+ */
+#define HID_IN_READY_TIMEOUT_MS  50
+
+static int wait_in_ready(void)
+{
+	int waited_ms = 0;
+	while (!atomic_cas(&m_in_ready, 1, 0)) {
+		if (waited_ms >= HID_IN_READY_TIMEOUT_MS) {
+			return -ETIMEDOUT;
+		}
+		k_sleep(K_MSEC(1));
+		waited_ms++;
+	}
+	return 0;
+}
+
 int nodong_usb_hid_send(const uint8_t *apdu, size_t len)
 {
 	if (!apdu || len == 0 || len > MAX_APDU_LEN) {
 		return -EINVAL;
 	}
+	if (!m_hdev || !m_started) {
+		return -ENOTCONN;
+	}
 
-	uint8_t report[HID_REPORT_LEN];
-	size_t  cursor = 0;
-	uint16_t seq   = 0;
+	uint8_t  report[HID_REPORT_LEN];
+	size_t   cursor = 0;
+	uint16_t seq    = 0;
 
 	while (cursor < len) {
 		memset(report, 0, sizeof(report));
@@ -189,20 +432,50 @@ int nodong_usb_hid_send(const uint8_t *apdu, size_t len)
 		cursor += take;
 		seq++;
 
-		/* TODO: hid_int_ep_write() or usb_hid_send_report(). */
-		(void)report;
+		int rc = wait_in_ready();
+		if (rc) {
+			ND_LOG_ERR("usb_hid_send: IN endpoint stalled");
+			return rc;
+		}
+
+		uint32_t wrote = 0;
+		rc = hid_int_ep_write(m_hdev, report, sizeof(report), &wrote);
+		if (rc) {
+			ND_LOG_ERR("hid_int_ep_write rc=%d", rc);
+			/* Restore the ready bit so the next attempt is not
+			 * permanently stuck waiting on a write we never made. */
+			atomic_set(&m_in_ready, 1);
+			return rc;
+		}
+		if (wrote != sizeof(report)) {
+			ND_LOG_WRN("hid: short write %u/%u",
+				   wrote, (unsigned)sizeof(report));
+		}
 	}
+
+	/* Wipe stack-local frame: it carried APDU response bytes which may
+	 * include signatures or pubkey material. Defence-in-depth only —
+	 * the actual response data is the caller's, but the report copy
+	 * here is the last on-stack residue. */
+	memset(report, 0, sizeof(report));
 	return 0;
 }
 
-/* Hook called by hid_int_ep IN-complete (TODO) — placeholder. */
-__attribute__((unused))
-static void hid_on_report_in_complete(void) { }
-
-/* Compile-time shim so the linker still has a reference to hid_on_report_out
- * until the real USB glue is wired up. Remove once usb_enable() is in init. */
-__attribute__((unused))
-static void *_keep_static_callbacks[] = {
-	(void *)&hid_on_report_out,
-	(void *)&hid_on_report_in_complete,
-};
+/*
+ * --- API drift notes for the embedded dev (DOUBLE-CHECK on real toolchain):
+ *
+ *   1) The exact name of `hid_int_ep_read` may be `hid_int_ep_read` (NCS 2.7
+ *      mainline) or surfaced via the new `usbd_hid_*` API on the
+ *      device_next stack. We target the legacy API because prj.conf has
+ *      CONFIG_USB_DEVICE_STACK=y, not CONFIG_USB_DEVICE_NEXT.
+ *
+ *   2) `struct hid_ops` member names vary slightly between Zephyr LTS
+ *      revisions. The fields used here (set_report, int_in_ready,
+ *      int_out_ready) are the v3.7 baseline. If a member is renamed in
+ *      a backport, add the missing initialiser; do NOT compile out
+ *      `set_report` — it is the cross-host compatibility path.
+ *
+ *   3) device_get_binding("HID_0") still works in v3.7 but is deprecated;
+ *      the recommended path is DEVICE_DT_GET_ONE(zephyr_hid_device) on
+ *      the device_next stack. Migrate when we move off the legacy stack.
+ */

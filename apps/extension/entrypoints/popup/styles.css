@@ -163,3 +163,12 @@ footer {
   padding: 6px 10px;
   font-size: 12px;
 }
+
+/* ActiveGrants 의 origin + 메타데이터(메서드 / 남은 시간) 컬럼. */
+.grant-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}

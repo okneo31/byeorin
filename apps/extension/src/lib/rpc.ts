@@ -42,7 +42,15 @@ export type BackgroundMessage =
   | { type: 'rpc'; payload: JsonRpcRequest }
   | { type: 'connect-result'; requestId: string; nonce: string; decision: 'approve' | 'reject' }
   | { type: 'connect-context-get'; requestId: string; nonce: string }
-  | { type: 'confirm-result'; requestId: string; nonce: string; decision: 'approve' | 'reject' }
+  | {
+      type: 'confirm-result';
+      requestId: string;
+      nonce: string;
+      decision: 'approve' | 'reject';
+      // 사용자가 confirm popup 에서 "이 사이트에서 1시간 동안 자동 승인" 을 체크했는지.
+      // background 는 decision==='approve' 이고 본 필드가 true 일 때만 grant 를 발급한다.
+      rememberFor1h?: boolean;
+    }
   | { type: 'confirm-context-get'; requestId: string; nonce: string };
 
 export type ConnectContext = {
@@ -85,7 +93,42 @@ export type SendTxConfirmContext = {
   chainId: string | null;
 };
 
-export type ConfirmContext = PersonalSignConfirmContext | SendTxConfirmContext;
+/**
+ * EIP-712 typed data 의 domain 부분. spec 상 모든 필드가 옵셔널이므로 ?-로 받는다.
+ * salt 는 32바이트 hex(있다면) — 그대로 표시한다.
+ */
+export type EIP712Domain = {
+  name?: string;
+  version?: string;
+  chainId?: number | string;
+  verifyingContract?: string;
+  salt?: string;
+};
+
+/**
+ * eth_signTypedData_v4 확인 popup 컨텍스트.
+ * - domain: 원본 typedData.domain 그대로(요약은 UI 가 추출).
+ * - typesJson: types 객체 직렬화(UI 가 옵셔널로 보여줌).
+ * - primaryType: 서명 대상 root type 명.
+ * - messageJson: typedData.message 의 pretty-printed JSON 문자열.
+ * - digest: 0x… 32바이트 EIP-712 해시(viem.hashTypedData 결과). 사용자가 보고 검증 가능.
+ */
+export type SignTypedDataConfirmContext = {
+  requestId: string;
+  method: 'eth_signTypedData_v4';
+  origin: string;
+  address: string;
+  domain: EIP712Domain;
+  primaryType: string;
+  typesJson: string;
+  messageJson: string;
+  digest: string;
+};
+
+export type ConfirmContext =
+  | PersonalSignConfirmContext
+  | SendTxConfirmContext
+  | SignTypedDataConfirmContext;
 
 export const RPC_ERRORS = {
   USER_REJECTED: { code: 4001, message: '사용자가 요청을 거부했습니다' },
