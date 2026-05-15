@@ -1,0 +1,24 @@
+# Zephyr / west / build artefacts
+build/
+.west/
+.cache/
+twister-out/
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
+*.o
+*.a
+compile_commands.json
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Signing keys MUST NOT be committed
+**/mcuboot_priv.pem
+**/*-signing-key.pem

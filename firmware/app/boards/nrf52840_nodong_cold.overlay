@@ -1,0 +1,180 @@
+/*
+ * Devicetree overlay for the 노동자의 지갑 Cold board.
+ *
+ * Pin assignments mirror hardware/pin-map.md. When the real board file
+ * lands under firmware/boards/nodong_cold/, this overlay becomes obsolete
+ * for production — but it keeps `west build -b nrf52840dk_nrf52840` working
+ * for early development on the Nordic DK.
+ *
+ * Bus assignment:
+ *   - SPI3  -> e-ink panel (SSD1681/UC8151)
+ *   - I2C0  -> SE050 secure element
+ *   - GPIO  -> 2 buttons, 1 status LED, e-ink DC/RST/BUSY sidebands
+ */
+
+/ {
+	chosen {
+		zephyr,console = &uart0;
+		zephyr,uart-mcumgr = &uart0;
+		zephyr,bt-mon-uart = &uart0;
+		zephyr,bt-c2h-uart = &uart0;
+	};
+
+	aliases {
+		ok-button     = &button_ok;
+		cancel-button = &button_cancel;
+		status-led    = &led_status;
+		eink-display  = &eink0;
+		se050         = &se050_0;
+	};
+
+	buttons {
+		compatible = "gpio-keys";
+
+		button_ok: button_ok {
+			gpios = <&gpio0 13 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			label = "OK";
+			zephyr,code = <0x1c>; /* INPUT_KEY_ENTER */
+		};
+
+		button_cancel: button_cancel {
+			gpios = <&gpio0 15 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			label = "Cancel";
+			zephyr,code = <0x01>; /* INPUT_KEY_ESC */
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		led_status: led_status {
+			gpios = <&gpio0 17 GPIO_ACTIVE_HIGH>;
+			label = "Status LED";
+		};
+	};
+
+	eink_ctrl: eink_ctrl {
+		compatible = "gpio-keys"; /* re-purposed to expose pins */
+		dc-gpios   = <&gpio0 22 GPIO_ACTIVE_HIGH>;
+		rst-gpios  = <&gpio0 23 GPIO_ACTIVE_LOW>;
+		busy-gpios = <&gpio0 24 GPIO_ACTIVE_HIGH>;
+	};
+};
+
+/* ------------------------------------------------------------------ */
+/* SPI3 — e-ink                                                       */
+/* ------------------------------------------------------------------ */
+&pinctrl {
+	spi3_default: spi3_default {
+		group1 {
+			psels = <NRF_PSEL(SPIM_SCK,  0, 19)>,
+			        <NRF_PSEL(SPIM_MOSI, 0, 20)>,
+			        <NRF_PSEL(SPIM_MISO, 0, 21)>; /* unused but routed */
+		};
+	};
+
+	spi3_sleep: spi3_sleep {
+		group1 {
+			psels = <NRF_PSEL(SPIM_SCK,  0, 19)>,
+			        <NRF_PSEL(SPIM_MOSI, 0, 20)>,
+			        <NRF_PSEL(SPIM_MISO, 0, 21)>;
+			low-power-enable;
+		};
+	};
+
+	i2c0_default: i2c0_default {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 0, 26)>,
+			        <NRF_PSEL(TWIM_SCL, 0, 27)>;
+		};
+	};
+
+	i2c0_sleep: i2c0_sleep {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 0, 26)>,
+			        <NRF_PSEL(TWIM_SCL, 0, 27)>;
+			low-power-enable;
+		};
+	};
+};
+
+&spi3 {
+	status = "okay";
+	compatible = "nordic,nrf-spim";
+	pinctrl-0 = <&spi3_default>;
+	pinctrl-1 = <&spi3_sleep>;
+	pinctrl-names = "default", "sleep";
+	cs-gpios = <&gpio0 25 GPIO_ACTIVE_LOW>;
+
+	eink0: eink@0 {
+		compatible = "solomon,ssd1681"; /* alt: ultrachip,uc8151 */
+		reg = <0>;
+		spi-max-frequency = <8000000>;
+		width  = <200>;
+		height = <200>;
+		dc-gpios   = <&gpio0 22 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&gpio0 23 GPIO_ACTIVE_LOW>;
+		busy-gpios  = <&gpio0 24 GPIO_ACTIVE_HIGH>;
+	};
+};
+
+/* ------------------------------------------------------------------ */
+/* I2C0 — SE050                                                       */
+/* ------------------------------------------------------------------ */
+&i2c0 {
+	status = "okay";
+	compatible = "nordic,nrf-twim";
+	pinctrl-0 = <&i2c0_default>;
+	pinctrl-1 = <&i2c0_sleep>;
+	pinctrl-names = "default", "sleep";
+	clock-frequency = <I2C_BITRATE_FAST>;
+
+	se050_0: se050@48 {
+		compatible = "nxp,se050";
+		reg = <0x48>;
+		label = "SE050";
+	};
+};
+
+/* ------------------------------------------------------------------ */
+/* Flash partitions                                                   */
+/*                                                                    */
+/*   MCUBoot owns 0x000000 - 0x00C000.                                */
+/*   Slot0 holds the running image, Slot1 receives upgrades over      */
+/*   USB-HID (APDU 0xFE).                                             */
+/*   "storage" is Zephyr NVS for settings + BLE bonds.                */
+/*   "keystore_meta" only stores SE050 *object IDs*, never key data.  */
+/* ------------------------------------------------------------------ */
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x00000000 0x0000C000>;
+			read-only;
+		};
+
+		slot0_partition: partition@c000 {
+			label = "image-0";
+			reg = <0x0000C000 0x00067000>;
+		};
+
+		slot1_partition: partition@73000 {
+			label = "image-1";
+			reg = <0x00073000 0x00067000>;
+		};
+
+		storage_partition: partition@da000 {
+			label = "storage";
+			reg = <0x000DA000 0x00006000>;
+		};
+
+		keystore_meta_partition: partition@e0000 {
+			label = "keystore-meta";
+			reg = <0x000E0000 0x00020000>;
+		};
+	};
+};

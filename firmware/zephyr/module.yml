@@ -1,0 +1,20 @@
+# Declares this tree as a Zephyr module so `west` discovers our Kconfig
+# fragments and CMake hooks without the user passing -DEXTRA_* flags.
+#
+# The actual application lives under app/. By exposing both as a Zephyr
+# "module" we get to ship board-overlays, Kconfig symbols (CONFIG_NODONG_*),
+# and (future) shared library code under firmware/lib/ from a single place.
+
+name: nodong_cold
+
+build:
+  cmake: ../app
+  kconfig: ../app/Kconfig
+  settings:
+    board_root: ..
+    dts_root: ..
+
+# Application identity — surfaced in the MCUBoot image header.
+package-helpers:
+  - name: nodong_cold
+    version: 0.0.1-dev

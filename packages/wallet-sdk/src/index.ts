@@ -28,3 +28,6 @@ export { XrpAdapter } from './chains/xrp.js';
 export { CosmosAdapter, type CosmosAdapterOptions } from './chains/cosmos.js';
 export { SolanaAdapter, type SolanaAdapterOptions } from './chains/solana.js';
 export { TronAdapter, type TronAdapterOptions } from './chains/tron.js';
+export { TonAdapter, type TonAdapterOptions } from './chains/ton.js';
+export { AptosAdapter, type AptosAdapterOptions } from './chains/aptos.js';
+export { SuiAdapter, type SuiAdapterOptions } from './chains/sui.js';

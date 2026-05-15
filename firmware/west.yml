@@ -1,0 +1,54 @@
+# West manifest for 노동자의 지갑 Cold firmware.
+#
+# Layout: this repo is the manifest repo. `west init -l firmware/` then
+# `west update` will fetch Zephyr, the nRF Connect SDK, and MCUBoot into
+# the workspace alongside this directory.
+
+manifest:
+  version: "1.0"
+
+  remotes:
+    - name: zephyrproject
+      url-base: https://github.com/zephyrproject-rtos
+    - name: nrfconnect
+      url-base: https://github.com/nrfconnect
+
+  defaults:
+    remote: zephyrproject
+
+  projects:
+    # Zephyr RTOS — pinned to a known-good release.
+    - name: zephyr
+      revision: v3.7.0
+      remote: zephyrproject
+      import:
+        # Pull in the modules Zephyr itself ships (HAL, mbedTLS, etc.).
+        # Excluding optional drivers we will never use keeps clones small.
+        name-allowlist:
+          - hal_nordic
+          - mbedtls
+          - tinycrypt
+          - segger
+          - cmsis
+          - nrf_hw_models
+          - mcuboot
+          - tfm-mcuboot
+          - trusted-firmware-m
+          - nrfxlib
+
+    # nRF Connect SDK — needed for USB-HID class glue, MPSL, and pm_config.
+    - name: sdk-nrf
+      revision: v2.7.0
+      remote: nrfconnect
+      path: nrf
+      import: false
+
+    # MCUBoot is pulled in transitively by zephyr import, but pin explicitly
+    # so signing keys / imgtool versions stay reproducible.
+    - name: mcuboot
+      revision: v2.1.0
+      remote: zephyrproject
+      path: bootloader/mcuboot
+
+  self:
+    path: firmware

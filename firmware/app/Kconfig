@@ -1,0 +1,63 @@
+# 노동자의 지갑 Cold — application Kconfig.
+#
+# Anything that is firmware-policy (not Zephyr-policy) belongs here.
+# These symbols are referenced from C as CONFIG_NODONG_*.
+
+mainmenu "Nodong Cold Wallet firmware"
+
+menu "Nodong Cold"
+
+config NODONG_SE050_ADDR
+	hex "SE050 I2C address (7-bit)"
+	default 0x48
+	help
+	  7-bit I2C address of the NXP SE050 secure element.
+	  Default per SE050 datasheet is 0x48.
+
+config NODONG_BLE_NAME
+	string "BLE advertised device name"
+	default "NodongCold"
+	help
+	  Name surfaced over GAP advertisements. Companion app uses
+	  this to filter discovered peers.
+
+config NODONG_USB_HID_REPORT_LEN
+	int "USB-HID report length (bytes)"
+	default 64
+	range 32 1024
+	help
+	  Size of one HID report. Ledger-compatible APDU framing
+	  fragments APDUs into reports of this size.
+
+config NODONG_FIRMWARE_VERSION_STRING
+	string "Firmware version string surfaced via GET_VERSION APDU"
+	default "0.0.1-dev"
+
+config NODONG_CONFIRM_TIMEOUT_SEC
+	int "User-confirmation timeout (seconds)"
+	default 45
+	range 5 300
+	help
+	  How long confirm_tx() waits for a physical button press
+	  before returning CONFIRM_TIMEOUT.
+
+config NODONG_MAX_APDU_LEN
+	int "Maximum reassembled APDU length"
+	default 1024
+	range 64 8192
+	help
+	  Upper bound on a single command APDU. Anything larger is
+	  rejected at the transport layer.
+
+config NODONG_ALLOW_BLE_SIGNING
+	bool "Allow signing requests over BLE (not only USB)"
+	default n
+	help
+	  Defence in depth: by default the firmware refuses SIGN_HASH
+	  APDUs that arrive over BLE. Enable only after the threat model
+	  for BLE pairing has been re-reviewed.
+
+endmenu
+
+# Pull in Zephyr's own Kconfig so the application can still use it.
+source "Kconfig.zephyr"

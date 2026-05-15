@@ -1,0 +1,31 @@
+# KiCad / EDA noise (when schematic & layout land under hardware/kicad/)
+*.lck
+*.bak
+*.bak[0-9]*
+*-backups/
+*-cache.lib
+*-cache.dcm
+fp-info-cache
+sym-lib-table.bak
+fp-lib-table.bak
+_autosave-*
+~*.lock
+
+# Editor swap
+*.swp
+*.swo
+*~
+
+# Manufacturing artefact outputs
+gerbers/
+gerbers.zip
+*.gbr
+*.drl
+*.xy
+*.pos
+*.rep
+*.csv.bak
+
+# OS junk
+.DS_Store
+Thumbs.db
