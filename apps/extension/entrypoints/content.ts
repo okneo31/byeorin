@@ -1,15 +1,17 @@
 import { defineContentScript } from 'wxt/sandbox';
 import {
   NODONG_MSG_TAG,
+  type BackgroundMessage,
   type JsonRpcRequest,
   type JsonRpcResponse,
   type WindowEnvelope,
 } from '../src/lib/rpc.js';
 
-// 모든 페이지에 inpage 스크립트(window.ethereum)를 주입하고,
-// inpage ↔ background 사이에서 메시지를 중계한다.
+// H3 fix: 공개 웹(https) + 로컬 개발(http://localhost) 로만 주입을 한정한다.
+// chrome://, chrome-extension://, file://, about:, view-source: 등 특권/내부 페이지에서는
+// dApp 프로바이더가 활성화될 이유가 없으며, 은행/정부/인트라넷 환경에서의 표면 노출도 줄인다.
 export default defineContentScript({
-  matches: ['<all_urls>'],
+  matches: ['https://*/*', 'http://localhost/*', 'http://127.0.0.1/*'],
   runAt: 'document_start',
   allFrames: false,
   async main() {
@@ -33,7 +35,8 @@ export default defineContentScript({
       const data = event.data;
       if (!data || data.tag !== NODONG_MSG_TAG || data.dir !== 'page-to-cs') return;
       const req = data.payload as JsonRpcRequest;
-      chrome.runtime.sendMessage(req, (res: JsonRpcResponse) => {
+      const msg: BackgroundMessage = { type: 'rpc', payload: req };
+      chrome.runtime.sendMessage(msg, (res: JsonRpcResponse) => {
         const envelope: WindowEnvelope = {
           tag: NODONG_MSG_TAG,
           dir: 'cs-to-page',

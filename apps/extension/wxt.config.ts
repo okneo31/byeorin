@@ -20,10 +20,11 @@ export default defineConfig({
       48: 'icon/48.png',
       128: 'icon/128.png',
     },
+    // H3 fix: inpage.js 노출도 https + localhost 로 한정. content_scripts matches 와 동기화.
     web_accessible_resources: [
       {
         resources: ['/inpage.js'],
-        matches: ['<all_urls>'],
+        matches: ['https://*/*', 'http://localhost/*', 'http://127.0.0.1/*'],
       },
     ],
   },

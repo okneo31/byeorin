@@ -25,6 +25,7 @@ export {
 } from './chains/evm.js';
 export { BtcAdapter } from './chains/btc.js';
 export { XrpAdapter } from './chains/xrp.js';
+export { isValidClassicAddress } from 'xrpl';
 export { CosmosAdapter, type CosmosAdapterOptions } from './chains/cosmos.js';
 export { SolanaAdapter, type SolanaAdapterOptions } from './chains/solana.js';
 export { TronAdapter, type TronAdapterOptions } from './chains/tron.js';

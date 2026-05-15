@@ -150,22 +150,96 @@ static const struct nodong_apdu_entry k_table[] = {
 
 /* ----------------------- Parser & helpers ----------------------- */
 
+/*
+ * APDU parser — ISO/IEC 7816-4 short and extended forms.
+ *
+ * Layouts we accept:
+ *   Case 1 (no data, no Le):  [CLA INS P1 P2]                                 len == 4
+ *   Short, no Le:             [CLA INS P1 P2 Lc data(Lc)]                     len == 5 + Lc
+ *   Short, with Le:           [CLA INS P1 P2 Lc data(Lc) Le]                  len == 6 + Lc
+ *   Extended, no Le:          [CLA INS P1 P2 0x00 LcHi LcLo data(Lc)]         len == 7 + Lc
+ *   Extended, with Le:        [CLA INS P1 P2 0x00 LcHi LcLo data(Lc) LeHi LeLo]
+ *                                                                             len == 9 + Lc
+ *
+ * Extended form is signalled by raw[4] == 0x00 with at least 7 total bytes.
+ * Earlier this function blindly did `out->lc = raw[4]` (a single byte),
+ * which silently mangled any extended-form APDU: only the low 8 bits of
+ * Lc were kept, and the 2-byte big-endian Lc plus the first byte of data
+ * were treated as payload starting one byte too early. Downstream TLV
+ * walks would then run off the truncated `lc` and miss data. Fix below
+ * decodes the framing correctly and rejects unrecognised trailing bytes.
+ *
+ * We do not currently consume Le, but tolerate its presence so a more
+ * conservative companion SDK does not break the link.
+ */
 int nodong_apdu_parse(const uint8_t *raw, size_t raw_len,
 		      struct nodong_apdu_cmd *out)
 {
-	if (!raw || !out || raw_len < 5) {
+	if (!raw || !out) {
 		return -EINVAL;
 	}
+	if (raw_len < 4u || raw_len > (size_t)CONFIG_NODONG_MAX_APDU_LEN) {
+		return -EINVAL;
+	}
+
 	out->cla = raw[0];
 	out->ins = raw[1];
 	out->p1  = raw[2];
 	out->p2  = raw[3];
-	out->lc  = raw[4];
-	if (raw_len < 5u + out->lc) {
-		return -EINVAL;
+
+	/* Case 1: header only, no Lc, no data, no Le. */
+	if (raw_len == 4u) {
+		out->lc   = 0;
+		out->data = NULL;
+		return 0;
 	}
-	out->data = (out->lc > 0) ? &raw[5] : NULL;
-	return 0;
+
+	/* From here on raw_len >= 5. */
+	if (raw[4] != 0x00) {
+		/* Short form: 1-byte Lc in raw[4]. */
+		uint16_t lc = raw[4];
+		size_t   need_no_le = 5u + lc;
+		size_t   need_w_le  = 6u + lc;
+
+		if (raw_len == need_no_le) {
+			out->lc   = lc;
+			out->data = (lc > 0) ? &raw[5] : NULL;
+			return 0;
+		}
+		if (raw_len == need_w_le) {
+			/* Trailing Le byte; ignored (we don't use Le). */
+			out->lc   = lc;
+			out->data = (lc > 0) ? &raw[5] : NULL;
+			return 0;
+		}
+		return -APDU_ERR_BAD_LC;
+	}
+
+	/*
+	 * Extended form: raw[4] == 0x00, then 2-byte big-endian Lc in
+	 * raw[5..6], data in raw[7..]. Requires at least 7 header bytes.
+	 */
+	if (raw_len < 7u) {
+		return -APDU_ERR_BAD_LC;
+	}
+	{
+		uint16_t lc = (uint16_t)((raw[5] << 8) | raw[6]);
+		size_t   need_no_le = 7u + lc;
+		size_t   need_w_le  = 9u + lc;
+
+		if (raw_len == need_no_le) {
+			out->lc   = lc;
+			out->data = (lc > 0) ? &raw[7] : NULL;
+			return 0;
+		}
+		if (raw_len == need_w_le) {
+			/* Trailing 2-byte Le; ignored. */
+			out->lc   = lc;
+			out->data = (lc > 0) ? &raw[7] : NULL;
+			return 0;
+		}
+		return -APDU_ERR_BAD_LC;
+	}
 }
 
 int nodong_tlv_find(const uint8_t *buf, size_t len, uint8_t tag,

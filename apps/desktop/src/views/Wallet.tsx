@@ -1,5 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { createMnemonic, type WalletAccount } from '@nodong/wallet-sdk';
+import {
+  AddressDisplay,
+  AmountDisplay,
+  Button,
+  Card,
+} from '@nodong/design-system';
 import { clear, getAccount, getAdapter, setMnemonic } from '../wallet-store.js';
 
 interface Props {
@@ -16,8 +22,13 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
   const [draft, setDraft] = useState<string>('');
   const [input, setInput] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+
+  // Triple-state balance: balance / balanceError / loadingBalance.
+  // 빈 지갑(0n)과 네트워크 오류(null + balanceError)를 구분한다.
   const [balance, setBalance] = useState<bigint | null>(null);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
   const [loadingBalance, setLoadingBalance] = useState<boolean>(false);
+  const [reloadKey, setReloadKey] = useState<number>(0);
 
   useEffect(() => {
     if (unlocked && !account) {
@@ -29,24 +40,34 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
     let cancelled = false;
     if (!account) {
       setBalance(null);
+      setBalanceError(null);
+      setLoadingBalance(false);
       return;
     }
     setLoadingBalance(true);
+    setBalanceError(null);
     getAdapter()
       .getBalance(account.address)
       .then((b) => {
-        if (!cancelled) setBalance(b);
+        if (cancelled) return;
+        setBalance(b);
+        setBalanceError(null);
+        setLoadingBalance(false);
       })
-      .catch(() => {
-        if (!cancelled) setBalance(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingBalance(false);
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setBalance(null);
+        setBalanceError(err instanceof Error ? err.message : '잔액 조회 실패');
+        setLoadingBalance(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [account]);
+  }, [account, reloadKey]);
+
+  const retryBalance = useCallback(() => {
+    setReloadKey((k) => k + 1);
+  }, []);
 
   const startCreate = () => {
     setError(null);
@@ -89,6 +110,7 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
     setAccount(null);
     setMode('idle');
     setBalance(null);
+    setBalanceError(null);
     onLock();
   };
 
@@ -100,41 +122,36 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
           <p className="nd-lead">TTL 메인넷에 연결되어 있습니다.</p>
         </header>
 
-        <section className="nd-card">
+        <Card as="section">
           <div className="nd-label">잔액</div>
-          <div className="nd-balance">
-            {loadingBalance
-              ? '…'
-              : balance != null
-                ? formatTtl(balance)
-                : '—'}
-            <span className="nd-balance__unit">TTL</span>
-          </div>
+          {loadingBalance && <div className="nd-muted">잔액 조회 중…</div>}
+          {!loadingBalance && balanceError && (
+            <>
+              <div className="nd-error">잔액을 불러오지 못했습니다 · {balanceError}</div>
+              <div style={{ marginTop: 12 }}>
+                <Button variant="secondary" onClick={retryBalance}>
+                  다시 시도
+                </Button>
+              </div>
+            </>
+          )}
+          {!loadingBalance && !balanceError && balance != null && (
+            <AmountDisplay value={balance} decimals={18} symbol="TTL" size="lg" />
+          )}
           <div className="nd-muted" style={{ marginTop: 12 }}>
             네트워크: TTL · Chain ID 7777
           </div>
-        </section>
+        </Card>
 
-        <section className="nd-card">
+        <Card as="section" style={{ marginTop: 16 }}>
           <div className="nd-label">주소</div>
-          <div className="nd-addr">{account.address}</div>
+          <AddressDisplay address={account.address} head={8} tail={6} />
           <div className="nd-row" style={{ marginTop: 16 }}>
-            <button
-              type="button"
-              className="nd-btn nd-btn--ghost"
-              onClick={() => {
-                if (navigator.clipboard) {
-                  void navigator.clipboard.writeText(account.address);
-                }
-              }}
-            >
-              주소 복사
-            </button>
-            <button type="button" className="nd-btn nd-btn--secondary" onClick={lock}>
+            <Button variant="secondary" onClick={lock}>
               잠금
-            </button>
+            </Button>
           </div>
-        </section>
+        </Card>
       </div>
     );
   }
@@ -149,19 +166,20 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
       </header>
 
       {mode === 'idle' && (
-        <section className="nd-card">
+        <Card as="section">
           <div className="nd-label">시작하기</div>
-          <button type="button" className="nd-btn nd-btn--primary" onClick={startCreate}>
+          <Button variant="primary" className="nd-button--block" onClick={startCreate}>
             새 지갑 만들기
-          </button>
-          <button type="button" className="nd-btn nd-btn--ghost" onClick={startRecover}>
+          </Button>
+          <div style={{ height: 10 }} />
+          <Button variant="ghost" className="nd-button--block" onClick={startRecover}>
             복구 문구로 복원
-          </button>
-        </section>
+          </Button>
+        </Card>
       )}
 
       {mode === 'create' && (
-        <section className="nd-card">
+        <Card as="section">
           <div className="nd-label">복구 문구 (12 단어)</div>
           <div className="nd-warn">
             이 12단어를 안전한 곳에 옮겨 적어 두세요. 복구 문구는 지갑 자체이며, 잃어버리면 자산을
@@ -170,18 +188,18 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
           <div className="nd-mnemonic">{draft}</div>
           {error && <div className="nd-error">{error}</div>}
           <div className="nd-row" style={{ marginTop: 16 }}>
-            <button type="button" className="nd-btn nd-btn--ghost" onClick={() => setMode('idle')}>
+            <Button variant="ghost" onClick={() => setMode('idle')}>
               취소
-            </button>
-            <button type="button" className="nd-btn nd-btn--primary" onClick={confirmCreate}>
+            </Button>
+            <Button variant="primary" onClick={confirmCreate}>
               저장하고 시작
-            </button>
+            </Button>
           </div>
-        </section>
+        </Card>
       )}
 
       {mode === 'recover' && (
-        <section className="nd-card">
+        <Card as="section">
           <div className="nd-label">복구 문구 입력</div>
           <textarea
             className="nd-textarea"
@@ -192,30 +210,19 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
           />
           {error && <div className="nd-error">{error}</div>}
           <div className="nd-row" style={{ marginTop: 16 }}>
-            <button type="button" className="nd-btn nd-btn--ghost" onClick={() => setMode('idle')}>
+            <Button variant="ghost" onClick={() => setMode('idle')}>
               취소
-            </button>
-            <button
-              type="button"
-              className="nd-btn nd-btn--primary"
+            </Button>
+            <Button
+              variant="primary"
               onClick={confirmRecover}
               disabled={input.trim().length === 0}
             >
               복원
-            </button>
+            </Button>
           </div>
-        </section>
+        </Card>
       )}
     </div>
   );
-}
-
-function formatTtl(wei: bigint): string {
-  const denom = 10n ** 18n;
-  const whole = wei / denom;
-  const frac = wei % denom;
-  if (frac === 0n) return whole.toString();
-  const fracStr = frac.toString().padStart(18, '0').replace(/0+$/, '');
-  // limit to 6 decimal places for display
-  return `${whole.toString()}.${fracStr.slice(0, 6)}`;
 }

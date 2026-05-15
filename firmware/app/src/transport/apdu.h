@@ -6,10 +6,23 @@
  * de-framed. We use a Ledger-style INS table so the companion SDK
  * can speak a familiar protocol.
  *
- * Wire format (command):
- *   +----+-----+----+----+----+----------+
- *   | CLA| INS | P1 | P2 | Lc | data ... |
- *   +----+-----+----+----+----+----------+
+ * Wire format (command, ISO/IEC 7816-4):
+ *   Short form (Lc in 0x01..0xFF):
+ *     +----+-----+----+----+------+----------+
+ *     | CLA| INS | P1 | P2 |  Lc  | data ... |
+ *     +----+-----+----+----+------+----------+
+ *       1    1    1    1     1       Lc bytes
+ *   Extended form (Lc > 0xFF, header byte 0x00 marks extended):
+ *     +----+-----+----+----+------+-------+----------+
+ *     | CLA| INS | P1 | P2 | 0x00 | Lc_BE | data ... |
+ *     +----+-----+----+----+------+-------+----------+
+ *       1    1    1    1     1       2       Lc bytes
+ *   Case 1 (no data, no Le): header only, total length == 4.
+ *
+ *   We do NOT use Le in our protocol. A single trailing Le byte (short form)
+ *   or two trailing Le bytes (extended form) is tolerated and skipped; any
+ *   other trailing slop is a framing error.
+ *
  * Wire format (response):
  *   +-----------+-----+-----+
  *   | data ...  | SW1 | SW2 |
@@ -102,9 +115,29 @@ struct nodong_apdu_entry {
 	const char *name;
 };
 
-/* Parse a raw command buffer. Returns 0 on OK, negative errno on malformed. */
+/*
+ * Parse a raw command buffer per ISO/IEC 7816-4.
+ *
+ * Accepts:
+ *   - Case 1                  : raw_len == 4                        (lc = 0)
+ *   - Short form, no Le       : raw_len == 5 + Lc, raw[4] in 1..255 (lc = raw[4])
+ *   - Short form, with Le     : raw_len == 6 + Lc, raw[4] in 1..255 (Le skipped)
+ *   - Extended form, no Le    : raw_len == 7 + Lc, raw[4] == 0x00,
+ *                               Lc = (raw[5]<<8)|raw[6]
+ *   - Extended form, with Le  : raw_len == 9 + Lc, raw[4] == 0x00   (Le skipped)
+ *
+ * Returns 0 on OK, -EINVAL on null/short/oversized, -APDU_ERR_BAD_LC if the
+ * declared Lc does not match raw_len under any of the legal framings above.
+ */
 int nodong_apdu_parse(const uint8_t *raw, size_t raw_len,
 		      struct nodong_apdu_cmd *out);
+
+/*
+ * Parser error codes. Returned as negative values from nodong_apdu_parse().
+ * Distinct from generic -EINVAL so the transport layer can map them to a
+ * specific status word if desired.
+ */
+#define APDU_ERR_BAD_LC          200  /* Declared Lc disagrees with raw_len */
 
 /* Dispatch a parsed command. Always sets resp->sw, even on error paths. */
 int nodong_apdu_dispatch(const struct nodong_apdu_cmd *cmd,

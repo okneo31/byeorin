@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
+import { AddressDisplay, AmountDisplay, Button, Card } from '@nodong/design-system';
 import { getAccount, getAdapter } from '../wallet-store.js';
 
 interface Props {
@@ -13,7 +14,6 @@ export function Account({ onSend, onLock }: Props) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!account) {
@@ -59,37 +59,36 @@ export function Account({ onSend, onLock }: Props) {
 
   if (!account) return null;
 
-  const copyAddr = async () => {
-    try {
-      await navigator.clipboard.writeText(account.address);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* ignore */
-    }
-  };
-
   return (
     <div>
       <h1 className="nd-h1">내 지갑</h1>
       <p className="nd-lead">TTL 메인넷 · 체인 ID 7777</p>
 
-      <div className="nd-card">
-        <p className="nd-label">잔액</p>
-        <div>
-          <span className="nd-balance">{loading ? '...' : formatTtl(balance)}</span>
-          <span className="nd-balance__unit">TTL</span>
-        </div>
+      <Card>
+        <p className="nd-muted" style={{ marginTop: 0, marginBottom: 8 }}>잔액</p>
+        {loading ? (
+          <span className="nd-muted">불러오는 중...</span>
+        ) : (
+          <AmountDisplay
+            value={balance ?? 0n}
+            decimals={18}
+            symbol="TTL"
+            maxDecimals={4}
+            size="lg"
+          />
+        )}
         {error && <div className="nd-error">{error}</div>}
-      </div>
+      </Card>
 
-      <div className="nd-card">
-        <p className="nd-label">받는 주소</p>
-        <div className="nd-addr">{account.address}</div>
-        <div style={{ height: 10 }} />
-        <button type="button" className="nd-btn nd-btn--ghost" onClick={copyAddr}>
-          {copied ? '주소 복사됨' : '주소 복사'}
-        </button>
+      <Card>
+        <p className="nd-muted" style={{ marginTop: 0, marginBottom: 8 }}>받는 주소</p>
+        <AddressDisplay
+          address={account.address}
+          head={10}
+          tail={8}
+          copyLabel="주소 복사"
+          copiedLabel="복사됨"
+        />
         {qrDataUrl && (
           <>
             <div style={{ height: 14 }} />
@@ -101,25 +100,14 @@ export function Account({ onSend, onLock }: Props) {
             </p>
           </>
         )}
-      </div>
+      </Card>
 
-      <button type="button" className="nd-btn nd-btn--primary" onClick={onSend}>
+      <Button variant="primary" className="nd-button--block" onClick={onSend}>
         송금
-      </button>
-      <button type="button" className="nd-btn nd-btn--ghost" onClick={onLock}>
+      </Button>
+      <Button variant="ghost" className="nd-button--block" onClick={onLock}>
         잠금
-      </button>
+      </Button>
     </div>
   );
-}
-
-function formatTtl(wei: bigint | null): string {
-  if (wei == null) return '0.0000';
-  // format to 4 decimal places (truncate, not round, to be conservative)
-  const negative = wei < 0n;
-  const abs = negative ? -wei : wei;
-  const whole = abs / 10n ** 18n;
-  const frac = abs % 10n ** 18n;
-  const fracStr = frac.toString().padStart(18, '0').slice(0, 4);
-  return `${negative ? '-' : ''}${whole.toString()}.${fracStr}`;
 }

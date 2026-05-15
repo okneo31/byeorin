@@ -1,19 +1,10 @@
-:root {
-  --nd-red: #c41e1e;
-  --nd-red-dark: #9a1313;
-  --nd-black: #0a0a0a;
-  --nd-yellow: #f4c430;
-  --nd-bg: #ffffff;
-  --nd-text: #0a0a0a;
-  --nd-muted: #5a5a5a;
-  --nd-border: #e5e5e5;
-  --nd-surface: #fafafa;
-  --nd-danger: #b00020;
-  --nd-success: #1b6e1b;
-  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
-    'Malgun Gothic', system-ui, sans-serif;
-  color-scheme: light;
-}
+/*
+ * apps/web — 앱 레벨 레이아웃 전용 CSS.
+ *
+ * 디자인 토큰과 컴포넌트(.nd-button, .nd-card, .nd-input, .nd-field,
+ * .nd-address, .nd-amount)는 @nodong/design-system/tokens.css 가 정의한다.
+ * 이 파일은 페이지 그리드 / 헤더 / 푸터 / 화면별 보조 위젯만 담는다.
+ */
 
 * {
   box-sizing: border-box;
@@ -24,18 +15,16 @@ body {
   margin: 0;
   padding: 0;
   background: var(--nd-bg);
-  color: var(--nd-text);
+  color: var(--nd-fg);
+  font-family: var(--nd-font-sans);
   -webkit-font-smoothing: antialiased;
-}
-
-button {
-  font-family: inherit;
 }
 
 a {
   color: var(--nd-red);
 }
 
+/* ── App shell ─────────────────────────────────────────── */
 .nd-app {
   min-height: 100vh;
   display: flex;
@@ -44,29 +33,22 @@ a {
 
 .nd-header {
   background: var(--nd-black);
-  color: #fff;
+  color: var(--nd-paper);
   padding: 16px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   border-bottom: 4px solid var(--nd-yellow);
 }
 
 .nd-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 18px;
   font-weight: 800;
   letter-spacing: -0.01em;
-}
-
-.nd-header__brand::before {
-  content: '';
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  background: var(--nd-red);
-  border-radius: 50%;
-  margin-right: 8px;
-  vertical-align: middle;
 }
 
 .nd-header__action {
@@ -87,109 +69,36 @@ a {
   padding: 24px 20px 48px;
 }
 
+/* ── Screen typography (페이지 헤더 한 줄 + 리드) ─────── */
 .nd-h1 {
   font-size: 28px;
   font-weight: 800;
   margin: 8px 0 4px;
   letter-spacing: -0.02em;
+  color: var(--nd-fg);
 }
 
 .nd-lead {
-  color: var(--nd-muted);
+  color: var(--nd-fg-muted);
   margin: 0 0 24px;
   font-size: 15px;
   line-height: 1.55;
 }
 
+/* ── 화면 간 카드/버튼 세로 간격 ─────────────────────── */
+.nd-card + .nd-card,
+.nd-card + .nd-button,
+.nd-button + .nd-button,
+.nd-button + .nd-card {
+  margin-top: 12px;
+}
 .nd-card {
-  background: var(--nd-surface);
-  border: 1px solid var(--nd-border);
-  border-radius: 14px;
-  padding: 20px;
   margin: 16px 0;
 }
-
-.nd-label {
-  display: block;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--nd-muted);
-  margin-bottom: 8px;
-  text-transform: none;
-}
-
-.nd-input,
-.nd-textarea {
+/* 화면 단위 풀폭 액션 버튼(.nd-button은 inline-flex가 기본) */
+.nd-button--block {
+  display: flex;
   width: 100%;
-  border: 1.5px solid var(--nd-border);
-  border-radius: 10px;
-  padding: 14px;
-  font-size: 16px;
-  font-family: inherit;
-  background: #fff;
-  color: var(--nd-text);
-  outline: none;
-}
-
-.nd-input:focus,
-.nd-textarea:focus {
-  border-color: var(--nd-red);
-}
-
-.nd-textarea {
-  min-height: 120px;
-  resize: vertical;
-  line-height: 1.5;
-}
-
-.nd-btn {
-  appearance: none;
-  border: none;
-  cursor: pointer;
-  font-size: 17px;
-  font-weight: 700;
-  padding: 16px 20px;
-  border-radius: 12px;
-  width: 100%;
-  transition: transform 0.05s ease, background 0.15s ease;
-}
-
-.nd-btn:active {
-  transform: translateY(1px);
-}
-
-.nd-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.nd-btn--primary {
-  background: var(--nd-red);
-  color: #fff;
-}
-
-.nd-btn--primary:hover:not(:disabled) {
-  background: var(--nd-red-dark);
-}
-
-.nd-btn--secondary {
-  background: var(--nd-black);
-  color: #fff;
-}
-
-.nd-btn--ghost {
-  background: #fff;
-  color: var(--nd-black);
-  border: 1.5px solid var(--nd-border);
-}
-
-.nd-btn--accent {
-  background: var(--nd-yellow);
-  color: var(--nd-black);
-}
-
-.nd-btn + .nd-btn {
-  margin-top: 12px;
 }
 
 .nd-row {
@@ -197,16 +106,13 @@ a {
   gap: 10px;
 }
 
-.nd-row > .nd-btn {
-  margin-top: 0;
-}
-
+/* ── 복구 문구 박스 (디자인 시스템 외 위젯) ─────────── */
 .nd-mnemonic {
   background: #fff;
   border: 2px dashed var(--nd-red);
   border-radius: 12px;
   padding: 18px;
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--nd-font-mono);
   font-size: 16px;
   line-height: 1.9;
   word-spacing: 6px;
@@ -214,6 +120,30 @@ a {
   user-select: all;
 }
 
+/* 복구 흐름의 textarea — 디자인 시스템 Input은 현재 textarea 모드가
+ * 없어서 일단 native <textarea>에 .nd-input 클래스를 재사용한다.
+ * TODO(design-system): Input에 `as="textarea"` 또는 별도 Textarea 컴포넌트 도입. */
+.nd-textarea {
+  width: 100%;
+  font-family: var(--nd-font-sans);
+  font-size: var(--nd-font-size-md);
+  color: var(--nd-fg);
+  background-color: var(--nd-paper);
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-md);
+  padding: 10px 12px;
+  line-height: var(--nd-line-normal);
+  min-height: 120px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.nd-textarea:focus-visible {
+  outline: none;
+  border-color: var(--nd-red);
+  box-shadow: var(--nd-focus-ring);
+}
+
+/* ── 상태 배너 ───────────────────────────────────────── */
 .nd-warn {
   background: #fff8e1;
   border-left: 4px solid var(--nd-yellow);
@@ -227,7 +157,7 @@ a {
 
 .nd-error {
   background: #fdecec;
-  color: var(--nd-danger);
+  color: var(--nd-error);
   padding: 10px 12px;
   border-radius: 8px;
   font-size: 14px;
@@ -243,27 +173,7 @@ a {
   margin-top: 10px;
 }
 
-.nd-addr {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
-  word-break: break-all;
-  color: var(--nd-muted);
-}
-
-.nd-balance {
-  font-size: 36px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  margin: 6px 0 0;
-}
-
-.nd-balance__unit {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--nd-muted);
-  margin-left: 6px;
-}
-
+/* ── QR / 보조 텍스트 ─────────────────────────────────── */
 .nd-qr {
   display: flex;
   justify-content: center;
@@ -280,14 +190,21 @@ a {
 }
 
 .nd-muted {
-  color: var(--nd-muted);
+  color: var(--nd-fg-muted);
   font-size: 13px;
+}
+
+.nd-hash {
+  font-family: var(--nd-font-mono);
+  font-size: 13px;
+  word-break: break-all;
+  color: var(--nd-fg-muted);
 }
 
 .nd-footer-note {
   margin-top: 24px;
   font-size: 12px;
-  color: var(--nd-muted);
+  color: var(--nd-fg-muted);
   text-align: center;
   line-height: 1.6;
 }

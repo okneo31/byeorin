@@ -4,7 +4,6 @@ import {
   encode,
   encodeForSigning,
   hashes,
-  isValidClassicAddress,
 } from 'xrpl';
 import type { Payment } from 'xrpl';
 import { secp256k1 } from '@noble/curves/secp256k1';
@@ -183,9 +182,14 @@ function toCompressedSecp256k1(pubkey: Uint8Array): Uint8Array {
 
 function xrpToDrops(xrp: number): bigint {
   if (!Number.isFinite(xrp)) throw new Error(`xrp: non-finite balance ${xrp}`);
-  if (xrp <= 0) return 0n;
+  if (xrp < 0) throw new Error(`xrp: negative balance ${xrp}`);
+  if (xrp === 0) return 0n;
+  if (xrp >= 1e15) throw new Error(`xrp: balance ${xrp} exceeds safe range`);
   // Use a string to avoid binary floating-point rounding for typical balances.
   const s = xrp.toFixed(6);
+  if (s.includes('e') || s.includes('E')) {
+    throw new Error(`xrp: unexpected scientific notation in toFixed result: ${s}`);
+  }
   const [whole = '0', frac = ''] = s.split('.');
   const fracPadded = (frac + '000000').slice(0, 6);
   return BigInt(whole) * 1_000_000n + BigInt(fracPadded);
@@ -204,5 +208,3 @@ function isActNotFound(err: unknown): boolean {
   if (typeof e.message === 'string' && e.message.includes('actNotFound')) return true;
   return false;
 }
-
-export { isValidClassicAddress };

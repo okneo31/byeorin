@@ -32,6 +32,19 @@ export type WindowEnvelope =
   | { tag: typeof NODONG_MSG_TAG; dir: 'cs-to-page'; payload: JsonRpcResponse }
   | { tag: typeof NODONG_MSG_TAG; dir: 'cs-to-page-event'; event: string; data?: unknown };
 
+// content script 가 background 로 전달하는 RPC 메시지.
+// background 는 sender.origin 또는 sender.url 에서 origin 을 산출한다(MV3 sender 객체).
+export type BackgroundMessage =
+  | { type: 'rpc'; payload: JsonRpcRequest }
+  | { type: 'connect-result'; requestId: string; decision: 'approve' | 'reject' }
+  | { type: 'connect-context-get'; requestId: string };
+
+export type ConnectContext = {
+  requestId: string;
+  origin: string;
+  address: string;
+};
+
 export const RPC_ERRORS = {
   USER_REJECTED: { code: 4001, message: '사용자가 요청을 거부했습니다' },
   UNAUTHORIZED: { code: 4100, message: '인증되지 않은 요청' },

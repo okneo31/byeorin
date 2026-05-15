@@ -12,8 +12,26 @@ import {
 //  - request({ method, params }): Promise<unknown>
 //  - on/removeListener (chainChanged/accountsChanged 이벤트 큐만 보관)
 //  - isMetaMask: false, isNodong: true
+//
+// H2 fix:
+//  - EIP-6963 announceProvider 구현 (MetaMask 와 공존)
+//  - window.ethereum 은 configurable: true 로 설정해 다른 지갑이 덮어쓸 수 있게 한다
+//  - 다른 지갑이 announce 하기를 잠시 기다린 뒤에만 ethereum 슬롯을 점유한다
 
 type Listener = (...args: unknown[]) => void;
+
+// EIP-6963 식별자(build 별 고정 UUID — 본 빌드 표지).
+const EIP6963_UUID = '6e6f646f-6e67-4e4f-444f-4e472d574c54'; // "nodong-NODONG-WLT"
+const EIP6963_RDNS = 'top.ttl1.nodong';
+
+// 작은 SVG 아이콘 — 적색 사각형 + 흰색 '노' 글자.
+// base64 인라인으로 data URL 화(외부 fetch 없음, < 1KB).
+const ICON_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
+  '<rect width="64" height="64" rx="12" fill="#c41e1e"/>' +
+  '<text x="32" y="44" font-size="36" font-family="sans-serif" font-weight="800" ' +
+  'text-anchor="middle" fill="#fff">노</text></svg>';
+const ICON_DATA_URL = 'data:image/svg+xml;base64,' + btoa(ICON_SVG);
 
 class NodongInpageProvider {
   readonly isMetaMask = false;
@@ -89,28 +107,80 @@ class NodongInpageProvider {
   }
 }
 
+// EIP-6963 announce 도우미.
+function announceEip6963(provider: NodongInpageProvider): void {
+  const info = Object.freeze({
+    uuid: EIP6963_UUID,
+    name: '노동자의 지갑',
+    icon: ICON_DATA_URL,
+    rdns: EIP6963_RDNS,
+  });
+  const detail = Object.freeze({ info, provider });
+  try {
+    window.dispatchEvent(
+      new CustomEvent('eip6963:announceProvider', { detail }),
+    );
+  } catch {
+    // 일부 페이지에서 CustomEvent 미지원 시 무시.
+  }
+}
+
 export default defineUnlistedScript(() => {
   const provider = new NodongInpageProvider();
 
-  // EIP-1193 표준 슬롯: 다른 지갑이 이미 점유했다면 우리는 nodong 으로만 노출.
+  // EIP-6963: 자기 announce 및 dApp 의 requestProvider 에 대한 응답.
+  announceEip6963(provider);
+  window.addEventListener('eip6963:requestProvider', () => announceEip6963(provider));
+
+  // window.nodong — 브랜드 별칭은 우리 namespace 이므로 고정 가능.
   try {
-    if (!(window as unknown as { ethereum?: unknown }).ethereum) {
-      Object.defineProperty(window, 'ethereum', {
-        value: provider,
-        writable: false,
-        configurable: false,
-      });
-    }
+    Object.defineProperty(window, 'nodong', {
+      value: provider,
+      writable: false,
+      configurable: false,
+    });
   } catch {
-    // 일부 다른 지갑이 freeze 한 경우.
+    // 재선언 시도 무시.
   }
 
-  Object.defineProperty(window, 'nodong', {
-    value: provider,
-    writable: false,
-    configurable: false,
-  });
+  // EIP-1193 표준 슬롯: 다른 지갑(MetaMask 등)이 이미 점유했다면 건드리지 않는다.
+  // 점유돼 있지 않더라도 200ms 정도 양보해 다른 지갑이 announce 할 기회를 준다.
+  // H2 fix: configurable: true 로 설정해 후속 지갑이 덮어쓸 수 있게 한다(공존성).
+  const claimEthereumSlot = (): void => {
+    const w = window as unknown as { ethereum?: unknown };
+    if (w.ethereum) return;
+    try {
+      Object.defineProperty(window, 'ethereum', {
+        value: provider,
+        writable: true,
+        configurable: true,
+      });
+    } catch {
+      // freeze 등 실패 시 무시 — EIP-6963 경로로 발견 가능.
+    }
+  };
 
-  // EIP-6963 announce 는 v0.2 에서. 우선은 ethereum 슬롯과 명시 별칭만 제공.
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(claimEthereumSlot, 200);
+    }, { once: true });
+  } else {
+    setTimeout(claimEthereumSlot, 200);
+  }
+
+  // 즉시 호출 dApp(부팅 시 ethereum 을 동기적으로 찾는 케이스) 대응: 비어있다면 일단 즉시 채워둔다.
+  // 단, configurable: true 이므로 나중에 MetaMask 가 덮어써도 무방하다.
+  if (!(window as unknown as { ethereum?: unknown }).ethereum) {
+    try {
+      Object.defineProperty(window, 'ethereum', {
+        value: provider,
+        writable: true,
+        configurable: true,
+      });
+    } catch {
+      /* noop */
+    }
+  }
+
   window.dispatchEvent(new Event('ethereum#initialized'));
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   EvmAdapter,
   TTL_CHAIN,
@@ -12,6 +12,11 @@ import {
   writeSession,
   type SessionState,
 } from '../../src/lib/session.js';
+import {
+  listApprovedOrigins,
+  revokeOrigin,
+  type Origin,
+} from '../../src/lib/origins.js';
 
 // 노동자의 지갑 — 확장 팝업.
 // 셸 수준: 없음 → 생성/복구 → 상태표시 → 로그아웃.
@@ -87,16 +92,19 @@ export function App() {
       <header className="brand">노동자의 지갑</header>
 
       {session ? (
-        <section className="card">
-          <p className="muted small">TTL · chainId 7777</p>
-          <p className="addr" title={session.address}>{shortenAddress(session.address)}</p>
-          <button className="btn-ghost" onClick={handleLogout}>
-            로그아웃
-          </button>
-          <p className="warn small">
-            ※ 본 버전은 니모닉이 세션 메모리에만 저장됩니다. 브라우저 재시작 시 다시 복구가 필요합니다.
-          </p>
-        </section>
+        <>
+          <section className="card">
+            <p className="muted small">TTL · chainId 7777</p>
+            <p className="addr" title={session.address}>{shortenAddress(session.address)}</p>
+            <button className="btn-ghost" onClick={handleLogout}>
+              로그아웃
+            </button>
+            <p className="warn small">
+              ※ 본 버전은 니모닉이 세션 메모리에만 저장됩니다. 브라우저 재시작 시 다시 복구가 필요합니다.
+            </p>
+          </section>
+          <ConnectedSites />
+        </>
       ) : mode === 'home' ? (
         <section className="card">
           <p>지갑이 없습니다.</p>
@@ -169,4 +177,59 @@ function RestorePane({
 function shortenAddress(a: string): string {
   if (a.length <= 12) return a;
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
+}
+
+// 연결된 사이트(승인된 origin) 목록 + 연결 해제 UI.
+// chrome.storage.local('nd:approved-origins') 에서만 origin 문자열을 다룬다.
+function ConnectedSites() {
+  const [origins, setOrigins] = useState<Origin[] | null>(null);
+
+  const refresh = useCallback(() => {
+    listApprovedOrigins().then(setOrigins);
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    // storage 변경 시 자동 새로고침.
+    const onChanged = (
+      changes: { [k: string]: chrome.storage.StorageChange },
+      area: chrome.storage.AreaName,
+    ): void => {
+      if (area === 'local' && 'nd:approved-origins' in changes) refresh();
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
+  }, [refresh]);
+
+  async function handleRevoke(origin: Origin): Promise<void> {
+    await revokeOrigin(origin);
+    refresh();
+  }
+
+  return (
+    <section className="card">
+      <h3 className="section-title">연결된 사이트 관리</h3>
+      {origins === null ? (
+        <p className="muted small">불러오는 중…</p>
+      ) : origins.length === 0 ? (
+        <p className="muted small">연결된 사이트가 없습니다.</p>
+      ) : (
+        <ul className="origin-list">
+          {origins.map((o) => (
+            <li key={o} className="origin-row">
+              <span className="origin-text" title={o}>{o}</span>
+              <button
+                className="btn-ghost btn-sm"
+                onClick={() => {
+                  void handleRevoke(o);
+                }}
+              >
+                연결 해제
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
 }

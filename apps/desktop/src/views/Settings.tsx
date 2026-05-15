@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button, Card } from '@nodong/design-system';
 
 export function Settings() {
   const [locale, setLocale] = useState<'ko' | 'en'>('ko');
@@ -26,76 +27,77 @@ export function Settings() {
         <p className="nd-lead">언어, 테마, 하드웨어 월릿 연결 등을 관리합니다.</p>
       </header>
 
-      <section className="nd-card">
+      <Card as="section">
         <div className="nd-label">언어</div>
         <div className="nd-row">
-          <button
-            type="button"
-            className={'nd-btn ' + (locale === 'ko' ? 'nd-btn--primary' : 'nd-btn--ghost')}
+          <Button
+            variant={locale === 'ko' ? 'primary' : 'ghost'}
             onClick={() => setLocale('ko')}
           >
             한국어
-          </button>
-          <button
-            type="button"
-            className={'nd-btn ' + (locale === 'en' ? 'nd-btn--primary' : 'nd-btn--ghost')}
+          </Button>
+          <Button
+            variant={locale === 'en' ? 'primary' : 'ghost'}
             onClick={() => setLocale('en')}
           >
             English
-          </button>
+          </Button>
         </div>
         <p className="nd-muted" style={{ marginTop: 8 }}>
           UI 언어 전환은 다음 릴리스에서 적용됩니다.
         </p>
-      </section>
+      </Card>
 
-      <section className="nd-card">
+      <div style={{ height: 16 }} />
+
+      <Card as="section">
         <div className="nd-label">테마</div>
         <div className="nd-row">
-          <button
-            type="button"
-            className={'nd-btn ' + (theme === 'light' ? 'nd-btn--primary' : 'nd-btn--ghost')}
+          <Button
+            variant={theme === 'light' ? 'primary' : 'ghost'}
             onClick={() => setTheme('light')}
           >
             라이트
-          </button>
-          <button
-            type="button"
-            className={'nd-btn ' + (theme === 'dark' ? 'nd-btn--primary' : 'nd-btn--ghost')}
+          </Button>
+          <Button
+            variant={theme === 'dark' ? 'primary' : 'ghost'}
             onClick={() => setTheme('dark')}
           >
             다크
-          </button>
+          </Button>
         </div>
         <p className="nd-muted" style={{ marginTop: 8 }}>
           다크 테마는 v0.2에서 활성화됩니다.
         </p>
-      </section>
+      </Card>
 
-      <section className="nd-card">
+      <div style={{ height: 16 }} />
+
+      <Card as="section">
         <div className="nd-label">하드웨어 월릿</div>
-        <button
-          type="button"
-          className="nd-btn nd-btn--ghost"
+        <Button
+          variant="ghost"
           disabled
           title="HW 예정"
           aria-label="하드웨어 월릿 연결 (예정)"
         >
           하드웨어 월릿 연결 (HW 예정)
-        </button>
+        </Button>
         <p className="nd-muted" style={{ marginTop: 8 }}>
           Ledger / Trezor USB 연결을 곧 지원합니다.
         </p>
-      </section>
+      </Card>
 
-      <section className="nd-card">
+      <div style={{ height: 16 }} />
+
+      <Card as="section">
         <div className="nd-label">정보</div>
         <p className="nd-muted">
           노동자의 지갑 데스크톱 · v{appVersion}
           <br />
           TTL Chain ID 7777 · https://rpc.ttl1.top
         </p>
-      </section>
+      </Card>
     </div>
   );
 }

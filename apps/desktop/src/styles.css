@@ -1,21 +1,10 @@
-:root {
-  --nd-red: #c41e1e;
-  --nd-red-dark: #9a1313;
-  --nd-black: #0a0a0a;
-  --nd-yellow: #f4c430;
-  --nd-bg: #ffffff;
-  --nd-text: #0a0a0a;
-  --nd-muted: #5a5a5a;
-  --nd-border: #e5e5e5;
-  --nd-surface: #fafafa;
-  --nd-danger: #b00020;
-  --nd-success: #1b6e1b;
-  --nd-sidebar: #0a0a0a;
-  --nd-sidebar-hover: #1c1c1c;
-  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
-    'Malgun Gothic', system-ui, sans-serif;
-  color-scheme: light;
-}
+/*
+ * apps/desktop — 데스크톱 셸 전용 CSS.
+ *
+ * 디자인 토큰과 컴포넌트(.nd-button, .nd-card, .nd-input, .nd-field,
+ * .nd-address, .nd-amount)는 @nodong/design-system/tokens.css 가 정의한다.
+ * 이 파일은 사이드바 / 메인 패널 / 데스크톱 셸 뷰 크롬만 담는다.
+ */
 
 * {
   box-sizing: border-box;
@@ -28,7 +17,8 @@ body,
   padding: 0;
   height: 100%;
   background: var(--nd-bg);
-  color: var(--nd-text);
+  color: var(--nd-fg);
+  font-family: var(--nd-font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -49,7 +39,7 @@ a {
 }
 
 .nd-sidebar {
-  background: var(--nd-sidebar);
+  background: var(--nd-black);
   color: #f0f0f0;
   display: flex;
   flex-direction: column;
@@ -63,15 +53,6 @@ a {
   gap: 12px;
   margin-bottom: 28px;
   padding: 0 4px;
-}
-
-.nd-sidebar__dot {
-  width: 14px;
-  height: 14px;
-  background: var(--nd-red);
-  border-radius: 50%;
-  flex-shrink: 0;
-  box-shadow: 0 0 0 3px rgba(196, 30, 30, 0.18);
 }
 
 .nd-sidebar__title {
@@ -111,7 +92,7 @@ a {
 }
 
 .nd-nav__item:hover:not(:disabled) {
-  background: var(--nd-sidebar-hover);
+  background: #1c1c1c;
   color: #ffffff;
 }
 
@@ -121,7 +102,7 @@ a {
 }
 
 .nd-nav__item--active:hover:not(:disabled) {
-  background: var(--nd-red-dark);
+  background: var(--nd-red-hover);
 }
 
 .nd-nav__item:disabled {
@@ -178,100 +159,41 @@ a {
 }
 
 .nd-lead {
-  color: var(--nd-muted);
+  color: var(--nd-fg-muted);
   margin: 0 0 16px;
   font-size: 15px;
   line-height: 1.55;
 }
 
-.nd-card {
-  background: var(--nd-surface);
-  border: 1px solid var(--nd-border);
-  border-radius: 14px;
-  padding: 22px;
-  margin: 16px 0;
-}
+/* ===== 데스크톱 뷰 보조 위젯 ===== */
 
 .nd-label {
   display: block;
   font-size: 13px;
   font-weight: 700;
-  color: var(--nd-muted);
+  color: var(--nd-fg-muted);
   margin-bottom: 8px;
 }
 
-.nd-input,
 .nd-textarea {
   width: 100%;
-  border: 1.5px solid var(--nd-border);
-  border-radius: 10px;
+  font-family: var(--nd-font-sans);
+  font-size: var(--nd-font-size-md);
+  color: var(--nd-fg);
+  background-color: var(--nd-paper);
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-md);
   padding: 14px;
-  font-size: 15px;
-  font-family: inherit;
-  background: #fff;
-  color: var(--nd-text);
-  outline: none;
-}
-
-.nd-input:focus,
-.nd-textarea:focus {
-  border-color: var(--nd-red);
-}
-
-.nd-textarea {
+  line-height: var(--nd-line-normal);
   min-height: 120px;
   resize: vertical;
-  line-height: 1.5;
+  box-sizing: border-box;
 }
 
-.nd-btn {
-  appearance: none;
-  border: none;
-  cursor: pointer;
-  font-size: 15px;
-  font-weight: 700;
-  padding: 14px 18px;
-  border-radius: 10px;
-  width: 100%;
-  transition: transform 0.05s ease, background 0.15s ease;
-}
-
-.nd-btn:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.nd-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.nd-btn--primary {
-  background: var(--nd-red);
-  color: #fff;
-}
-
-.nd-btn--primary:hover:not(:disabled) {
-  background: var(--nd-red-dark);
-}
-
-.nd-btn--secondary {
-  background: var(--nd-black);
-  color: #fff;
-}
-
-.nd-btn--ghost {
-  background: #fff;
-  color: var(--nd-black);
-  border: 1.5px solid var(--nd-border);
-}
-
-.nd-btn--accent {
-  background: var(--nd-yellow);
-  color: var(--nd-black);
-}
-
-.nd-btn + .nd-btn {
-  margin-top: 10px;
+.nd-textarea:focus-visible {
+  outline: none;
+  border-color: var(--nd-red);
+  box-shadow: var(--nd-focus-ring);
 }
 
 .nd-row {
@@ -279,8 +201,8 @@ a {
   gap: 10px;
 }
 
-.nd-row > .nd-btn {
-  margin-top: 0;
+.nd-row > .nd-button {
+  flex: 1;
 }
 
 .nd-mnemonic {
@@ -288,7 +210,7 @@ a {
   border: 2px dashed var(--nd-red);
   border-radius: 12px;
   padding: 18px;
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--nd-font-mono);
   font-size: 15px;
   line-height: 1.9;
   word-spacing: 6px;
@@ -309,7 +231,7 @@ a {
 
 .nd-error {
   background: #fdecec;
-  color: var(--nd-danger);
+  color: var(--nd-error);
   padding: 10px 12px;
   border-radius: 8px;
   font-size: 14px;
@@ -326,49 +248,24 @@ a {
   line-height: 1.55;
 }
 
-.nd-addr {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
-  word-break: break-all;
-  color: var(--nd-muted);
-}
-
-.nd-balance {
-  font-size: 36px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  margin: 6px 0 0;
-}
-
-.nd-balance__unit {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--nd-muted);
-  margin-left: 6px;
-}
-
 .nd-muted {
-  color: var(--nd-muted);
+  color: var(--nd-fg-muted);
   font-size: 13px;
+}
+
+/* 데스크톱 뷰는 .nd-button을 풀폭으로 쓰는 경우가 잦다. */
+.nd-button--block {
+  display: flex;
+  width: 100%;
 }
 
 /* ===== Portfolio grid ===== */
 
 .nd-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 14px;
   margin-top: 8px;
-}
-
-.nd-tile {
-  background: var(--nd-surface);
-  border: 1px solid var(--nd-border);
-  border-radius: 12px;
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
 }
 
 .nd-tile__sym {
@@ -380,7 +277,8 @@ a {
 
 .nd-tile__name {
   font-size: 13px;
-  color: var(--nd-muted);
+  color: var(--nd-fg-muted);
+  margin-top: 4px;
 }
 
 .nd-tile__status {
@@ -390,7 +288,7 @@ a {
   border-radius: 999px;
   display: inline-block;
   align-self: flex-start;
-  margin-top: 6px;
+  margin-top: 10px;
 }
 
 .nd-tile__status--live {
@@ -400,5 +298,5 @@ a {
 
 .nd-tile__status--pending {
   background: #f3f3f3;
-  color: var(--nd-muted);
+  color: var(--nd-fg-muted);
 }

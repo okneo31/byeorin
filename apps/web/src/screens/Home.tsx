@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { createMnemonic } from '@nodong/wallet-sdk';
+import { Button, Card } from '@nodong/design-system';
 import { setMnemonic } from '../wallet-store.js';
 
 type Mode = 'choose' | 'create' | 'recover';
@@ -23,27 +24,27 @@ export function Home({ onReady }: Props) {
         쉽고 안전하게.
       </p>
 
-      <div className="nd-card">
-        <p className="nd-label">처음 사용하세요?</p>
-        <button
-          type="button"
-          className="nd-btn nd-btn--primary"
+      <Card>
+        <p className="nd-muted" style={{ marginTop: 0 }}>처음 사용하세요?</p>
+        <Button
+          variant="primary"
+          className="nd-button--block"
           onClick={() => setMode('create')}
         >
           지갑 생성
-        </button>
-      </div>
+        </Button>
+      </Card>
 
-      <div className="nd-card">
-        <p className="nd-label">이미 복구 문구가 있나요?</p>
-        <button
-          type="button"
-          className="nd-btn nd-btn--ghost"
+      <Card>
+        <p className="nd-muted" style={{ marginTop: 0 }}>이미 복구 문구가 있나요?</p>
+        <Button
+          variant="secondary"
+          className="nd-button--block"
           onClick={() => setMode('recover')}
         >
           복구
-        </button>
-      </div>
+        </Button>
+      </Card>
     </div>
   );
 }
@@ -85,13 +86,13 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
         이 문구를 잃어버리면 지갑을 복구할 수 없습니다. 화면 캡처는 권하지 않습니다.
       </div>
 
-      <div className="nd-card">
+      <Card>
         <div className="nd-mnemonic">{mnemonic}</div>
         <div style={{ height: 12 }} />
-        <button type="button" className="nd-btn nd-btn--ghost" onClick={onCopy}>
+        <Button variant="ghost" className="nd-button--block" onClick={onCopy}>
           {copied ? '복사됨' : '복사하기'}
-        </button>
-      </div>
+        </Button>
+      </Card>
 
       <label
         style={{
@@ -113,17 +114,17 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
 
       {error && <div className="nd-error">{error}</div>}
 
-      <button
-        type="button"
-        className="nd-btn nd-btn--primary"
+      <Button
+        variant="primary"
+        className="nd-button--block"
         disabled={!confirmed}
         onClick={onConfirm}
       >
         외웠습니다, 다음
-      </button>
-      <button type="button" className="nd-btn nd-btn--ghost" onClick={onBack}>
+      </Button>
+      <Button variant="ghost" className="nd-button--block" onClick={onBack}>
         뒤로
-      </button>
+      </Button>
     </div>
   );
 }
@@ -149,9 +150,16 @@ function RecoverFlow({ onDone, onBack }: { onDone: () => void; onBack: () => voi
         12개 또는 24개의 복구 단어를 띄어쓰기로 입력하세요. 영어 또는 한국어 단어 모두 지원합니다.
       </p>
 
-      <div className="nd-card">
-        <label className="nd-label">복구 문구</label>
+      <Card>
+        {/* TODO(design-system): Input 컴포넌트가 textarea 모드를 아직 지원하지
+            않는다. 일단 native <textarea>로 두고, 디자인 시스템 확장 여부는
+            별도 결정한다. */}
+        <label className="nd-field__label" htmlFor="nd-mnemonic-input">
+          복구 문구
+        </label>
+        <div style={{ height: 8 }} />
         <textarea
+          id="nd-mnemonic-input"
           className="nd-textarea"
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -160,21 +168,21 @@ function RecoverFlow({ onDone, onBack }: { onDone: () => void; onBack: () => voi
           autoCapitalize="none"
           autoCorrect="off"
         />
-      </div>
+      </Card>
 
       {error && <div className="nd-error">{error}</div>}
 
-      <button
-        type="button"
-        className="nd-btn nd-btn--primary"
+      <Button
+        variant="primary"
+        className="nd-button--block"
         disabled={input.trim().split(/\s+/).filter(Boolean).length < 12}
         onClick={onSubmit}
       >
         복구하기
-      </button>
-      <button type="button" className="nd-btn nd-btn--ghost" onClick={onBack}>
+      </Button>
+      <Button variant="ghost" className="nd-button--block" onClick={onBack}>
         뒤로
-      </button>
+      </Button>
     </div>
   );
 }

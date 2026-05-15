@@ -1,5 +1,6 @@
-/* 노동자의 지갑 — 팝업 스타일.
-   브랜드: 적색 #c41e1e / 흑색 #0a0a0a / 황색 #f4c430 */
+/* 노동자의 지갑 — 연결 동의 popup 스타일.
+   브랜드: 적색 #c41e1e / 흑색 #0a0a0a / 황색 #f4c430.
+   popup 화면 사이즈는 chrome.windows.create 의 400x600 와 정렬. */
 
 :root {
   --bg: #0a0a0a;
@@ -23,25 +24,25 @@ body {
   color: var(--fg);
   font-family: 'Pretendard', system-ui, -apple-system, 'Segoe UI', Roboto, 'Apple SD Gothic Neo',
     sans-serif;
+  min-height: 100vh;
 }
 
 body {
-  width: 360px;
-  min-height: 480px;
+  width: 400px;
 }
 
-.popup {
+.connect {
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding: 20px 18px;
+  min-height: 600px;
 }
 
 .brand {
   font-size: 20px;
   font-weight: 800;
   letter-spacing: -0.5px;
-  color: var(--fg);
   border-left: 4px solid var(--red);
   padding-left: 10px;
 }
@@ -53,14 +54,41 @@ body {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+}
+
+.card h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: #0d0d0d;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.origin {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+  word-break: break-all;
 }
 
 .addr {
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 16px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 15px;
   color: var(--yellow);
-  margin: 4px 0;
 }
 
 .muted {
@@ -79,10 +107,20 @@ body {
   color: #ff6b6b;
 }
 
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.actions button {
+  flex: 1;
+}
+
 button {
   font: inherit;
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   cursor: pointer;
   border: 1px solid transparent;
   transition: filter 120ms ease;
@@ -102,64 +140,4 @@ button:hover {
   background: transparent;
   color: var(--fg);
   border-color: var(--border);
-}
-
-textarea {
-  background: #0d0d0d;
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 13px;
-  resize: vertical;
-}
-
-textarea:focus {
-  outline: none;
-  border-color: var(--yellow);
-}
-
-footer {
-  margin-top: auto;
-  text-align: center;
-}
-
-.section-title {
-  margin: 0 0 4px 0;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--fg);
-}
-
-.origin-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.origin-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: #0d0d0d;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-
-.origin-text {
-  flex: 1;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 11px;
-  word-break: break-all;
-  color: var(--fg);
-}
-
-.btn-sm {
-  padding: 6px 10px;
-  font-size: 12px;
 }

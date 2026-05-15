@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Logo } from '@nodong/design-system';
 import { Home } from './screens/Home.js';
 import { Account } from './screens/Account.js';
 import { Send } from './screens/Send.js';
@@ -22,7 +23,9 @@ export function App() {
   return (
     <div className="nd-app">
       <header className="nd-header">
-        <div className="nd-header__brand">노동자의 지갑</div>
+        <div className="nd-header__brand">
+          <Logo size={32} variant="mark-with-text" />
+        </div>
         {screen !== 'home' && (
           <button type="button" className="nd-header__action" onClick={onLock}>
             잠금

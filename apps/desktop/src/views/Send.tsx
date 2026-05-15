@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AddressDisplay, Button, Card, Input } from '@nodong/design-system';
 import { getAccount } from '../wallet-store.js';
 
 interface Props {
@@ -10,6 +11,8 @@ export function Send({ unlocked, onGoWallet }: Props) {
   const account = getAccount();
   const [to, setTo] = useState('');
   const [amount, setAmount] = useState('');
+  const [toError, setToError] = useState<string | null>(null);
+  const [amountError, setAmountError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -21,11 +24,11 @@ export function Send({ unlocked, onGoWallet }: Props) {
           <h1 className="nd-h1">송수신</h1>
           <p className="nd-lead">먼저 지갑을 열거나 복원해 주세요.</p>
         </header>
-        <section className="nd-card">
-          <button type="button" className="nd-btn nd-btn--primary" onClick={onGoWallet}>
+        <Card as="section">
+          <Button variant="primary" className="nd-button--block" onClick={onGoWallet}>
             지갑으로 이동
-          </button>
-        </section>
+          </Button>
+        </Card>
       </div>
     );
   }
@@ -33,25 +36,26 @@ export function Send({ unlocked, onGoWallet }: Props) {
   const submit = async () => {
     setError(null);
     setTxHash(null);
+    setToError(null);
+    setAmountError(null);
+
     if (!/^0x[0-9a-fA-F]{40}$/.test(to.trim())) {
-      setError('받는 주소가 올바르지 않습니다.');
+      setToError('받는 주소가 올바르지 않습니다.');
       return;
     }
     let value: bigint;
     try {
       value = parseTtlToWei(amount.trim());
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setAmountError(e instanceof Error ? e.message : String(e));
       return;
     }
     if (value <= 0n) {
-      setError('금액은 0보다 커야 합니다.');
+      setAmountError('금액은 0보다 커야 합니다.');
       return;
     }
     setSending(true);
     try {
-      // Construct a transient Wallet (mnemonic still in session); easier path:
-      // use the adapter via account.signer to manually run transfer.
       const acc = account;
       const unsigned = await acc.adapter.buildTransfer(
         { to: to.trim(), amount: value },
@@ -77,36 +81,35 @@ export function Send({ unlocked, onGoWallet }: Props) {
         <p className="nd-lead">TTL을 송금합니다. 수수료는 자동 추정됩니다.</p>
       </header>
 
-      <section className="nd-card">
+      <Card as="section">
         <div className="nd-label">보내는 주소</div>
-        <div className="nd-addr">{account.address}</div>
-      </section>
+        <AddressDisplay address={account.address} head={8} tail={6} />
+      </Card>
 
-      <section className="nd-card">
-        <label className="nd-label" htmlFor="to">
-          받는 주소
-        </label>
-        <input
+      <Card as="section" style={{ marginTop: 16 }}>
+        <Input
           id="to"
-          className="nd-input"
+          label="받는 주소"
           value={to}
           onChange={(e) => setTo(e.target.value)}
           placeholder="0x..."
           autoComplete="off"
           spellCheck={false}
+          mono
+          error={toError ?? undefined}
         />
 
-        <label className="nd-label" htmlFor="amount" style={{ marginTop: 16 }}>
-          금액 (TTL)
-        </label>
-        <input
+        <div style={{ height: 16 }} />
+
+        <Input
           id="amount"
-          className="nd-input"
+          label="금액 (TTL)"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           inputMode="decimal"
           placeholder="0.0"
           autoComplete="off"
+          error={amountError ?? undefined}
         />
 
         {error && <div className="nd-error">{error}</div>}
@@ -118,16 +121,18 @@ export function Send({ unlocked, onGoWallet }: Props) {
           </div>
         )}
 
-        <button
-          type="button"
-          className="nd-btn nd-btn--primary"
-          onClick={submit}
-          disabled={sending}
-          style={{ marginTop: 16 }}
-        >
-          {sending ? '전송 중…' : '서명하고 전송'}
-        </button>
-      </section>
+        <div style={{ marginTop: 16 }}>
+          <Button
+            variant="primary"
+            className="nd-button--block"
+            onClick={submit}
+            loading={sending}
+            disabled={sending}
+          >
+            {sending ? '전송 중…' : '서명하고 전송'}
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 }

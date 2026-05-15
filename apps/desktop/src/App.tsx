@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button, Logo } from '@nodong/design-system';
 import { Wallet } from './views/Wallet.js';
 import { Send } from './views/Send.js';
 import { Portfolio } from './views/Portfolio.js';
@@ -42,7 +43,7 @@ export function App() {
     <div className="nd-shell">
       <aside className="nd-sidebar">
         <div className="nd-sidebar__brand">
-          <span className="nd-sidebar__dot" />
+          <Logo size={36} variant="mark" />
           <div>
             <div className="nd-sidebar__title">노동자의 지갑</div>
             <div className="nd-sidebar__subtitle">TTL Ecosystem · v0.1</div>
@@ -72,9 +73,9 @@ export function App() {
         </nav>
         <div className="nd-sidebar__footer">
           {unlocked ? (
-            <button type="button" className="nd-btn nd-btn--ghost" onClick={onLock}>
+            <Button variant="secondary" className="nd-button--block" onClick={onLock}>
               잠금
-            </button>
+            </Button>
           ) : (
             <p className="nd-muted nd-sidebar__note">
               비수탁(non-custodial)
