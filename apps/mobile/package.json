@@ -1,0 +1,29 @@
+{
+  "name": "@nodong/mobile",
+  "version": "0.0.1",
+  "private": true,
+  "description": "노동자의 지갑 — 모바일 셸 (React Native Bare)",
+  "scripts": {
+    "start": "react-native start",
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@nodong/wallet-sdk": "workspace:*",
+    "react": "^18.3.1",
+    "react-native": "^0.76.1",
+    "react-native-keychain": "^9.2.2",
+    "react-native-qrcode-svg": "^6.3.12",
+    "react-native-svg": "^15.8.0"
+  },
+  "devDependencies": {
+    "@react-native-community/cli": "^15.0.0",
+    "@react-native/babel-preset": "^0.76.1",
+    "@react-native/metro-config": "^0.76.1",
+    "@react-native/typescript-config": "^0.76.1",
+    "@types/react": "^18.3.12",
+    "babel-plugin-module-resolver": "^5.0.2",
+    "typescript": "^5.6.3"
+  }
+}

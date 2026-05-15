@@ -26,3 +26,5 @@ export {
 export { BtcAdapter } from './chains/btc.js';
 export { XrpAdapter } from './chains/xrp.js';
 export { CosmosAdapter, type CosmosAdapterOptions } from './chains/cosmos.js';
+export { SolanaAdapter, type SolanaAdapterOptions } from './chains/solana.js';
+export { TronAdapter, type TronAdapterOptions } from './chains/tron.js';

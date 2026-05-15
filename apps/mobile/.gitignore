@@ -1,0 +1,35 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Metro / bundler
+.metro-health-check*
+.metro-cache/
+
+# iOS
+ios/Pods/
+ios/build/
+ios/.xcode.env.local
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcuserstate
+xcuserdata/
+
+# Android
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
+*.iml
+
+# Signing — keep the debug keystore for shared dev builds, ignore everything else
+*.keystore
+!debug.keystore
+
+# Misc
+.DS_Store
+*.log

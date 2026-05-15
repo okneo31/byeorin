@@ -23,11 +23,20 @@
     "clean": "rimraf dist .turbo .tsbuildinfo"
   },
   "dependencies": {
+    "@cosmjs/amino": "^0.32.4",
+    "@cosmjs/encoding": "^0.32.4",
+    "@cosmjs/proto-signing": "^0.32.4",
+    "@cosmjs/stargate": "^0.32.4",
     "@noble/curves": "^1.6.0",
     "@noble/hashes": "^1.5.0",
+    "@scure/base": "^1.1.9",
     "@scure/bip32": "^1.5.0",
     "@scure/bip39": "^1.4.0",
-    "viem": "^2.21.40"
+    "@scure/btc-signer": "^1.5.0",
+    "@solana/web3.js": "^1.95.5",
+    "tronweb": "^6.0.0",
+    "viem": "^2.21.40",
+    "xrpl": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

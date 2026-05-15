@@ -1,0 +1,26 @@
+{
+  "name": "@nodong/extension",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "노동자의 지갑 — 브라우저 확장 (MV3, EIP-1193)",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "typecheck": "wxt prepare && tsc --noEmit"
+  },
+  "dependencies": {
+    "@nodong/wallet-sdk": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.279",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@wxt-dev/module-react": "^1.1.0",
+    "typescript": "^5.6.3",
+    "wxt": "^0.19.13"
+  }
+}

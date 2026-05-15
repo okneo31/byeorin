@@ -1,0 +1,3 @@
+# 아이콘 placeholder.
+# 실제 16/32/48/128 PNG 자원은 packages/design-system 에서 공급한다.
+# WXT 빌드 시 manifest.icons 가 이 디렉터리의 PNG 를 참조한다.

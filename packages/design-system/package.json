@@ -1,0 +1,33 @@
+{
+  "name": "@nodong/design-system",
+  "version": "0.0.1",
+  "description": "노동자의 지갑 — 공유 디자인 시스템 (토큰 + React 컴포넌트)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./tokens.css": "./dist/tokens.css"
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsup && node scripts/copy-tokens.mjs",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist .turbo .tsbuildinfo"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.3"
+  }
+}

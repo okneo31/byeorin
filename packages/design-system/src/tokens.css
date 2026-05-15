@@ -1,0 +1,254 @@
+/*
+ * 노동자의 지갑 — 디자인 토큰
+ * 따뜻하고 단단한 노동운동 미감. 사이버펑크/엔터프라이즈/카지노 X.
+ * 모든 색·간격·라운드·그림자는 CSS 커스텀 속성으로 노출된다.
+ */
+:root {
+  /* ── Brand colors ─────────────────────────────────────── */
+  --nd-red: #c41e1e;          /* 활동가 빨강 — primary action */
+  --nd-red-hover: #a31616;
+  --nd-red-active: #861010;
+  --nd-black: #0a0a0a;
+  --nd-yellow: #f4c430;       /* 따뜻한 강조 */
+  --nd-yellow-hover: #d9ac1f;
+  --nd-paper: #fffaf0;        /* 따뜻한 오프화이트 배경 */
+  --nd-ink: #1a1a1a;
+
+  /* ── Neutrals ─────────────────────────────────────────── */
+  --nd-gray-700: #3d3d3d;
+  --nd-gray-500: #7a7a7a;
+  --nd-gray-300: #c0c0c0;
+  --nd-gray-100: #ededed;
+  --nd-gray-50:  #f6f5f1;
+
+  /* ── Status ───────────────────────────────────────────── */
+  --nd-success: #2d6a4f;
+  --nd-warning: #e07a00;
+  --nd-error:   #a31616;
+
+  /* ── Semantic aliases ─────────────────────────────────── */
+  --nd-bg:           var(--nd-paper);
+  --nd-bg-subtle:    var(--nd-gray-50);
+  --nd-fg:           var(--nd-ink);
+  --nd-fg-muted:     var(--nd-gray-500);
+  --nd-border:       var(--nd-gray-300);
+  --nd-border-strong:var(--nd-gray-700);
+
+  /* ── Spacing scale (4px base) ─────────────────────────── */
+  --nd-space-1:  4px;
+  --nd-space-2:  8px;
+  --nd-space-3: 12px;
+  --nd-space-4: 16px;
+  --nd-space-5: 24px;
+  --nd-space-6: 32px;
+  --nd-space-7: 48px;
+  --nd-space-8: 64px;
+
+  /* ── Radius ───────────────────────────────────────────── */
+  --nd-radius-sm: 4px;
+  --nd-radius-md: 8px;
+  --nd-radius-lg: 14px;
+
+  /* ── Shadow (warm, low spread — printed-paper feel) ──── */
+  --nd-shadow-1: 0 1px 2px rgba(10, 10, 10, 0.08), 0 1px 1px rgba(10, 10, 10, 0.04);
+  --nd-shadow-2: 0 4px 12px rgba(10, 10, 10, 0.10), 0 2px 4px rgba(10, 10, 10, 0.06);
+
+  /* ── Typography ───────────────────────────────────────── */
+  --nd-font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+                  "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  --nd-font-mono: "JetBrains Mono", "Cascadia Mono", "Menlo", "Consolas",
+                  ui-monospace, monospace;
+
+  --nd-font-size-xs: 12px;
+  --nd-font-size-sm: 14px;
+  --nd-font-size-md: 16px;
+  --nd-font-size-lg: 18px;
+  --nd-font-size-xl: 22px;
+  --nd-font-size-2xl: 28px;
+
+  --nd-line-tight: 1.25;
+  --nd-line-normal: 1.5;
+
+  --nd-weight-regular: 400;
+  --nd-weight-medium: 500;
+  --nd-weight-bold: 700;
+
+  /* ── Focus ring (always visible, accessibility-first) ── */
+  --nd-focus-ring: 0 0 0 3px rgba(196, 30, 30, 0.35);
+
+  /* ── Motion ───────────────────────────────────────────── */
+  --nd-duration-fast: 120ms;
+  --nd-duration-base: 180ms;
+  --nd-easing: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ── Component base styles ─────────────────────────────── */
+
+.nd-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--nd-space-2);
+  font-family: var(--nd-font-sans);
+  font-weight: var(--nd-weight-medium);
+  line-height: var(--nd-line-tight);
+  border-radius: var(--nd-radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--nd-duration-fast) var(--nd-easing),
+              border-color var(--nd-duration-fast) var(--nd-easing),
+              color var(--nd-duration-fast) var(--nd-easing),
+              box-shadow var(--nd-duration-fast) var(--nd-easing);
+}
+.nd-button:focus-visible {
+  outline: none;
+  box-shadow: var(--nd-focus-ring);
+}
+.nd-button[aria-disabled="true"],
+.nd-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* sizes — Korean text needs comfortable horizontal padding */
+.nd-button--sm { font-size: var(--nd-font-size-sm); padding: 6px 14px; min-height: 32px; }
+.nd-button--md { font-size: var(--nd-font-size-md); padding: 10px 18px; min-height: 40px; }
+.nd-button--lg { font-size: var(--nd-font-size-lg); padding: 14px 22px; min-height: 52px; }
+
+/* variants */
+.nd-button--primary {
+  background-color: var(--nd-red);
+  color: var(--nd-paper);
+  border-color: var(--nd-red);
+}
+.nd-button--primary:hover:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--nd-red-hover);
+  border-color: var(--nd-red-hover);
+}
+.nd-button--primary:active:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--nd-red-active);
+  border-color: var(--nd-red-active);
+}
+
+.nd-button--secondary {
+  background-color: var(--nd-paper);
+  color: var(--nd-ink);
+  border-color: var(--nd-border-strong);
+}
+.nd-button--secondary:hover:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--nd-gray-100);
+}
+
+.nd-button--ghost {
+  background-color: transparent;
+  color: var(--nd-ink);
+  border-color: transparent;
+}
+.nd-button--ghost:hover:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--nd-gray-100);
+}
+
+.nd-button--danger {
+  background-color: var(--nd-error);
+  color: var(--nd-paper);
+  border-color: var(--nd-error);
+}
+.nd-button--danger:hover:not(:disabled):not([aria-disabled="true"]) {
+  background-color: #861010;
+  border-color: #861010;
+}
+
+.nd-button__spinner {
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: nd-spin 0.7s linear infinite;
+}
+@keyframes nd-spin { to { transform: rotate(360deg); } }
+
+/* ── Card ────────────────────────────────────────────── */
+.nd-card {
+  background-color: var(--nd-paper);
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-lg);
+  padding: var(--nd-space-5);
+  box-shadow: var(--nd-shadow-1);
+  color: var(--nd-fg);
+}
+.nd-card--flat { box-shadow: none; }
+.nd-card--elevated { box-shadow: var(--nd-shadow-2); }
+
+/* ── Input ───────────────────────────────────────────── */
+.nd-field { display: flex; flex-direction: column; gap: var(--nd-space-2); font-family: var(--nd-font-sans); }
+.nd-field__label { font-size: var(--nd-font-size-sm); font-weight: var(--nd-weight-medium); color: var(--nd-fg); }
+.nd-field__hint  { font-size: var(--nd-font-size-xs); color: var(--nd-fg-muted); }
+.nd-field__error { font-size: var(--nd-font-size-xs); color: var(--nd-error); }
+
+.nd-input {
+  width: 100%;
+  font-family: var(--nd-font-sans);
+  font-size: var(--nd-font-size-md);
+  color: var(--nd-fg);
+  background-color: var(--nd-paper);
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-md);
+  padding: 10px 12px;
+  line-height: var(--nd-line-normal);
+  transition: border-color var(--nd-duration-fast) var(--nd-easing),
+              box-shadow var(--nd-duration-fast) var(--nd-easing);
+  box-sizing: border-box;
+}
+.nd-input::placeholder { color: var(--nd-gray-500); }
+.nd-input:focus-visible {
+  outline: none;
+  border-color: var(--nd-red);
+  box-shadow: var(--nd-focus-ring);
+}
+.nd-input[aria-invalid="true"] {
+  border-color: var(--nd-error);
+}
+.nd-input--mono { font-family: var(--nd-font-mono); letter-spacing: 0.01em; }
+.nd-input:disabled { background-color: var(--nd-gray-100); cursor: not-allowed; }
+
+/* ── AddressDisplay ──────────────────────────────────── */
+.nd-address {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--nd-space-2);
+  font-family: var(--nd-font-mono);
+  font-size: var(--nd-font-size-sm);
+  color: var(--nd-fg);
+  background-color: var(--nd-gray-50);
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-sm);
+  padding: 4px 8px;
+}
+.nd-address__copy {
+  font-family: var(--nd-font-sans);
+  font-size: var(--nd-font-size-xs);
+  background: transparent;
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-sm);
+  padding: 2px 8px;
+  cursor: pointer;
+  color: var(--nd-fg);
+}
+.nd-address__copy:hover { background-color: var(--nd-gray-100); }
+.nd-address__copy:focus-visible { outline: none; box-shadow: var(--nd-focus-ring); }
+
+/* ── AmountDisplay ───────────────────────────────────── */
+.nd-amount {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--nd-font-sans);
+  color: var(--nd-fg);
+}
+.nd-amount__value { font-variant-numeric: tabular-nums; font-weight: var(--nd-weight-bold); }
+.nd-amount__symbol { color: var(--nd-fg-muted); font-weight: var(--nd-weight-medium); }
+.nd-amount--lg .nd-amount__value { font-size: var(--nd-font-size-2xl); }
+.nd-amount--md .nd-amount__value { font-size: var(--nd-font-size-lg); }
+.nd-amount--sm .nd-amount__value { font-size: var(--nd-font-size-md); }

@@ -1,0 +1,197 @@
+import { describe, expect, it } from 'vitest';
+import { fromBech32 } from '@cosmjs/encoding';
+import { CosmosAdapter, Wallet } from '../src/index.js';
+
+const KNOWN_MNEMONIC =
+  'test test test test test test test test test test test junk';
+
+// Public RPC for live tests. Skipped unless NETWORK_TESTS is set so CI stays
+// hermetic and we don't depend on third-party uptime.
+const COSMOS_HUB_RPC =
+  process.env.COSMOS_HUB_RPC ?? 'https://cosmos-rpc.publicnode.com';
+
+const RUN_LIVE = !!process.env.NETWORK_TESTS;
+
+describe('CosmosAdapter — offline', () => {
+  const cosmosHub = new CosmosAdapter({
+    chainId: 'cosmoshub-4',
+    bech32Prefix: 'cosmos',
+    rpcUrl: COSMOS_HUB_RPC,
+    denom: 'uatom',
+  });
+
+  const osmosis = new CosmosAdapter({
+    chainId: 'osmosis-1',
+    bech32Prefix: 'osmo',
+    rpcUrl: 'https://rpc.osmosis.zone',
+    denom: 'uosmo',
+  });
+
+  it('exposes the right chain identity', () => {
+    expect(cosmosHub.id).toBe('cosmos:cosmoshub-4');
+    expect(cosmosHub.curve).toBe('secp256k1');
+    expect(cosmosHub.coinType).toBe(118);
+  });
+
+  it('builds a SLIP-44 derivation path with coinType 118 by default', () => {
+    expect(cosmosHub.derivationPath()).toBe("m/44'/118'/0'/0/0");
+    expect(cosmosHub.derivationPath(0, 3)).toBe("m/44'/118'/0'/0/3");
+  });
+
+  it('honours coinType override (e.g. 60 for Injective)', () => {
+    const inj = new CosmosAdapter({
+      chainId: 'injective-1',
+      bech32Prefix: 'inj',
+      rpcUrl: 'http://localhost',
+      denom: 'inj',
+      coinType: 60,
+    });
+    expect(inj.coinType).toBe(60);
+    expect(inj.derivationPath()).toBe("m/44'/60'/0'/0/0");
+  });
+
+  it('derives a cosmos1 address from the known mnemonic', () => {
+    const w = Wallet.fromMnemonic({ mnemonic: KNOWN_MNEMONIC });
+    const acc = w.account(cosmosHub);
+    expect(acc.derivationPath).toBe("m/44'/118'/0'/0/0");
+    expect(acc.address.startsWith('cosmos1')).toBe(true);
+    // Deterministic snapshot — must not drift across runs/platforms.
+    expect(acc.address).toBe(
+      'cosmos15yk64u7zc9g9k2yr2wmzeva5qgwxps6yxj00e7',
+    );
+  });
+
+  it('derives an osmo1 address that shares raw bytes with cosmos1 (same key)', () => {
+    const w = Wallet.fromMnemonic({ mnemonic: KNOWN_MNEMONIC });
+    const cosmosAcc = w.account(cosmosHub);
+    const osmoAcc = w.account(osmosis);
+
+    expect(osmoAcc.address.startsWith('osmo1')).toBe(true);
+
+    const cosmosRaw = fromBech32(cosmosAcc.address);
+    const osmoRaw = fromBech32(osmoAcc.address);
+
+    expect(cosmosRaw.prefix).toBe('cosmos');
+    expect(osmoRaw.prefix).toBe('osmo');
+    // Raw 20-byte address (ripemd160(sha256(pubkey))) must be identical:
+    // proves the same key reaches the same account across Cosmos chains.
+    expect(Buffer.from(osmoRaw.data).toString('hex')).toBe(
+      Buffer.from(cosmosRaw.data).toString('hex'),
+    );
+  });
+
+  it('pubkeyToAddress accepts compressed, uncompressed, and 64-byte pubkeys', async () => {
+    const w = Wallet.fromMnemonic({ mnemonic: KNOWN_MNEMONIC });
+    const acc = w.account(cosmosHub);
+    const compressed = acc.publicKey;
+    expect(compressed.length).toBe(33);
+
+    // From compressed.
+    expect(cosmosHub.pubkeyToAddress(compressed)).toBe(acc.address);
+
+    // From uncompressed (65, 0x04 prefix).
+    const { secp256k1 } = await import('@noble/curves/secp256k1');
+    const uncompressed = secp256k1.ProjectivePoint.fromHex(compressed).toRawBytes(false);
+    expect(uncompressed.length).toBe(65);
+    expect(cosmosHub.pubkeyToAddress(uncompressed)).toBe(acc.address);
+
+    // From 64-byte raw (no 0x04 prefix).
+    const raw64 = uncompressed.slice(1);
+    expect(raw64.length).toBe(64);
+    expect(cosmosHub.pubkeyToAddress(raw64)).toBe(acc.address);
+  });
+
+  it('rejects malformed pubkeys', () => {
+    expect(() => cosmosHub.pubkeyToAddress(new Uint8Array(10))).toThrow(
+      /bad pubkey length/,
+    );
+  });
+
+  it('serializeForSigning returns a 32-byte sha256 digest', async () => {
+    // We can build a SignDoc-shaped tx directly; we don't need a live RPC here.
+    // Synthesise minimal bodyBytes / authInfoBytes / signDoc via private path:
+    // simpler — just smoke-test the hash size via a forged unsigned tx.
+    const w = Wallet.fromMnemonic({ mnemonic: KNOWN_MNEMONIC });
+    const acc = w.account(cosmosHub);
+
+    // Forge a SignDoc-like object: makeSignBytes only reads the four fields.
+    const forged = {
+      signDoc: {
+        bodyBytes: new Uint8Array([1, 2, 3]),
+        authInfoBytes: new Uint8Array([4, 5, 6]),
+        chainId: 'cosmoshub-4',
+        accountNumber: 0n,
+      } as unknown as Parameters<typeof cosmosHub.serializeForSigning>[0]['signDoc'],
+      bodyBytes: new Uint8Array([1, 2, 3]),
+      authInfoBytes: new Uint8Array([4, 5, 6]),
+      chainId: 'cosmoshub-4',
+      accountNumber: 0,
+      signerInfo: { pubKey: acc.publicKey, address: acc.address },
+    };
+
+    const digest = await cosmosHub.serializeForSigning(forged);
+    expect(digest).toBeInstanceOf(Uint8Array);
+    expect(digest.length).toBe(32);
+  });
+
+  it('applySignature builds a TxRaw and uppercase-hex sha256 hash', async () => {
+    const fakeUnsigned = {
+      signDoc: {} as unknown as Parameters<
+        typeof cosmosHub.applySignature
+      >[0]['signDoc'],
+      bodyBytes: new Uint8Array([10, 20, 30]),
+      authInfoBytes: new Uint8Array([40, 50, 60]),
+      chainId: 'cosmoshub-4',
+      accountNumber: 0,
+      signerInfo: { pubKey: new Uint8Array(33), address: 'cosmos1...' },
+    };
+    // 65-byte signature: 64-byte compact + 1 recovery byte (which we strip).
+    const sig = new Uint8Array(65);
+    // Use a valid low-S signature: r=1, s=1 is valid for our encoder.
+    sig[31] = 1;
+    sig[63] = 1;
+    sig[64] = 0;
+
+    const signed = await cosmosHub.applySignature(fakeUnsigned, sig);
+    expect(signed.txBytes).toBeInstanceOf(Uint8Array);
+    expect(signed.txBytes.length).toBeGreaterThan(
+      fakeUnsigned.bodyBytes.length + fakeUnsigned.authInfoBytes.length,
+    );
+    expect(signed.hash).toMatch(/^[0-9A-F]{64}$/);
+  });
+
+  it('applySignature rejects non-64/65-byte signatures', async () => {
+    const fakeUnsigned = {
+      signDoc: {} as unknown as Parameters<
+        typeof cosmosHub.applySignature
+      >[0]['signDoc'],
+      bodyBytes: new Uint8Array([1]),
+      authInfoBytes: new Uint8Array([2]),
+      chainId: 'cosmoshub-4',
+      accountNumber: 0,
+      signerInfo: { pubKey: new Uint8Array(33), address: 'cosmos1...' },
+    };
+    await expect(
+      cosmosHub.applySignature(fakeUnsigned, new Uint8Array(32)),
+    ).rejects.toThrow(/signature must be 64 or 65 bytes/);
+  });
+});
+
+describe.skipIf(!RUN_LIVE)('CosmosAdapter — live RPC', () => {
+  it('fetches a balance from a live Cosmos Hub RPC', async () => {
+    const adapter = new CosmosAdapter({
+      chainId: 'cosmoshub-4',
+      bech32Prefix: 'cosmos',
+      rpcUrl: COSMOS_HUB_RPC,
+      denom: 'uatom',
+    });
+    // Cosmos Hub community pool / a known account — pick the well-known
+    // address derived from the test mnemonic. The balance might be 0 — we
+    // just want a successful BigInt response.
+    const w = Wallet.fromMnemonic({ mnemonic: KNOWN_MNEMONIC });
+    const acc = w.account(adapter);
+    const bal = await adapter.getBalance(acc.address);
+    expect(typeof bal).toBe('bigint');
+    expect(bal >= 0n).toBe(true);
+  });
+});

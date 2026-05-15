@@ -1,0 +1,172 @@
+import { useEffect, useState } from 'react';
+import {
+  EvmAdapter,
+  TTL_CHAIN,
+  Wallet,
+  createMnemonic,
+  isValidMnemonic,
+} from '@nodong/wallet-sdk';
+import {
+  clearSession,
+  readSession,
+  writeSession,
+  type SessionState,
+} from '../../src/lib/session.js';
+
+// 노동자의 지갑 — 확장 팝업.
+// 셸 수준: 없음 → 생성/복구 → 상태표시 → 로그아웃.
+// v0.1 은 평문 니모닉을 chrome.storage.session(휘발) 에만 저장.
+// TODO(v0.2): passphrase + scrypt + AES-GCM keystore 도입.
+
+type Mode = 'home' | 'create' | 'restore';
+
+export function App() {
+  const [session, setSession] = useState<SessionState | null>(null);
+  const [mode, setMode] = useState<Mode>('home');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    readSession().then((s) => {
+      setSession(s);
+      setLoading(false);
+    });
+  }, []);
+
+  async function handleCreate() {
+    setError(null);
+    try {
+      const mnemonic = createMnemonic(128, 'english');
+      const acc = Wallet.fromMnemonic({ mnemonic }).account(new EvmAdapter({ chain: TTL_CHAIN }));
+      const next: SessionState = { mnemonic, address: acc.address };
+      await writeSession(next);
+      setSession(next);
+      setMode('home');
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function handleRestore(mnemonic: string) {
+    setError(null);
+    try {
+      const trimmed = mnemonic.trim().replace(/\s+/g, ' ');
+      if (!isValidMnemonic(trimmed, 'english')) {
+        setError('유효하지 않은 니모닉입니다');
+        return;
+      }
+      const acc = Wallet.fromMnemonic({ mnemonic: trimmed }).account(
+        new EvmAdapter({ chain: TTL_CHAIN }),
+      );
+      const next: SessionState = { mnemonic: trimmed, address: acc.address };
+      await writeSession(next);
+      setSession(next);
+      setMode('home');
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function handleLogout() {
+    await clearSession();
+    setSession(null);
+    setMode('home');
+  }
+
+  if (loading) {
+    return (
+      <main className="popup">
+        <header className="brand">노동자의 지갑</header>
+        <p className="muted">불러오는 중…</p>
+      </main>
+    );
+  }
+
+  return (
+    <main className="popup">
+      <header className="brand">노동자의 지갑</header>
+
+      {session ? (
+        <section className="card">
+          <p className="muted small">TTL · chainId 7777</p>
+          <p className="addr" title={session.address}>{shortenAddress(session.address)}</p>
+          <button className="btn-ghost" onClick={handleLogout}>
+            로그아웃
+          </button>
+          <p className="warn small">
+            ※ 본 버전은 니모닉이 세션 메모리에만 저장됩니다. 브라우저 재시작 시 다시 복구가 필요합니다.
+          </p>
+        </section>
+      ) : mode === 'home' ? (
+        <section className="card">
+          <p>지갑이 없습니다.</p>
+          <button className="btn-primary" onClick={() => setMode('create')}>
+            새 지갑 만들기
+          </button>
+          <button className="btn-ghost" onClick={() => setMode('restore')}>
+            니모닉으로 복구
+          </button>
+        </section>
+      ) : mode === 'create' ? (
+        <CreatePane onConfirm={handleCreate} onCancel={() => setMode('home')} />
+      ) : (
+        <RestorePane onSubmit={handleRestore} onCancel={() => setMode('home')} />
+      )}
+
+      {error ? <p className="error small">{error}</p> : null}
+      <footer className="muted small">v0.1 skeleton · 비수탁</footer>
+    </main>
+  );
+}
+
+function CreatePane({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <section className="card">
+      <p>새 12단어 니모닉이 생성됩니다.</p>
+      <p className="warn small">
+        니모닉을 노출하는 별도 화면은 v0.2 에서 제공됩니다. 지금은 셸 수준 검증만 수행합니다.
+      </p>
+      <button className="btn-primary" onClick={onConfirm}>
+        생성
+      </button>
+      <button className="btn-ghost" onClick={onCancel}>
+        취소
+      </button>
+    </section>
+  );
+}
+
+function RestorePane({
+  onSubmit,
+  onCancel,
+}: {
+  onSubmit: (mnemonic: string) => void;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState('');
+  return (
+    <section className="card">
+      <label className="muted small" htmlFor="m">
+        니모닉 (12 또는 24 단어)
+      </label>
+      <textarea
+        id="m"
+        rows={4}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="단어를 공백으로 구분하여 입력"
+      />
+      <button className="btn-primary" onClick={() => onSubmit(text)}>
+        복구
+      </button>
+      <button className="btn-ghost" onClick={onCancel}>
+        취소
+      </button>
+    </section>
+  );
+}
+
+function shortenAddress(a: string): string {
+  if (a.length <= 12) return a;
+  return `${a.slice(0, 6)}…${a.slice(-4)}`;
+}

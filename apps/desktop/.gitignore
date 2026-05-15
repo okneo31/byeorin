@@ -1,0 +1,14 @@
+# build output
+dist/
+.vite/
+
+# deps
+node_modules/
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/
+
+# OS / editor
+.DS_Store
+Thumbs.db
