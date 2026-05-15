@@ -10,6 +10,7 @@ import {
 } from '@scure/btc-signer';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils';
+import { toCompressedSecp256k1 } from '../crypto/secp.js';
 import type { Address, TransferIntent, TxHash } from '../types.js';
 import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
 
@@ -313,20 +314,4 @@ function bigIntFromBE(bytes: Uint8Array): bigint {
   let out = 0n;
   for (let i = 0; i < bytes.length; i++) out = (out << 8n) | BigInt(bytes[i]!);
   return out;
-}
-
-/** Normalize a secp256k1 pubkey to 33-byte compressed form. Accepts 33, 64, or 65 bytes. */
-function toCompressedSecp256k1(pubkey: Uint8Array): Uint8Array {
-  if (pubkey.length === 33 && (pubkey[0] === 0x02 || pubkey[0] === 0x03)) return pubkey;
-  if (pubkey.length === 65 && pubkey[0] === 0x04) {
-    return secp256k1.ProjectivePoint.fromHex(pubkey).toRawBytes(true);
-  }
-  if (pubkey.length === 64) {
-    // Uncompressed without the 0x04 prefix.
-    const prefixed = new Uint8Array(65);
-    prefixed[0] = 0x04;
-    prefixed.set(pubkey, 1);
-    return secp256k1.ProjectivePoint.fromHex(prefixed).toRawBytes(true);
-  }
-  throw new Error(`btc: unsupported pubkey length ${pubkey.length}`);
 }

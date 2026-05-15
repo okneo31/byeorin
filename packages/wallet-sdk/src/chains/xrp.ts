@@ -9,6 +9,7 @@ import type { Payment } from 'xrpl';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha512 } from '@noble/hashes/sha512';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import { toCompressedSecp256k1 } from '../crypto/secp.js';
 import type { Address, TransferIntent, TxHash } from '../types.js';
 import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
 
@@ -166,22 +167,6 @@ export class XrpAdapter implements ChainAdapter<XrpUnsignedTx, XrpSignedTx> {
       tx: { ...tx.tx, SigningPubKey: bytesToHex(compressed).toUpperCase() },
     };
   }
-}
-
-function toCompressedSecp256k1(pubkey: Uint8Array): Uint8Array {
-  if (pubkey.length === 33 && (pubkey[0] === 0x02 || pubkey[0] === 0x03)) {
-    return pubkey;
-  }
-  if (pubkey.length === 65 && pubkey[0] === 0x04) {
-    return secp256k1.ProjectivePoint.fromHex(pubkey).toRawBytes(true);
-  }
-  if (pubkey.length === 64) {
-    const padded = new Uint8Array(65);
-    padded[0] = 0x04;
-    padded.set(pubkey, 1);
-    return secp256k1.ProjectivePoint.fromHex(padded).toRawBytes(true);
-  }
-  throw new Error(`xrp: bad pubkey length=${pubkey.length}`);
 }
 
 function xrpToDrops(xrp: number): bigint {

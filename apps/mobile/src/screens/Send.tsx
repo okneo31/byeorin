@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { walletStore } from '../store';
-import { colors, radius, spacing } from '../theme';
+import { colors, radius, spacing, theme } from '../theme';
 import { parseTtl } from '../units';
 
 interface Props {
@@ -109,6 +109,7 @@ export function Send({ onBack }: Props) {
         disabled={busy}
       >
         {busy ? (
+          // Pure white spinner on brand-red button — matches btnPrimaryText.
           <ActivityIndicator color="#fff" />
         ) : (
           <Text style={styles.btnPrimaryText}>전송</Text>
@@ -134,11 +135,13 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '800',
     marginBottom: spacing.xs,
+    fontFamily: theme.font.korean,
   },
   lead: {
     color: colors.textMuted,
     fontSize: 13,
     marginBottom: spacing.lg,
+    fontFamily: theme.font.korean,
   },
   label: {
     color: colors.textMuted,
@@ -146,6 +149,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
+    fontFamily: theme.font.korean,
   },
   card: {
     backgroundColor: colors.surface,
@@ -162,8 +166,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     fontSize: 15,
+    // Address/amount input may include Hangul placeholders; keep stack consistent.
+    fontFamily: theme.font.korean,
   },
   successCard: {
+    // TODO(design-system): no dark-tinted success surface in DS — local value.
     backgroundColor: '#0d2614',
     borderRadius: radius.md,
     borderWidth: 1,
@@ -178,11 +185,12 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.6,
     marginBottom: spacing.xs,
+    fontFamily: theme.font.korean,
   },
   txHash: {
     color: colors.text,
     fontSize: 12,
-    fontFamily: 'monospace',
+    fontFamily: theme.font.mono,
   },
   btn: {
     paddingVertical: 14,
@@ -197,9 +205,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryPressed,
   },
   btnPrimaryText: {
+    // Pure white on brand-red button (see Home.tsx note).
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+    fontFamily: theme.font.korean,
   },
   btnGhost: {
     backgroundColor: 'transparent',
@@ -213,6 +223,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
     fontWeight: '600',
+    fontFamily: theme.font.korean,
   },
   btnDisabled: {
     opacity: 0.5,
@@ -221,5 +232,6 @@ const styles = StyleSheet.create({
     color: colors.error,
     fontSize: 13,
     marginBottom: spacing.sm,
+    fontFamily: theme.font.korean,
   },
 });

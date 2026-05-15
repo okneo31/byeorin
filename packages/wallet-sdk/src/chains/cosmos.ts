@@ -1,5 +1,6 @@
 import { ripemd160 } from '@noble/hashes/ripemd160';
 import { sha256 } from '@noble/hashes/sha256';
+import { keccak_256 } from '@noble/hashes/sha3';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { toBase64, toBech32 } from '@cosmjs/encoding';
 import {
@@ -10,6 +11,10 @@ import {
   Registry,
 } from '@cosmjs/proto-signing';
 import { defaultRegistryTypes, StargateClient } from '@cosmjs/stargate';
+import {
+  toCompressedSecp256k1,
+  toUncompressedSecp256k1,
+} from '../crypto/secp.js';
 import type { Address, TransferIntent, TxHash } from '../types.js';
 import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
 
@@ -30,6 +35,22 @@ export interface CosmosAdapterOptions {
   defaultGas?: number;
   /** Optional override of default fee amount in `denom` (default 5000). */
   defaultFee?: bigint;
+  /**
+   * Use EVM-style (Ethermint) address derivation instead of the classic
+   * Cosmos `ripemd160(sha256(pubkey))`. When `true`:
+   *   - 20-byte raw address = `keccak256(uncompressed_pubkey[1:])[-20:]`
+   *     (identical bytes to the matching EVM `0x..` address).
+   *   - Pubkey is encoded as `Any` with type URL
+   *     `/injective.crypto.v1beta1.ethsecp256k1.PubKey` instead of
+   *     `/cosmos.crypto.secp256k1.PubKey`.
+   *   - bech32 HRP from `bech32Prefix` is unchanged.
+   * Required for Ethermint-style chains: Injective (`inj`), Evmos (`evmos`),
+   * Cronos POS (`crc`), Berachain Cosmos (`bera`), etc. All such chains also
+   * use `coinType: 60`, but coinType alone is not a sufficient signal (some
+   * chains migrate to 60 without switching the address scheme), so we keep
+   * this opt-in explicit.
+   */
+  evmAddressing?: boolean;
 }
 
 /**
@@ -58,6 +79,8 @@ export interface CosmosSignedTx {
 }
 
 const SECP256K1_PUBKEY_TYPE = 'tendermint/PubKeySecp256k1';
+const ETHSECP256K1_PUBKEY_TYPE_URL =
+  '/injective.crypto.v1beta1.ethsecp256k1.PubKey';
 const MSG_SEND_TYPE_URL = '/cosmos.bank.v1beta1.MsgSend';
 
 /**
@@ -78,6 +101,7 @@ export class CosmosAdapter
   readonly decimals: number;
   readonly defaultGas: number;
   readonly defaultFee: bigint;
+  readonly evmAddressing: boolean;
 
   private readonly registry: Registry;
 
@@ -90,6 +114,7 @@ export class CosmosAdapter
     this.coinType = opts.coinType ?? 118;
     this.defaultGas = opts.defaultGas ?? 200_000;
     this.defaultFee = opts.defaultFee ?? 5000n;
+    this.evmAddressing = opts.evmAddressing ?? false;
     this.id = `cosmos:${opts.chainId}`;
     this.displayName = opts.chainId;
     // defaultRegistryTypes contains MsgSend, MsgMultiSend, staking, gov, ibc, etc.
@@ -101,16 +126,24 @@ export class CosmosAdapter
   }
 
   /**
-   * Convert a 33-byte compressed secp256k1 pubkey to a bech32 address:
-   *   addr = bech32(prefix, ripemd160(sha256(pubkey)))
+   * Convert a secp256k1 pubkey to a bech32 address.
    *
-   * Accepts uncompressed (65-byte) or raw (64-byte) pubkeys too — they're
-   * compressed first to match the Cosmos convention.
+   * Classic Cosmos:
+   *   addr = bech32(prefix, ripemd160(sha256(compressed_pubkey)))
+   *
+   * Ethermint (`evmAddressing: true`, used by Injective/Evmos/Cronos POS):
+   *   addr = bech32(prefix, keccak256(uncompressed_pubkey[1:])[-20:])
+   *   — i.e. the same 20-byte payload as the matching EVM `0x..` address,
+   *   just wrapped in bech32.
+   *
+   * Accepts compressed (33-byte), uncompressed (65-byte), or raw (64-byte)
+   * pubkeys — they're normalized to the form each scheme needs.
    */
   pubkeyToAddress(pubkey: Uint8Array): Address {
-    const compressed = toCompressedSecp256k1(pubkey);
-    const rawAddr = ripemd160(sha256(compressed));
-    return toBech32(this.bech32Prefix, rawAddr);
+    const raw20 = this.evmAddressing
+      ? keccak_256(toUncompressedSecp256k1(pubkey).slice(1)).slice(-20)
+      : ripemd160(sha256(toCompressedSecp256k1(pubkey)));
+    return toBech32(this.bech32Prefix, raw20);
   }
 
   async getBalance(address: Address): Promise<bigint> {
@@ -165,10 +198,18 @@ export class CosmosAdapter
     });
 
     // 3. Encode the pubkey as Any and build AuthInfo (default SIGN_MODE_DIRECT).
-    const pubkeyAny = encodePubkey({
-      type: SECP256K1_PUBKEY_TYPE,
-      value: toBase64(pubKey),
-    });
+    // Ethermint chains (Injective/Evmos/Cronos POS) use a different type URL
+    // — the underlying proto message is still `PubKey { bytes key = 1 }`, so
+    // we hand-encode it to avoid needing the injective protobuf bindings.
+    const pubkeyAny = this.evmAddressing
+      ? {
+          typeUrl: ETHSECP256K1_PUBKEY_TYPE_URL,
+          value: encodePubKeyProtoBytes(pubKey),
+        }
+      : encodePubkey({
+          type: SECP256K1_PUBKEY_TYPE,
+          value: toBase64(pubKey),
+        });
     const authInfoBytes = makeAuthInfoBytes(
       [{ pubkey: pubkeyAny, sequence }],
       [{ denom: this.denom, amount: this.defaultFee.toString() }],
@@ -259,20 +300,16 @@ export class CosmosAdapter
 /* helpers                                                             */
 /* ------------------------------------------------------------------ */
 
-function toCompressedSecp256k1(pubkey: Uint8Array): Uint8Array {
-  if (pubkey.length === 33 && (pubkey[0] === 0x02 || pubkey[0] === 0x03)) {
-    return pubkey;
-  }
-  if (pubkey.length === 65 && pubkey[0] === 0x04) {
-    return secp256k1.ProjectivePoint.fromHex(pubkey).toRawBytes(true);
-  }
-  if (pubkey.length === 64) {
-    const tagged = new Uint8Array(65);
-    tagged[0] = 0x04;
-    tagged.set(pubkey, 1);
-    return secp256k1.ProjectivePoint.fromHex(tagged).toRawBytes(true);
-  }
-  throw new Error(`cosmos: bad pubkey length=${pubkey.length}`);
+/**
+ * Hand-encode the proto message:
+ *   message PubKey { bytes key = 1; }
+ * used by both `/cosmos.crypto.secp256k1.PubKey` and the Ethermint variants
+ * (`/injective.crypto.v1beta1.ethsecp256k1.PubKey`, the `evmos` equivalent,
+ * etc.). The body is identical — only the `Any` typeUrl differs.
+ */
+function encodePubKeyProtoBytes(key: Uint8Array): Uint8Array {
+  // field 1, wire type 2 (length-delimited)
+  return concat([varint((1 << 3) | 2), varint(key.length), key]);
 }
 
 function normalizeLowS(sig64: Uint8Array): Uint8Array {

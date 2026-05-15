@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fromBech32 } from '@cosmjs/encoding';
+import { hexToBytes } from '@noble/hashes/utils';
+import { mnemonicToAccount } from 'viem/accounts';
 import { CosmosAdapter, Wallet } from '../src/index.js';
 
 const KNOWN_MNEMONIC =
@@ -176,6 +178,75 @@ describe('CosmosAdapter — offline', () => {
     await expect(
       cosmosHub.applySignatures(fakeUnsigned, [new Uint8Array(32)]),
     ).rejects.toThrow(/signature must be 64 or 65 bytes/);
+  });
+});
+
+describe('CosmosAdapter — Injective (Ethermint, evmAddressing)', () => {
+  const injective = new CosmosAdapter({
+    chainId: 'injective-1',
+    bech32Prefix: 'inj',
+    rpcUrl: 'http://localhost',
+    denom: 'inj',
+    coinType: 60,
+    evmAddressing: true,
+  });
+
+  it('exposes the right Injective chain identity', () => {
+    expect(injective.id).toBe('cosmos:injective-1');
+    expect(injective.coinType).toBe(60);
+    expect(injective.bech32Prefix).toBe('inj');
+    expect(injective.evmAddressing).toBe(true);
+    expect(injective.derivationPath()).toBe("m/44'/60'/0'/0/0");
+  });
+
+  it('derives an inj1 address whose 20-byte payload equals the EVM address', () => {
+    const w = Wallet.fromMnemonic({ mnemonic: KNOWN_MNEMONIC });
+    const acc = w.account(injective);
+
+    // Bech32 sanity.
+    expect(acc.address.startsWith('inj1')).toBe(true);
+    expect(acc.address.length).toBe(42);
+
+    const decoded = fromBech32(acc.address);
+    expect(decoded.prefix).toBe('inj');
+    expect(decoded.data.length).toBe(20);
+
+    // Compute the EVM-equivalent 0x.. address from the SAME mnemonic at the
+    // SAME path via viem — the trailing 20 bytes must match the bech32 payload.
+    // This is the Injective ↔ EVM key-compat property.
+    const evmAccount = mnemonicToAccount(KNOWN_MNEMONIC, {
+      path: "m/44'/60'/0'/0/0",
+    });
+    const evmHex = evmAccount.address.toLowerCase().replace(/^0x/, '');
+    expect(evmHex.length).toBe(40);
+    const evmBytes = hexToBytes(evmHex);
+
+    expect(Buffer.from(decoded.data).toString('hex')).toBe(
+      Buffer.from(evmBytes).toString('hex'),
+    );
+  });
+
+  it('differs from a classic Cosmos-style derivation for the same key', () => {
+    // Same prefix, same key, but ethermint vs classic must yield different
+    // 20-byte payloads (keccak vs ripemd160(sha256)).
+    const injClassic = new CosmosAdapter({
+      chainId: 'injective-1',
+      bech32Prefix: 'inj',
+      rpcUrl: 'http://localhost',
+      denom: 'inj',
+      coinType: 60,
+      // evmAddressing omitted -> defaults to false
+    });
+    const w = Wallet.fromMnemonic({ mnemonic: KNOWN_MNEMONIC });
+    const injAcc = w.account(injective);
+    const classicAcc = w.account(injClassic);
+
+    expect(injAcc.address).not.toBe(classicAcc.address);
+    const a = fromBech32(injAcc.address).data;
+    const b = fromBech32(classicAcc.address).data;
+    expect(Buffer.from(a).toString('hex')).not.toBe(
+      Buffer.from(b).toString('hex'),
+    );
   });
 });
 

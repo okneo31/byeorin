@@ -11,7 +11,7 @@ import { Home } from './src/screens/Home';
 import { Account } from './src/screens/Account';
 import { Send } from './src/screens/Send';
 import { walletStore } from './src/store';
-import { colors, spacing } from './src/theme';
+import { colors, spacing, theme } from './src/theme';
 
 export type Screen = 'home' | 'account' | 'send';
 
@@ -83,11 +83,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: 0.2,
+    fontFamily: theme.font.korean,
   },
   headerBtn: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: 8,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -98,6 +99,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 13,
     fontWeight: '600',
+    fontFamily: theme.font.korean,
   },
   main: {
     flex: 1,
@@ -111,6 +113,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+    fontFamily: theme.font.korean,
   },
 });
 

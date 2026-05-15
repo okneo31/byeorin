@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { createMnemonic } from '@nodong/wallet-sdk';
 import { walletStore } from '../store';
-import { colors, radius, spacing } from '../theme';
+import { colors, radius, spacing, theme } from '../theme';
 
 type Mode = 'choose' | 'create' | 'recover';
 
@@ -193,12 +193,14 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '800',
     marginBottom: spacing.sm,
+    fontFamily: theme.font.korean,
   },
   lead: {
     color: colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
     marginBottom: spacing.lg,
+    fontFamily: theme.font.korean,
   },
   label: {
     color: colors.textMuted,
@@ -206,6 +208,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
+    fontFamily: theme.font.korean,
   },
   card: {
     backgroundColor: colors.surface,
@@ -216,6 +219,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   warn: {
+    // TODO(design-system): no dark-tinted warn surface in DS — local value.
     backgroundColor: '#3a2a00',
     borderRadius: radius.md,
     padding: spacing.md,
@@ -227,12 +231,15 @@ const styles = StyleSheet.create({
     color: colors.warn,
     fontSize: 13,
     lineHeight: 18,
+    fontFamily: theme.font.korean,
   },
   mnemonic: {
     color: colors.text,
     fontSize: 17,
     lineHeight: 26,
     fontWeight: '600',
+    // The Korean BIP-39 wordlist is Hangul, so apply the Korean stack here too.
+    fontFamily: theme.font.korean,
   },
   textarea: {
     color: colors.text,
@@ -242,6 +249,8 @@ const styles = StyleSheet.create({
     minHeight: 96,
     textAlignVertical: 'top',
     fontSize: 15,
+    // Korean BIP-39 mnemonics are Hangul — apply the Korean stack.
+    fontFamily: theme.font.korean,
   },
   btn: {
     paddingVertical: 14,
@@ -256,9 +265,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryPressed,
   },
   btnPrimaryText: {
+    // Pure white on brand-red button. DS `paper` (#fffaf0) is too warm here.
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+    fontFamily: theme.font.korean,
   },
   btnGhost: {
     backgroundColor: 'transparent',
@@ -272,6 +283,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     fontWeight: '600',
+    fontFamily: theme.font.korean,
   },
   btnDisabled: {
     opacity: 0.4,
@@ -297,6 +309,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   checkboxMark: {
+    // Pure white check on filled brand-red box. Not DS's warm `paper`.
     color: '#fff',
     fontSize: 14,
     fontWeight: '900',
@@ -306,10 +319,12 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
     flex: 1,
+    fontFamily: theme.font.korean,
   },
   error: {
     color: colors.error,
     fontSize: 13,
     marginVertical: spacing.sm,
+    fontFamily: theme.font.korean,
   },
 });

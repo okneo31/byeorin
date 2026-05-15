@@ -15,7 +15,7 @@ import {
   type TransactionSerializableEIP1559,
 } from 'viem';
 import { publicKeyToAddress } from 'viem/accounts';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { toUncompressedSecp256k1 } from '../crypto/secp.js';
 import type { Address, TransferIntent, TxHash } from '../types.js';
 import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
 
@@ -136,16 +136,3 @@ export class EvmAdapter implements ChainAdapter<EvmUnsignedTx, EvmSignedTx> {
   }
 }
 
-function toUncompressedSecp256k1(pubkey: Uint8Array): Uint8Array {
-  if (pubkey.length === 65 && pubkey[0] === 0x04) return pubkey;
-  if (pubkey.length === 64) {
-    const out = new Uint8Array(65);
-    out[0] = 0x04;
-    out.set(pubkey, 1);
-    return out;
-  }
-  if (pubkey.length === 33 && (pubkey[0] === 0x02 || pubkey[0] === 0x03)) {
-    return secp256k1.ProjectivePoint.fromHex(pubkey).toRawBytes(false);
-  }
-  throw new Error(`evm: bad pubkey length=${pubkey.length}`);
-}

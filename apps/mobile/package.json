@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@nodong/design-system": "workspace:*",
     "@nodong/shell-core": "workspace:*",
     "@nodong/wallet-sdk": "workspace:*",
     "react": "^18.3.1",

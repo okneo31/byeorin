@@ -10,7 +10,7 @@ import {
 import QRCode from 'react-native-qrcode-svg';
 import type { WalletAccount } from '@nodong/wallet-sdk';
 import { walletStore } from '../store';
-import { colors, radius, spacing } from '../theme';
+import { colors, radius, spacing, theme } from '../theme';
 import { formatTtl } from '../units';
 
 interface Props {
@@ -79,6 +79,8 @@ export function Account({ onSend, onLock }: Props) {
         </Text>
         <View style={styles.qrWrap}>
           <View style={styles.qrBg}>
+            {/* QR background must be pure white for scanner contrast; DS's warm
+                `paper` (#fffaf0) hurts machine-read reliability. */}
             <QRCode value={account.address} size={180} backgroundColor="#ffffff" />
           </View>
         </View>
@@ -131,11 +133,13 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '800',
     marginBottom: spacing.xs,
+    fontFamily: theme.font.korean,
   },
   lead: {
     color: colors.textMuted,
     fontSize: 13,
     marginBottom: spacing.lg,
+    fontFamily: theme.font.korean,
   },
   label: {
     color: colors.textMuted,
@@ -143,6 +147,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
+    fontFamily: theme.font.korean,
   },
   card: {
     backgroundColor: colors.surface,
@@ -155,7 +160,7 @@ const styles = StyleSheet.create({
   address: {
     color: colors.text,
     fontSize: 13,
-    fontFamily: 'monospace',
+    fontFamily: theme.font.mono,
     lineHeight: 20,
     marginBottom: spacing.md,
   },
@@ -165,6 +170,8 @@ const styles = StyleSheet.create({
   },
   qrBg: {
     padding: spacing.md,
+    // Pure white border around the QR matches the QR backgroundColor above
+    // (scanner contrast — see comment in JSX).
     backgroundColor: '#ffffff',
     borderRadius: radius.md,
   },
@@ -172,6 +179,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 22,
     fontWeight: '700',
+    fontFamily: theme.font.mono,
   },
   btn: {
     paddingVertical: 14,
@@ -186,9 +194,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryPressed,
   },
   btnPrimaryText: {
+    // Pure white on brand-red button (see Home.tsx note).
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+    fontFamily: theme.font.korean,
   },
   btnGhost: {
     backgroundColor: 'transparent',
@@ -202,10 +212,12 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
     fontWeight: '600',
+    fontFamily: theme.font.korean,
   },
   error: {
     color: colors.error,
     fontSize: 13,
     marginTop: spacing.sm,
+    fontFamily: theme.font.korean,
   },
 });
