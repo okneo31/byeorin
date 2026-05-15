@@ -1,3 +1,10 @@
+// SIGNATURE FORMAT VERIFIED 2026-05-16:
+// TronWeb v6 expects r(32)||s(32)||(recovery+27) — i.e. EVM-style v.
+// SoftSigner emits raw `recovery` (0|1), so applySignatures must add 27
+// before writing the last byte. Cross-checked against
+// `tronweb/utils/crypto.signTransaction` (which calls ECKeySign:
+// `r.padStart(64,'0') + s.padStart(64,'0') + byte2hexStr(recovery + 27)`).
+// See tests/tron.test.ts "signature matches TronWeb's own signer".
 import { toUncompressedSecp256k1 } from '../crypto/secp.js';
 import type { Address, TransferIntent, TxHash } from '../types.js';
 import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
@@ -119,8 +126,25 @@ export class TronAdapter
         `tron: secp256k1 signature must be 65 bytes (r||s||v), got ${signature.length}`,
       );
     }
-    const hex = bytesToHex(signature);
-    // Tron accepts the 65-byte r||s||recovery as a single hex string.
+    // SoftSigner emits the last byte as raw recovery (0 or 1).
+    // TronWeb's reference signer encodes the last byte as (recovery + 27)
+    // — see ECKeySign in tronweb/utils/crypto.js. Normalize here so a
+    // raw `recovery >= 2` is rejected and a `27/28` byte from a hardware
+    // signer that already encoded `v` is left untouched.
+    const recoveryRaw = signature[64] as number;
+    let v: number;
+    if (recoveryRaw === 0 || recoveryRaw === 1) {
+      v = recoveryRaw + 27;
+    } else if (recoveryRaw === 27 || recoveryRaw === 28) {
+      v = recoveryRaw;
+    } else {
+      throw new Error(
+        `tron: signature recovery byte must be 0|1|27|28, got ${recoveryRaw}`,
+      );
+    }
+    const normalized = new Uint8Array(signature);
+    normalized[64] = v;
+    const hex = bytesToHex(normalized);
     tx.tx.signature = [hex];
     return { tx: tx.tx, txid: tx.tx.txID };
   }

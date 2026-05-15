@@ -66,6 +66,9 @@ importers:
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
+      viem:
+        specifier: ^2.21.40
+        version: 2.49.2(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.4.3)
     devDependencies:
       '@types/chrome':
         specifier: ^0.0.279
@@ -201,6 +204,9 @@ importers:
 
   packages/shell-core:
     dependencies:
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
       '@nodong/wallet-sdk':
         specifier: workspace:*
         version: link:../wallet-sdk
@@ -214,6 +220,9 @@ importers:
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
+      vitest:
+        specifier: ^2.1.5
+        version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
 
   packages/wallet-sdk:
     dependencies:

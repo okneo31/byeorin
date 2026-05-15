@@ -1,0 +1,199 @@
+/* 노동자의 지갑 — 서명/전송 확인 popup 스타일.
+   브랜드: 적색 #c41e1e / 흑색 #0a0a0a / 황색 #f4c430 / 종이 #fffaf0.
+   popup 화면 사이즈는 chrome.windows.create 의 420x640 와 정렬. */
+
+:root {
+  --bg: #0a0a0a;
+  --fg: #f5f5f5;
+  --muted: #9a9a9a;
+  --red: #c41e1e;
+  --yellow: #f4c430;
+  --paper: #fffaf0;
+  --card: #141414;
+  --border: #2a2a2a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'Pretendard', system-ui, -apple-system, 'Segoe UI', Roboto, 'Apple SD Gothic Neo',
+    sans-serif;
+  min-height: 100vh;
+}
+
+body {
+  width: 420px;
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 18px;
+  min-height: 640px;
+}
+
+.brand {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  border-left: 4px solid var(--red);
+  padding-left: 10px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: #0d0d0d;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.origin {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.addr {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 14px;
+  color: var(--yellow);
+  word-break: break-all;
+}
+
+.addr-link {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 14px;
+  color: var(--yellow);
+  word-break: break-all;
+  text-decoration: underline dotted;
+}
+
+.addr-link:hover {
+  filter: brightness(1.2);
+}
+
+.value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--paper);
+}
+
+.value-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 12px;
+}
+
+.warn {
+  color: var(--yellow);
+}
+
+.error {
+  color: #ff6b6b;
+}
+
+.msg-block {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: #0d0d0d;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  max-height: 200px;
+  overflow: auto;
+  color: var(--paper);
+}
+
+.msg-block.hex {
+  color: var(--muted);
+}
+
+.hex-tag {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--muted);
+  background: #1a1a1a;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-left: 6px;
+  letter-spacing: 0.3px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.actions button {
+  flex: 1;
+}
+
+button {
+  font: inherit;
+  border-radius: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: filter 120ms ease;
+}
+
+button:hover {
+  filter: brightness(1.1);
+}
+
+.btn-primary {
+  background: var(--red);
+  color: #fff;
+  font-weight: 700;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--fg);
+  border-color: var(--border);
+}

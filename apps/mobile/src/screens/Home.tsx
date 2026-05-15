@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { createMnemonic } from '@nodong/wallet-sdk';
 import { walletStore } from '../store';
 import { colors, radius, spacing, theme } from '../theme';
+import { Button, Card, Input } from '../ui';
 
 type Mode = 'choose' | 'create' | 'recover';
 
@@ -28,15 +29,19 @@ export function Home({ onReady }: Props) {
         쉽고 안전하게.
       </Text>
 
-      <View style={styles.card}>
+      <Card style={styles.section}>
         <Text style={styles.label}>처음 사용하세요?</Text>
-        <PrimaryButton title="지갑 생성" onPress={() => setMode('create')} />
-      </View>
+        <Button variant="primary" fullWidth onPress={() => setMode('create')}>
+          지갑 생성
+        </Button>
+      </Card>
 
-      <View style={styles.card}>
+      <Card style={styles.section}>
         <Text style={styles.label}>이미 복구 문구가 있나요?</Text>
-        <GhostButton title="복구" onPress={() => setMode('recover')} />
-      </View>
+        <Button variant="secondary" fullWidth onPress={() => setMode('recover')}>
+          복구하기
+        </Button>
+      </Card>
     </ScrollView>
   );
 }
@@ -45,14 +50,18 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
   const [mnemonic] = useState(() => createMnemonic(128, 'korean'));
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const onConfirm = () => {
+    setBusy(true);
     void (async () => {
       try {
         await walletStore.unlock(mnemonic);
         onDone();
       } catch (e) {
         setError(e instanceof Error ? e.message : '지갑 생성에 실패했습니다.');
+      } finally {
+        setBusy(false);
       }
     })();
   };
@@ -71,11 +80,11 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
         </Text>
       </View>
 
-      <View style={styles.card}>
+      <Card style={styles.section}>
         <Text style={styles.mnemonic} selectable>
           {mnemonic}
         </Text>
-      </View>
+      </Card>
 
       <Pressable
         onPress={() => setConfirmed(!confirmed)}
@@ -91,8 +100,19 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <PrimaryButton title="외웠습니다, 다음" disabled={!confirmed} onPress={onConfirm} />
-      <GhostButton title="뒤로" onPress={onBack} />
+      <Button
+        variant="primary"
+        fullWidth
+        disabled={!confirmed}
+        loading={busy}
+        onPress={onConfirm}
+      >
+        외웠습니다, 다음
+      </Button>
+      <View style={styles.btnSpacer} />
+      <Button variant="ghost" fullWidth onPress={onBack}>
+        뒤로
+      </Button>
     </ScrollView>
   );
 }
@@ -100,15 +120,19 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
 function RecoverFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const onSubmit = () => {
     setError(null);
+    setBusy(true);
     void (async () => {
       try {
         await walletStore.unlock(input);
         onDone();
       } catch (e) {
         setError(e instanceof Error ? e.message : '복구에 실패했습니다.');
+      } finally {
+        setBusy(false);
       }
     })();
   };
@@ -122,65 +146,34 @@ function RecoverFlow({ onDone, onBack }: { onDone: () => void; onBack: () => voi
         12개 또는 24개의 복구 단어를 띄어쓰기로 입력하세요. 영어 또는 한국어 단어 모두 지원합니다.
       </Text>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>복구 문구</Text>
-        <TextInput
-          style={styles.textarea}
+      <Card style={styles.section}>
+        <Input
+          label="복구 문구"
           value={input}
           onChangeText={setInput}
           placeholder="예) word1 word2 word3 ..."
-          placeholderTextColor={colors.textMuted}
           multiline
           numberOfLines={4}
           autoCapitalize="none"
           autoCorrect={false}
-          spellCheck={false}
+          error={error ?? undefined}
         />
-      </View>
+      </Card>
 
-      {error && <Text style={styles.error}>{error}</Text>}
-
-      <PrimaryButton title="복구하기" disabled={wordCount < 12} onPress={onSubmit} />
-      <GhostButton title="뒤로" onPress={onBack} />
+      <Button
+        variant="primary"
+        fullWidth
+        disabled={wordCount < 12}
+        loading={busy}
+        onPress={onSubmit}
+      >
+        복구하기
+      </Button>
+      <View style={styles.btnSpacer} />
+      <Button variant="ghost" fullWidth onPress={onBack}>
+        뒤로
+      </Button>
     </ScrollView>
-  );
-}
-
-function PrimaryButton({
-  title,
-  onPress,
-  disabled,
-}: {
-  title: string;
-  onPress: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      disabled={disabled}
-      style={({ pressed }) => [
-        styles.btn,
-        styles.btnPrimary,
-        pressed && !disabled && styles.btnPrimaryPressed,
-        disabled && styles.btnDisabled,
-      ]}
-    >
-      <Text style={styles.btnPrimaryText}>{title}</Text>
-    </Pressable>
-  );
-}
-
-function GhostButton({ title, onPress }: { title: string; onPress: () => void }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.btnGhostPressed]}
-    >
-      <Text style={styles.btnGhostText}>{title}</Text>
-    </Pressable>
   );
 }
 
@@ -210,13 +203,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     fontFamily: theme.font.korean,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
+  // Each Card needs its own bottom margin in the screen layout. Card itself
+  // doesn't ship spacing — that's a layout decision, not a primitive concern.
+  section: {
     marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   warn: {
     // TODO(design-system): no dark-tinted warn surface in DS — local value.
@@ -241,52 +231,8 @@ const styles = StyleSheet.create({
     // The Korean BIP-39 wordlist is Hangul, so apply the Korean stack here too.
     fontFamily: theme.font.korean,
   },
-  textarea: {
-    color: colors.text,
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    minHeight: 96,
-    textAlignVertical: 'top',
-    fontSize: 15,
-    // Korean BIP-39 mnemonics are Hangul — apply the Korean stack.
-    fontFamily: theme.font.korean,
-  },
-  btn: {
-    paddingVertical: 14,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    marginTop: spacing.sm,
-  },
-  btnPrimary: {
-    backgroundColor: colors.primary,
-  },
-  btnPrimaryPressed: {
-    backgroundColor: colors.primaryPressed,
-  },
-  btnPrimaryText: {
-    // Pure white on brand-red button. DS `paper` (#fffaf0) is too warm here.
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-    fontFamily: theme.font.korean,
-  },
-  btnGhost: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  btnGhostPressed: {
-    backgroundColor: colors.surfaceAlt,
-  },
-  btnGhostText: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '600',
-    fontFamily: theme.font.korean,
-  },
-  btnDisabled: {
-    opacity: 0.4,
+  btnSpacer: {
+    height: spacing.sm,
   },
   checkRow: {
     flexDirection: 'row',

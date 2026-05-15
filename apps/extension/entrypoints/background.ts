@@ -1,12 +1,24 @@
 import { defineBackground } from 'wxt/sandbox';
+import {
+  bytesToHex,
+  concat,
+  hexToBytes,
+  isHex,
+  keccak256,
+  stringToBytes,
+  type Hex,
+} from 'viem';
 import { TTL_CHAIN } from '@nodong/wallet-sdk';
-import { getActiveAccount, getTtlAdapter } from '../src/lib/wallet-service.js';
+import { getActiveAccount, getTtlAdapter, walletStore } from '../src/lib/wallet-service.js';
 import {
   RPC_ERRORS,
   type BackgroundMessage,
+  type ConfirmContext,
   type ConnectContext,
   type JsonRpcRequest,
   type JsonRpcResponse,
+  type PersonalSignConfirmContext,
+  type SendTxConfirmContext,
 } from '../src/lib/rpc.js';
 import {
   approveOrigin,
@@ -34,6 +46,19 @@ const pendingConnects = new Map<string, PendingConnect>();
 
 // 연결 동의 popup 의 유효 시한(분 단위). 시간 초과 시 자동 reject 처리.
 const CONNECT_TIMEOUT_MS = 2 * 60 * 1000;
+
+// 서명/전송 확인 popup 슬롯. ConfirmContext 자체를 들고 있고, 결과만 Promise 로 해소.
+type PendingConfirm = {
+  context: ConfirmContext;
+  resolve: (decision: 'approve' | 'reject') => void;
+  windowId?: number;
+  timeout: ReturnType<typeof setTimeout>;
+};
+
+const pendingConfirms = new Map<string, PendingConfirm>();
+
+// personal_sign / eth_sendTransaction 동의 popup 유효 시한. connect 와 동일하게 2분.
+const CONFIRM_TIMEOUT_MS = 2 * 60 * 1000;
 
 export default defineBackground({
   type: 'module',
@@ -67,6 +92,16 @@ export default defineBackground({
             ? { requestId: bm.requestId, origin: ctx.origin, address: ctx.address }
             : null;
           sendResponse(out);
+          return false;
+        }
+        if (bm.type === 'confirm-result') {
+          handleConfirmResult(bm.requestId, bm.decision);
+          sendResponse({ ok: true });
+          return false;
+        }
+        if (bm.type === 'confirm-context-get') {
+          const slot = pendingConfirms.get(bm.requestId);
+          sendResponse(slot ? slot.context : null);
           return false;
         }
       } else {
@@ -185,13 +220,190 @@ async function handleRpc(
     }
 
     case 'personal_sign': {
-      // TODO(v0.2): popup confirm + SoftSigner.sign 으로 personal_sign 메시지 해시 서명.
-      return fail(RPC_ERRORS.UNSUPPORTED.code, 'personal_sign 미구현 (v0.2 예정)');
+      // EIP-191 prefixed signing. params 순서는 [messageHex, address] (MetaMask 규약 — eth_sign 과 반대).
+      const params = Array.isArray(req.params) ? req.params : [];
+      const a = params[0];
+      const b = params[1];
+      if (typeof a !== 'string' || typeof b !== 'string') {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, 'personal_sign 파라미터 형식 오류');
+      }
+      // 일부 dApp 은 (address, message) 순서로 보내므로 휴리스틱으로 보정.
+      // - 둘 다 hex 인 경우: 더 짧은(20바이트=42자) 쪽을 address 로 간주.
+      // - 한쪽만 hex 인 경우: hex 가 message, 다른 쪽이 address.
+      let messageHex: string;
+      let claimedAddress: string;
+      const aIsAddr = /^0x[0-9a-fA-F]{40}$/.test(a);
+      const bIsAddr = /^0x[0-9a-fA-F]{40}$/.test(b);
+      if (aIsAddr && !bIsAddr) {
+        // (address, message) 순서
+        claimedAddress = a;
+        messageHex = b;
+      } else {
+        // 표준: (message, address)
+        messageHex = a;
+        claimedAddress = b;
+      }
+      if (!isHex(messageHex)) {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, '메시지 hex 가 아닙니다');
+      }
+
+      const origin = senderOrigin(sender);
+      if (!origin || !(await isOriginApproved(origin))) {
+        return fail(RPC_ERRORS.UNAUTHORIZED.code, '연결되지 않은 dApp');
+      }
+      if (!walletStore.isUnlocked()) {
+        // tryAutoRestore 는 getActiveAccount 가 수행하므로 여기까지 와서 false 라면 진짜 잠금.
+        const acc0 = await getActiveAccount();
+        if (!acc0) return fail(RPC_ERRORS.UNAUTHORIZED.code, '지갑 잠금 상태입니다');
+      }
+      const acc = await getActiveAccount();
+      if (!acc) return fail(RPC_ERRORS.UNAUTHORIZED.code, '지갑 잠금 상태입니다');
+      if (claimedAddress.toLowerCase() !== acc.address.toLowerCase()) {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, '주소 불일치');
+      }
+
+      // 메시지 디코드 시도 — popup 에서 텍스트로도 보여줄 수 있도록 컨텍스트에 동봉.
+      let messageUtf8: string | null = null;
+      try {
+        const bytes = hexToBytes(messageHex as Hex);
+        const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+        // 출력 가능 문자만 허용(개행/탭/CR 예외).
+        let printable = true;
+        for (let i = 0; i < decoded.length; i++) {
+          const c = decoded.charCodeAt(i);
+          if (c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d) {
+            printable = false;
+            break;
+          }
+        }
+        if (printable) messageUtf8 = decoded;
+      } catch {
+        messageUtf8 = null;
+      }
+
+      const context: PersonalSignConfirmContext = {
+        requestId: '', // openConfirm 내부에서 할당
+        method: 'personal_sign',
+        origin,
+        address: acc.address,
+        message: messageHex,
+        messageUtf8,
+      };
+      const decision = await openConfirm(context);
+      if (decision !== 'approve') {
+        return fail(RPC_ERRORS.USER_REJECTED.code, RPC_ERRORS.USER_REJECTED.message);
+      }
+
+      // EIP-191: keccak256("\x19Ethereum Signed Message:\n" + len + message)
+      const msgBytes = hexToBytes(messageHex as Hex);
+      const prefix = stringToBytes(`\x19Ethereum Signed Message:\n${msgBytes.length}`);
+      const digestHex = keccak256(concat([prefix, msgBytes]));
+      const sig = await acc.signer.sign(hexToBytes(digestHex));
+      if (sig.length !== 65) {
+        return fail(RPC_ERRORS.INTERNAL.code, '서명 길이 오류');
+      }
+      // SoftSigner 출력: r(32) || s(32) || recovery(1)  →  EIP-191 은 v ∈ {27, 28}.
+      const r = sig.subarray(0, 32);
+      const s = sig.subarray(32, 64);
+      const recovery = sig[64]!;
+      const v = recovery + 27;
+      const sigHex =
+        '0x' +
+        bytesToHex(r).slice(2) +
+        bytesToHex(s).slice(2) +
+        v.toString(16).padStart(2, '0');
+      return ok(sigHex);
     }
 
     case 'eth_sendTransaction': {
-      // TODO(v0.2): popup confirm 후 Wallet.transfer 로 전송.
-      return fail(RPC_ERRORS.UNSUPPORTED.code, 'eth_sendTransaction 미구현 (v0.2 예정)');
+      const params = Array.isArray(req.params) ? req.params : [];
+      const tx = params[0] as
+        | {
+            from?: string;
+            to?: string;
+            value?: string;
+            data?: string;
+            gas?: string;
+            gasPrice?: string;
+            maxFeePerGas?: string;
+            maxPriorityFeePerGas?: string;
+            nonce?: string;
+            chainId?: string;
+          }
+        | undefined;
+      if (!tx || typeof tx !== 'object') {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, 'eth_sendTransaction 파라미터 누락');
+      }
+
+      const origin = senderOrigin(sender);
+      if (!origin || !(await isOriginApproved(origin))) {
+        return fail(RPC_ERRORS.UNAUTHORIZED.code, '연결되지 않은 dApp');
+      }
+      const acc = await getActiveAccount();
+      if (!acc) return fail(RPC_ERRORS.UNAUTHORIZED.code, '지갑 잠금 상태입니다');
+      if (tx.from && tx.from.toLowerCase() !== acc.address.toLowerCase()) {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, 'from 주소 불일치');
+      }
+      if (!tx.to || typeof tx.to !== 'string') {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, 'to 주소 누락');
+      }
+
+      // chainId 가드 — 명시되었다면 TTL(7777) 이어야 한다.
+      if (tx.chainId) {
+        let cid: number;
+        try {
+          cid = parseInt(tx.chainId, 16);
+        } catch {
+          return fail(RPC_ERRORS.INVALID_PARAMS.code, `잘못된 chainId: ${tx.chainId}`);
+        }
+        if (!Number.isFinite(cid) || cid !== TTL_CHAIN.id) {
+          return fail(RPC_ERRORS.INVALID_PARAMS.code, `지원하지 않는 chainId: ${tx.chainId}`);
+        }
+      }
+
+      // 계약 호출(0x 이외의 data) 은 v0.3 으로 연기.
+      const dataHex = tx.data ?? '0x';
+      if (dataHex !== '0x' && dataHex !== '') {
+        return fail(RPC_ERRORS.UNSUPPORTED.code, '계약 호출(data)은 v0.3 예정');
+      }
+
+      const valueHex = tx.value ?? '0x0';
+      let valueWei: bigint;
+      try {
+        valueWei = BigInt(valueHex);
+      } catch {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, '잘못된 value');
+      }
+      if (valueWei < 0n) {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, 'value 음수');
+      }
+
+      const context: SendTxConfirmContext = {
+        requestId: '', // openConfirm 내부에서 할당
+        method: 'eth_sendTransaction',
+        origin,
+        from: acc.address,
+        to: tx.to,
+        value: valueHex,
+        data: dataHex,
+        gas: tx.gas ?? null,
+        gasPrice: tx.gasPrice ?? null,
+        maxFeePerGas: tx.maxFeePerGas ?? null,
+        maxPriorityFeePerGas: tx.maxPriorityFeePerGas ?? null,
+        nonce: tx.nonce ?? null,
+        chainId: tx.chainId ?? null,
+      };
+      const decision = await openConfirm(context);
+      if (decision !== 'approve') {
+        return fail(RPC_ERRORS.USER_REJECTED.code, RPC_ERRORS.USER_REJECTED.message);
+      }
+
+      try {
+        const txHash = await walletStore.transfer({ to: tx.to, amount: valueWei });
+        return ok(txHash);
+      } catch (err) {
+        return fail(RPC_ERRORS.INTERNAL.code, `전송 실패: ${(err as Error)?.message ?? err}`);
+      }
     }
 
     case 'eth_signTypedData_v4': {
@@ -274,6 +486,78 @@ function handleConnectResult(requestId: string, decision: 'approve' | 'reject'):
   const slot = pendingConnects.get(requestId);
   if (!slot) return;
   pendingConnects.delete(requestId);
+  clearTimeout(slot.timeout);
+  if (slot.windowId != null) {
+    try {
+      chrome.windows.remove(slot.windowId);
+    } catch {
+      /* noop */
+    }
+  }
+  slot.resolve(decision);
+}
+
+// ── 서명/전송 확인 popup 흐름 ──────────────────────────────────────────
+// connect 흐름과 동일한 패턴: requestId 발급 → pendingConfirms 슬롯 → popup → 결과 메시지 → resolve.
+// 차이: 컨텍스트 자체(ConfirmContext)를 슬롯에 저장해 confirm-context-get 응답으로 그대로 돌려준다.
+//
+// 정책(v0.2):
+//  - "1시간 기억" 같은 origin 별 자동 승인은 제공하지 않는다(악용 방지). 매 호출마다 사용자 동의.
+//  - timeout(2분) 경과 시 또는 사용자가 popup 을 직접 닫으면 자동 reject.
+
+function openConfirm(ctxInput: ConfirmContext): Promise<'approve' | 'reject'> {
+  return new Promise<'approve' | 'reject'>((resolve) => {
+    const requestId = makeRequestId();
+    const context: ConfirmContext = { ...ctxInput, requestId };
+
+    const timeout = setTimeout(() => {
+      const slot = pendingConfirms.get(requestId);
+      if (!slot) return;
+      pendingConfirms.delete(requestId);
+      try {
+        if (slot.windowId != null) chrome.windows.remove(slot.windowId);
+      } catch {
+        /* noop */
+      }
+      resolve('reject');
+    }, CONFIRM_TIMEOUT_MS);
+
+    const slot: PendingConfirm = { context, resolve, timeout };
+    pendingConfirms.set(requestId, slot);
+
+    const url =
+      chrome.runtime.getURL('confirm.html') +
+      '?requestId=' + encodeURIComponent(requestId);
+
+    chrome.windows.create(
+      { url, type: 'popup', width: 420, height: 640 },
+      (win) => {
+        if (chrome.runtime.lastError || !win) {
+          clearTimeout(timeout);
+          pendingConfirms.delete(requestId);
+          resolve('reject');
+          return;
+        }
+        slot.windowId = win.id;
+      },
+    );
+
+    const onRemoved = (winId: number): void => {
+      const cur = pendingConfirms.get(requestId);
+      if (!cur || cur.windowId !== winId) return;
+      pendingConfirms.delete(requestId);
+      clearTimeout(cur.timeout);
+      chrome.windows.onRemoved.removeListener(onRemoved);
+      resolve('reject');
+    };
+    chrome.windows.onRemoved.addListener(onRemoved);
+  });
+}
+
+function handleConfirmResult(requestId: string, decision: 'approve' | 'reject'): void {
+  const slot = pendingConfirms.get(requestId);
+  if (!slot) return;
+  pendingConfirms.delete(requestId);
   clearTimeout(slot.timeout);
   if (slot.windowId != null) {
     try {

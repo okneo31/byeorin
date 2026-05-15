@@ -14,7 +14,8 @@
     "@nodong/shell-core": "workspace:*",
     "@nodong/wallet-sdk": "workspace:*",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "viem": "^2.21.40"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.279",

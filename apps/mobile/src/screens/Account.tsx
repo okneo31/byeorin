@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,12 +10,14 @@ import QRCode from 'react-native-qrcode-svg';
 import type { WalletAccount } from '@nodong/wallet-sdk';
 import { walletStore } from '../store';
 import { colors, radius, spacing, theme } from '../theme';
-import { formatTtl } from '../units';
+import { AddressDisplay, AmountDisplay, Button, Card } from '../ui';
 
 interface Props {
   onSend: () => void;
   onLock: () => void;
 }
+
+const TTL_DECIMALS = 18;
 
 export function Account({ onSend, onLock }: Props) {
   const [account, setAccount] = useState<WalletAccount | null>(null);
@@ -60,9 +61,9 @@ export function Account({ onSend, onLock }: Props) {
     return (
       <View style={styles.empty}>
         <Text style={styles.lead}>지갑이 잠겨 있습니다.</Text>
-        <Pressable style={[styles.btn, styles.btnPrimary]} onPress={onLock}>
-          <Text style={styles.btnPrimaryText}>처음으로</Text>
-        </Pressable>
+        <Button variant="primary" onPress={onLock}>
+          처음으로
+        </Button>
       </View>
     );
   }
@@ -72,11 +73,9 @@ export function Account({ onSend, onLock }: Props) {
       <Text style={styles.h1}>내 계정</Text>
       <Text style={styles.lead}>TTL 메인넷 · ChainId 7777</Text>
 
-      <View style={styles.card}>
+      <Card style={styles.section}>
         <Text style={styles.label}>주소</Text>
-        <Text style={styles.address} selectable>
-          {account.address}
-        </Text>
+        <AddressDisplay address={account.address} head={6} tail={4} />
         <View style={styles.qrWrap}>
           <View style={styles.qrBg}>
             {/* QR background must be pure white for scanner contrast; DS's warm
@@ -84,38 +83,31 @@ export function Account({ onSend, onLock }: Props) {
             <QRCode value={account.address} size={180} backgroundColor="#ffffff" />
           </View>
         </View>
-      </View>
+      </Card>
 
-      <View style={styles.card}>
+      <Card style={styles.section}>
         <Text style={styles.label}>잔액</Text>
         {loading ? (
           <ActivityIndicator color={colors.primary} />
+        ) : balance != null ? (
+          <AmountDisplay value={balance} decimals={TTL_DECIMALS} symbol="TTL" size="lg" />
         ) : (
-          <Text style={styles.balance}>
-            {balance != null ? `${formatTtl(balance)} TTL` : '—'}
-          </Text>
+          <Text style={styles.balanceEmpty}>—</Text>
         )}
         {error && <Text style={styles.error}>{error}</Text>}
         <View style={{ height: spacing.sm }} />
-        <Pressable
-          style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.btnGhostPressed]}
-          onPress={refresh}
-          disabled={loading}
-        >
-          <Text style={styles.btnGhostText}>새로고침</Text>
-        </Pressable>
-      </View>
+        <Button variant="ghost" fullWidth onPress={refresh} disabled={loading}>
+          새로고침
+        </Button>
+      </Card>
 
-      <Pressable
-        style={({ pressed }) => [
-          styles.btn,
-          styles.btnPrimary,
-          pressed && styles.btnPrimaryPressed,
-        ]}
-        onPress={onSend}
-      >
-        <Text style={styles.btnPrimaryText}>보내기</Text>
-      </Pressable>
+      <Button variant="primary" fullWidth onPress={onSend}>
+        송금
+      </Button>
+      <View style={styles.btnSpacer} />
+      <Button variant="ghost" fullWidth onPress={onLock}>
+        잠금
+      </Button>
     </ScrollView>
   );
 }
@@ -127,6 +119,7 @@ const styles = StyleSheet.create({
   empty: {
     paddingVertical: spacing.xl,
     alignItems: 'center',
+    gap: spacing.md,
   },
   h1: {
     color: colors.text,
@@ -149,24 +142,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     fontFamily: theme.font.korean,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  address: {
-    color: colors.text,
-    fontSize: 13,
-    fontFamily: theme.font.mono,
-    lineHeight: 20,
+  section: {
     marginBottom: spacing.md,
   },
   qrWrap: {
     alignItems: 'center',
-    paddingTop: spacing.sm,
+    paddingTop: spacing.md,
   },
   qrBg: {
     padding: spacing.md,
@@ -175,44 +156,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: radius.md,
   },
-  balance: {
+  balanceEmpty: {
     color: colors.text,
     fontSize: 22,
     fontWeight: '700',
     fontFamily: theme.font.mono,
   },
-  btn: {
-    paddingVertical: 14,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    marginTop: spacing.sm,
-  },
-  btnPrimary: {
-    backgroundColor: colors.primary,
-  },
-  btnPrimaryPressed: {
-    backgroundColor: colors.primaryPressed,
-  },
-  btnPrimaryText: {
-    // Pure white on brand-red button (see Home.tsx note).
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-    fontFamily: theme.font.korean,
-  },
-  btnGhost: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  btnGhostPressed: {
-    backgroundColor: colors.surfaceAlt,
-  },
-  btnGhostText: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-    fontFamily: theme.font.korean,
+  btnSpacer: {
+    height: spacing.sm,
   },
   error: {
     color: colors.error,
