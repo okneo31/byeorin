@@ -157,6 +157,31 @@ describe('TronAdapter signature format (offline)', () => {
       /recovery byte/,
     );
   });
+
+  // Boundary check: only 0|1|27|28 are accepted. Anything else — including
+  // the values just adjacent to the accepted ranges — must throw cleanly.
+  it.each([
+    { label: '2 (off-by-one above 0|1)', byte: 2 },
+    { label: '26 (one below 27)', byte: 26 },
+    { label: '29 (one above 28)', byte: 29 },
+    { label: '255 (max u8)', byte: 255 },
+  ])('applySignatures rejects recovery byte $label', async ({ byte }) => {
+    const adapter = new TronAdapter({ network: 'mainnet' });
+    const ourTx: TronUnsignedTx = {
+      tx: { txID, raw_data_hex: rawDataHex },
+    };
+    const reqs = await adapter.signRequests(ourTx);
+    const goodSig = await new SoftSigner({
+      curve: 'secp256k1',
+      privateKey,
+    }).sign(reqs[0]!.message);
+    // Splice a bogus recovery byte onto otherwise-valid r||s.
+    const tampered = new Uint8Array(goodSig);
+    tampered[64] = byte;
+    await expect(adapter.applySignatures(ourTx, [tampered])).rejects.toThrow(
+      /recovery byte/,
+    );
+  });
 });
 
 function hexToBytes(hex: string): Uint8Array {

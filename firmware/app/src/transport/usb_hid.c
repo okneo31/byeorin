@@ -1,5 +1,6 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
+ * SECURITY-CRITICAL: changes require security review.
  * 노동자의 지갑 Cold — USB-HID transport (Ledger-style framing).
  *
  * State machine:
@@ -46,6 +47,22 @@ struct rx_ctx {
 static struct rx_ctx           m_rx;
 static nodong_apdu_inbound_cb  m_inbound_cb;
 
+/*
+ * Defence in depth: when we return to IDLE — whether because we
+ * completed an APDU, the host sent a malformed fragment, or a sequence
+ * number jumped — wipe the reassembly buffer so a subsequent partial
+ * fill cannot expose stale bytes from an earlier (possibly aborted)
+ * transaction to a later read.
+ */
+static void rx_reset(void)
+{
+	m_rx.state     = RX_IDLE;
+	m_rx.total_len = 0;
+	m_rx.cursor    = 0;
+	m_rx.next_seq  = 0;
+	memset(m_rx.buf, 0, sizeof(m_rx.buf));
+}
+
 void nodong_usb_hid_register_apdu_cb(nodong_apdu_inbound_cb cb)
 {
 	m_inbound_cb = cb;
@@ -53,8 +70,7 @@ void nodong_usb_hid_register_apdu_cb(nodong_apdu_inbound_cb cb)
 
 int nodong_usb_hid_init(void)
 {
-	memset(&m_rx, 0, sizeof(m_rx));
-	m_rx.state = RX_IDLE;
+	rx_reset();
 	/* TODO: usb_enable(), bind HID class with our report descriptor,
 	 *       register the OUT endpoint callback that funnels into
 	 *       hid_on_report_out() below. */
@@ -96,11 +112,17 @@ static void hid_on_report_out(const uint8_t *report, size_t len)
 	}
 
 	if (seq == 0) {
-		if (len < 7) { return; }
+		if (len < 7) { rx_reset(); return; }
+		/*
+		 * A first-fragment arriving mid-reassembly aborts the prior
+		 * APDU and starts a fresh one. Wipe the old buffer first so
+		 * no leftover bytes can be smuggled into the new payload.
+		 */
+		rx_reset();
 		m_rx.total_len = ((uint16_t)report[5] << 8) | report[6];
 		if (m_rx.total_len == 0 || m_rx.total_len > MAX_APDU_LEN) {
 			ND_LOG_ERR("hid: rejecting apdu len=%u", m_rx.total_len);
-			m_rx.state = RX_IDLE;
+			rx_reset();
 			return;
 		}
 		m_rx.cursor   = 0;
@@ -111,12 +133,18 @@ static void hid_on_report_out(const uint8_t *report, size_t len)
 		if (m_rx.state != RX_REASSEMBLE || seq != m_rx.next_seq) {
 			ND_LOG_WRN("hid: seq mismatch (got %u want %u)",
 				   seq, m_rx.next_seq);
-			m_rx.state = RX_IDLE;
+			rx_reset();
 			return;
 		}
 		m_rx.next_seq++;
 	}
 
+	/*
+	 * Bounds: len <= HID_REPORT_LEN (uint8 worth), payload_off <= 7,
+	 * cursor <= total_len <= MAX_APDU_LEN. The MIN below clamps copy
+	 * so cursor + copy <= total_len, and total_len fits in uint16_t —
+	 * no wraparound is reachable on this path.
+	 */
 	size_t copy = MIN(len - payload_off, (size_t)(m_rx.total_len - m_rx.cursor));
 	memcpy(&m_rx.buf[m_rx.cursor], &report[payload_off], copy);
 	m_rx.cursor += copy;
@@ -125,7 +153,7 @@ static void hid_on_report_out(const uint8_t *report, size_t len)
 		if (m_inbound_cb) {
 			m_inbound_cb(m_rx.buf, m_rx.total_len);
 		}
-		m_rx.state = RX_IDLE;
+		rx_reset();
 	}
 }
 

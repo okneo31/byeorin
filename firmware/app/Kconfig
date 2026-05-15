@@ -35,11 +35,14 @@ config NODONG_FIRMWARE_VERSION_STRING
 
 config NODONG_CONFIRM_TIMEOUT_SEC
 	int "User-confirmation timeout (seconds)"
-	default 45
+	default 60
 	range 5 300
 	help
 	  How long confirm_tx() waits for a physical button press
-	  before returning CONFIRM_TIMEOUT.
+	  before returning CONFIRM_TIMEOUT. 60 s is the recommended
+	  default — long enough for a user to read a Hangul address
+	  carefully, short enough that a forgotten device on a desk
+	  does not stay armed indefinitely.
 
 config NODONG_MAX_APDU_LEN
 	int "Maximum reassembled APDU length"

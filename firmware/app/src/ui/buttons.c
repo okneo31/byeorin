@@ -36,6 +36,20 @@ static nodong_button_t    m_last;
 static struct gpio_callback m_cb_data[NODONG_BUTTON__COUNT];
 static struct k_work_delayable m_debounce[NODONG_BUTTON__COUNT];
 
+/*
+ * Debounce timing — current 20 ms is conservative for tactile dome
+ * switches; the recommended hold time for a clean PRESS event is 5–10 ms.
+ *
+ * TODO(bring-up): tune to 5–10 ms once we have scope traces of the
+ * real switches on the production board, and implement:
+ *   - RELEASE event emission (re-sample on falling edge, emit
+ *     NODONG_BUTTON_EV_RELEASE iff level==0 after the same window).
+ *   - LONG_PRESS event (schedule a second k_work_delayable for 2 s
+ *     after PRESS; cancel on RELEASE).
+ *   - Clear-press-on-release semantics: discard any sem token left
+ *     behind by a press whose release happened during a UI transition,
+ *     so a held button cannot fall through into the next confirm dialog.
+ */
 static void debounce_handler(struct k_work *w)
 {
 	struct k_work_delayable *dw = k_work_delayable_from_work(w);

@@ -1,5 +1,6 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
+ * SECURITY-CRITICAL: changes require security review.
  * 노동자의 지갑 Cold — NXP SE050 wrapper.
  *
  * This is the *only* layer that talks to the secure element. Higher
@@ -72,9 +73,20 @@ int  se_sign(nodong_se_curve_t curve,
 /*
  * Monotonic counter used for anti-rollback in the bootloader.
  * Reads only; writes happen during validated firmware-upgrade flow.
+ *
+ * Two naming conventions live in the tree:
+ *   - se_anti_rollback_get / _set  : terse, used by app code
+ *   - se_anti_rollback_get_counter / _increment : as named in
+ *     bootloader/README.md and referenced by the early-boot
+ *     anti-rollback hook spec.
+ * Both names refer to the same underlying SE object SE_OID_ROLLBACK;
+ * the *_increment form additionally enforces strict-monotonic semantics
+ * inside the SE policy (any new_value <= current is rejected by the SE).
  */
 int  se_anti_rollback_get(uint32_t *out);
 int  se_anti_rollback_set(uint32_t new_value);
+int  se_anti_rollback_get_counter(uint32_t *out);
+int  se_anti_rollback_increment(uint32_t new_value);
 
 /* Attestation (signed device-identity certificate). */
 int  se_attest(const uint8_t *challenge, size_t challenge_len,

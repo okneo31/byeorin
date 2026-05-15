@@ -1,5 +1,6 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
+ * SECURITY-CRITICAL: changes require security review.
  * 노동자의 지갑 Cold — SE050 wrapper.
  *
  * NOTE: every function in this file is a stub. Real implementation will
@@ -109,6 +110,23 @@ int se_anti_rollback_set(uint32_t new_value)
 	/* TODO: bump counter — only allowed inside the validated upgrade flow,
 	 *       and the SE will reject any new_value <= current. */
 	return -ENOSYS;
+}
+
+/*
+ * README-named aliases (see bootloader/README.md "Anti-rollback policy").
+ * Kept as thin wrappers so that the spec language and the C symbol names
+ * line up under code review — there is no behavioural difference today,
+ * but the real implementation may diverge once the SE policy is locked
+ * (e.g. _increment may need to take a separate `auth_blob`).
+ */
+int se_anti_rollback_get_counter(uint32_t *out)
+{
+	return se_anti_rollback_get(out);
+}
+
+int se_anti_rollback_increment(uint32_t new_value)
+{
+	return se_anti_rollback_set(new_value);
 }
 
 int se_attest(const uint8_t *challenge, size_t challenge_len,

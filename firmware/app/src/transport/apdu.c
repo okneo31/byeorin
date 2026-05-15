@@ -1,5 +1,6 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
+ * SECURITY-CRITICAL: changes require security review.
  * 노동자의 지갑 Cold — APDU dispatch.
  */
 #include "transport/apdu.h"
@@ -84,16 +85,24 @@ static int h_sign_hash(const struct nodong_apdu_cmd *cmd,
 	 * confirmation screen. Each app must end by either:
 	 *   - returning CONFIRM_OK and we call se_sign, OR
 	 *   - returning CONFIRM_CANCEL / CONFIRM_TIMEOUT.
+	 *
+	 * NOTE: nodong_tlv_find may leave chain_v == NULL when the TLV is
+	 * absent. Always gate the memcmp() on chain_v != NULL first to
+	 * avoid feeding NULL into memcmp (undefined behaviour even if the
+	 * length check would short-circuit on most implementations).
 	 */
 	enum nodong_confirm_result conf = NODONG_CONFIRM_CANCEL;
-	if (chain_l >= 3 && (memcmp(chain_v, "ETH", 3) == 0 ||
-			     memcmp(chain_v, "TTL", 3) == 0)) {
+	if (chain_v && chain_l >= 3 &&
+	    (memcmp(chain_v, "ETH", 3) == 0 ||
+	     memcmp(chain_v, "TTL", 3) == 0)) {
 		conf = evm_app_confirm(chain_v, chain_l,
 				       to_v, to_l, amount_v, amount_l);
-	} else if (chain_l >= 6 && memcmp(chain_v, "COSMOS", 6) == 0) {
+	} else if (chain_v && chain_l >= 6 &&
+		   memcmp(chain_v, "COSMOS", 6) == 0) {
 		conf = cosmos_app_confirm(chain_v, chain_l,
 					  to_v, to_l, amount_v, amount_l);
-	} else if (chain_l >= 3 && memcmp(chain_v, "BTC", 3) == 0) {
+	} else if (chain_v && chain_l >= 3 &&
+		   memcmp(chain_v, "BTC", 3) == 0) {
 		conf = btc_app_confirm(chain_v, chain_l,
 				       to_v, to_l, amount_v, amount_l);
 	} else {
@@ -171,6 +180,29 @@ static const struct nodong_apdu_entry k_table[] = {
  *
  * We do not currently consume Le, but tolerate its presence so a more
  * conservative companion SDK does not break the link.
+ *
+ * Mental-trace cases (Wave 2 review, M5+1):
+ *
+ *   (a) raw = [E0 01 00 00 00 01]                       (raw_len = 6)
+ *       Header marks extended (raw[4]==0x00) but only 6 bytes are
+ *       present — short of the 7-byte minimum extended header.
+ *       Falls into `if (raw_len < 7u) return -APDU_ERR_BAD_LC;`. REJECT.
+ *
+ *   (b) raw = [E0 01 00 00 FF FF*254]                   (raw_len = 259)
+ *       Short form, lc = 0xFF = 255. need_no_le = 5 + 255 = 260,
+ *       need_w_le = 261. raw_len = 259 matches neither → REJECT with
+ *       -APDU_ERR_BAD_LC. Truncated payload cannot be silently honoured.
+ *
+ *   (c) raw = [E0 01 00 00 00 00 00]                    (raw_len = 7)
+ *       Extended form, lc = 0. need_no_le = 7. Matches → ACCEPT with
+ *       out->lc = 0, out->data = NULL. Legal "case 1, extended-marker"
+ *       framing; downstream handlers must already cope with lc==0.
+ *
+ *   (d) raw = [E0 01 00 00 00 FF FF data*65535]         (raw_len = 65542)
+ *       Extended form, lc = 65535. Rejected at the top guard
+ *       `raw_len > CONFIG_NODONG_MAX_APDU_LEN` (default 1024) → -EINVAL.
+ *       No risk of a buffer-sized integer overflow inside the parser
+ *       because the cap fires before the framing decode runs.
  */
 int nodong_apdu_parse(const uint8_t *raw, size_t raw_len,
 		      struct nodong_apdu_cmd *out)
@@ -242,14 +274,35 @@ int nodong_apdu_parse(const uint8_t *raw, size_t raw_len,
 	}
 }
 
+/*
+ * TLV decoder — strictly 1-byte tag, 1-byte length, value.
+ *
+ * Constraints (do NOT relax without a security review):
+ *   - Length is a single uint8_t. Any TLV value > 255 bytes is unrepresentable
+ *     and MUST be rejected by the host SDK before encoding. We deliberately
+ *     do not implement BER long-form lengths to keep this parser auditable.
+ *   - Our largest legitimate TLVs in practice:
+ *       BIP32_PATH    : up to 10 components * 4 bytes = 40 bytes
+ *       DIGEST        : 32 bytes
+ *       TO_ADDRESS    : up to ~90 bytes (worst-case bech32m)
+ *       AMOUNT_STR    : up to 32 bytes
+ *       CHAIN_LABEL   : up to 16 bytes
+ *     All comfortably below 255. If a future caller needs a longer field
+ *     (e.g. a >85-segment hardened BIP-32 path — extremely unlikely) it
+ *     MUST be split across multiple TLVs of the same tag, with the parser
+ *     extended to concatenate.
+ */
 int nodong_tlv_find(const uint8_t *buf, size_t len, uint8_t tag,
 		    const uint8_t **out_value, size_t *out_value_len)
 {
+	if (!buf || !out_value || !out_value_len) {
+		return -EINVAL;
+	}
 	size_t i = 0;
 	while (i + 2 <= len) {
 		uint8_t t = buf[i];
 		uint8_t l = buf[i + 1];
-		if (i + 2 + l > len) {
+		if (i + 2u + (size_t)l > len) {
 			return -EINVAL;
 		}
 		if (t == tag) {
@@ -257,7 +310,7 @@ int nodong_tlv_find(const uint8_t *buf, size_t len, uint8_t tag,
 			*out_value_len = l;
 			return 0;
 		}
-		i += 2u + l;
+		i += 2u + (size_t)l;
 	}
 	return -ENOENT;
 }
@@ -265,6 +318,9 @@ int nodong_tlv_find(const uint8_t *buf, size_t len, uint8_t tag,
 int nodong_apdu_dispatch(const struct nodong_apdu_cmd *cmd,
 			 struct nodong_apdu_resp *resp)
 {
+	if (!cmd || !resp) {
+		return -EINVAL;
+	}
 	if (cmd->cla != NODONG_APDU_CLA) {
 		resp->sw = NODONG_SW_CLA_NOT_SUPPORTED;
 		return 0;
@@ -275,11 +331,21 @@ int nodong_apdu_dispatch(const struct nodong_apdu_cmd *cmd,
 		if (e->ins != cmd->ins) {
 			continue;
 		}
+		/*
+		 * Transport-tagged gate: a SIGN_HASH (or any other
+		 * allow_over_ble=false) APDU arriving over BLE is rejected
+		 * unless the build explicitly opts in via
+		 * CONFIG_NODONG_ALLOW_BLE_SIGNING.  Production builds leave
+		 * the symbol undefined; only an audited debug build sets it.
+		 */
 		if (cmd->origin == NODONG_TRANSPORT_BLE && !e->allow_over_ble) {
-#ifndef CONFIG_NODONG_ALLOW_BLE_SIGNING
+#if !defined(CONFIG_NODONG_ALLOW_BLE_SIGNING)
 			ND_LOG_WRN("ins=0x%02x refused over BLE", cmd->ins);
 			resp->sw = NODONG_SW_UNAUTHORIZED;
 			return 0;
+#else
+			ND_LOG_WRN("ins=0x%02x permitted over BLE — DEBUG ONLY",
+				   cmd->ins);
 #endif
 		}
 		ND_LOG_INF("dispatch %s (ins=0x%02x)", e->name, cmd->ins);

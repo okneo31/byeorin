@@ -20,5 +20,12 @@ compile_commands.json
 Thumbs.db
 
 # Signing keys MUST NOT be committed
+*.pem
+*-priv.pem
 **/mcuboot_priv.pem
 **/*-signing-key.pem
+*.key
+
+# Provisioning / secrets
+**/secrets/
+provisioning.json

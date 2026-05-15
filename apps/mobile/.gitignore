@@ -18,6 +18,8 @@ ios/.xcode.env.local
 *.perspectivev3
 *.xcuserstate
 xcuserdata/
+*.mobileprovision
+*.p12
 
 # Android
 android/build/
@@ -28,7 +30,11 @@ android/local.properties
 
 # Signing — keep the debug keystore for shared dev builds, ignore everything else
 *.keystore
+*.jks
 !debug.keystore
+**/release.keystore
+**/upload.keystore
+keystore.properties
 
 # Misc
 .DS_Store

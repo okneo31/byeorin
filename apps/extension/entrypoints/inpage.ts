@@ -108,6 +108,12 @@ class NodongInpageProvider {
 }
 
 // EIP-6963 announce 도우미.
+//
+// 보안 — announce 이벤트는 provider 객체와 식별 정보(name/icon/rdns/uuid) 만 노출한다.
+// 페이지가 announce 만 듣고 있다고 해서 계정 주소나 origin 이 누설되지는 않는다.
+// 모든 EIP-1193 메서드(eth_requestAccounts 등)는 여전히 background 의 per-origin 동의를
+// 거쳐야 한다. provider.chainId 와 networkVersion 만 정적 노출되며, 이는 우리가 지원하는
+// 체인(TTL=7777) 의 상수일 뿐이라 노출되어도 무방하다.
 function announceEip6963(provider: NodongInpageProvider): void {
   const info = Object.freeze({
     uuid: EIP6963_UUID,

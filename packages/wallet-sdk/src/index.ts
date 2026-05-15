@@ -19,6 +19,7 @@ export {
 } from './chains/registry.js';
 export {
   EvmAdapter,
+  signEvmMessage,
   type EvmAdapterOptions,
   type EvmUnsignedTx,
   type EvmSignedTx,

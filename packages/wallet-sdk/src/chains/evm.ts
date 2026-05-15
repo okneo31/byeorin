@@ -1,11 +1,13 @@
 import {
   bytesToHex,
+  concat,
   createPublicClient,
   hexToBytes,
   http,
   keccak256,
   parseSignature,
   serializeTransaction,
+  stringToBytes,
   type Address as ViemAddress,
   type Chain as ViemChain,
   type Hex,
@@ -16,7 +18,7 @@ import {
 } from 'viem';
 import { publicKeyToAddress } from 'viem/accounts';
 import { toUncompressedSecp256k1 } from '../crypto/secp.js';
-import type { Address, TransferIntent, TxHash } from '../types.js';
+import type { Signer, Address, TransferIntent, TxHash } from '../types.js';
 import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
 
 export type EvmUnsignedTx =
@@ -134,5 +136,64 @@ export class EvmAdapter implements ChainAdapter<EvmUnsignedTx, EvmSignedTx> {
       return false;
     }
   }
+}
+
+/**
+ * EIP-191 personal-sign helper.
+ *
+ * Computes the canonical Ethereum signed-message digest and signs it with the
+ * provided Signer (SoftSigner or HW). Returns a 0x-prefixed 65-byte
+ * `r(32) || s(32) || v(1)` hex string with `v ∈ {27, 28}` — the format
+ * `eth_sign` / `personal_sign` callers expect.
+ *
+ * Digest = `keccak256("\x19Ethereum Signed Message:\n" + len(message) + message)`
+ *
+ * `message` may be:
+ *   - a UTF-8 string (encoded to bytes before length-prefixing), or
+ *   - a `Uint8Array` (used as-is, length-prefixed).
+ *
+ * The `address` argument is accepted for symmetry with wallet APIs but is
+ * **not** verified against the signer's public key. Callers wiring this into
+ * a JSON-RPC bridge should validate the address upstream (see
+ * `apps/extension/entrypoints/background.ts::personal_sign`).
+ *
+ * Cross-checked against MetaMask's personal_sign output and the on-chain
+ * `ecrecover` behaviour used by EIP-1271-style verifiers.
+ */
+export async function signEvmMessage(
+  signer: Signer,
+  address: Address,
+  message: string | Uint8Array,
+): Promise<Hex> {
+  if (signer.curve !== 'secp256k1') {
+    throw new Error(`signEvmMessage: requires secp256k1 signer, got ${signer.curve}`);
+  }
+  // Accept-but-don't-verify the address. Documented above.
+  void address;
+  const msgBytes =
+    typeof message === 'string' ? stringToBytes(message) : message;
+  const prefix = stringToBytes(`\x19Ethereum Signed Message:\n${msgBytes.length}`);
+  const digestHex = keccak256(concat([prefix, msgBytes]));
+  const sig = await signer.sign(hexToBytes(digestHex));
+  if (sig.length !== 65) {
+    throw new Error(`signEvmMessage: signature must be 65 bytes, got ${sig.length}`);
+  }
+  const recovery = sig[64] as number;
+  // SoftSigner emits raw recovery {0,1}. Accept pre-encoded v ∈ {27, 28} too
+  // (some HW signers add 27 internally).
+  let v: number;
+  if (recovery === 0 || recovery === 1) {
+    v = recovery + 27;
+  } else if (recovery === 27 || recovery === 28) {
+    v = recovery;
+  } else {
+    throw new Error(
+      `signEvmMessage: recovery byte must be 0|1|27|28, got ${recovery}`,
+    );
+  }
+  const out = new Uint8Array(65);
+  out.set(sig.subarray(0, 64), 0);
+  out[64] = v;
+  return bytesToHex(out);
 }
 

@@ -29,6 +29,15 @@ function getRequestIdFromUrl(): string | null {
   }
 }
 
+function getNonceFromUrl(): string | null {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('nonce');
+  } catch {
+    return null;
+  }
+}
+
 function shorten(a: string): string {
   if (!a || a.length <= 12) return a;
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -94,11 +103,16 @@ export function App() {
 
   useEffect(() => {
     const requestId = getRequestIdFromUrl();
-    if (!requestId) {
-      setState({ kind: 'error', message: '잘못된 서명 요청 (requestId 누락)' });
+    const nonce = getNonceFromUrl();
+    // 보안: nonce 가 없으면 dApp 이 직접 popup URL 을 연 시나리오 — 친절한 안내.
+    if (!requestId || !nonce) {
+      setState({
+        kind: 'error',
+        message: '이 페이지는 지갑이 직접 열어야 합니다. 사이트에서 서명 요청을 다시 시도해 주세요.',
+      });
       return;
     }
-    const msg: BackgroundMessage = { type: 'confirm-context-get', requestId };
+    const msg: BackgroundMessage = { type: 'confirm-context-get', requestId, nonce };
     chrome.runtime.sendMessage(msg, (ctx: ConfirmContext | null) => {
       if (chrome.runtime.lastError) {
         setState({
@@ -108,9 +122,10 @@ export function App() {
         return;
       }
       if (!ctx) {
+        // nonce 불일치 또는 만료 — dApp 이 fake requestId 로 직접 connect 한 경우 포함.
         setState({
           kind: 'error',
-          message: '서명 요청이 만료되었거나 존재하지 않습니다',
+          message: '서명 요청이 만료되었거나 존재하지 않습니다. 사이트에서 다시 요청해 주세요.',
         });
         return;
       }
@@ -120,8 +135,9 @@ export function App() {
 
   function send(decision: 'approve' | 'reject'): void {
     const requestId = getRequestIdFromUrl();
-    if (!requestId) return;
-    const msg: BackgroundMessage = { type: 'confirm-result', requestId, decision };
+    const nonce = getNonceFromUrl();
+    if (!requestId || !nonce) return;
+    const msg: BackgroundMessage = { type: 'confirm-result', requestId, nonce, decision };
     chrome.runtime.sendMessage(msg, () => {
       setState({ kind: 'submitted', decision });
       // background 가 popup window 를 닫지만, 안전망으로 자체 close.

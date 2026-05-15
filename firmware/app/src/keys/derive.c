@@ -1,5 +1,6 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
+ * SECURITY-CRITICAL: changes require security review.
  * 노동자의 지갑 Cold — key derivation facade.
  *
  * Intentionally minimal: this is the seam where "key path semantics"

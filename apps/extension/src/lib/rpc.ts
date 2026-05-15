@@ -34,12 +34,16 @@ export type WindowEnvelope =
 
 // content script 가 background 로 전달하는 RPC 메시지.
 // background 는 sender.origin 또는 sender.url 에서 origin 을 산출한다(MV3 sender 객체).
+//
+// 보안 — connect/confirm 메시지는 모두 background 가 popup 을 띄울 때 발급한 nonce 를 동반한다.
+// dApp 이 직접 chrome-extension://<id>/connect.html?requestId=... 을 열어 우회 시도할 경우,
+// nonce 가 없거나 일치하지 않으므로 context 조회가 실패한다.
 export type BackgroundMessage =
   | { type: 'rpc'; payload: JsonRpcRequest }
-  | { type: 'connect-result'; requestId: string; decision: 'approve' | 'reject' }
-  | { type: 'connect-context-get'; requestId: string }
-  | { type: 'confirm-result'; requestId: string; decision: 'approve' | 'reject' }
-  | { type: 'confirm-context-get'; requestId: string };
+  | { type: 'connect-result'; requestId: string; nonce: string; decision: 'approve' | 'reject' }
+  | { type: 'connect-context-get'; requestId: string; nonce: string }
+  | { type: 'confirm-result'; requestId: string; nonce: string; decision: 'approve' | 'reject' }
+  | { type: 'confirm-context-get'; requestId: string; nonce: string };
 
 export type ConnectContext = {
   requestId: string;

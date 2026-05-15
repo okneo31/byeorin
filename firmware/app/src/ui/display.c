@@ -56,9 +56,27 @@ int display_refresh_partial(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 int display_draw_text(uint16_t x, uint16_t y, uint8_t font_id, const char *utf8)
 {
 	(void)x; (void)y; (void)font_id; (void)utf8;
-	/* TODO: blit glyphs from compiled font table into m_fb.
-	 *       For Korean we need a UTF-8 → glyph-index step (NanumGothic
-	 *       Coding subsetted to common syllables to fit in flash). */
+	/*
+	 * TODO: blit glyphs from a compiled font table into m_fb.
+	 *
+	 * Character-set requirement for the confirm screen:
+	 *   - Full ASCII (0x20–0x7E) for addresses, amounts, hex strings,
+	 *     bech32 HRPs, "[OK]" / "[CANCEL]" button labels.
+	 *   - Korean Hangul precomposed syllables (U+AC00..U+D7A3) for the
+	 *     localised dialog strings: "주소 확인", "금액 확인", "거부",
+	 *     "승인", "서명하시겠습니까?", "노동자의 지갑" etc.
+	 *
+	 * BOM cost trade-off (rough, at 12px body weight, 1bpp packed):
+	 *   - Full Hangul precomposed block: 11,172 syllables × ~24 bytes
+	 *     ≈ 268 KB. Will NOT fit in our 412 KB slot alongside code.
+	 *   - Subsetted "common 3,000" KSC-5601 syllables ≈ 72 KB. Fits.
+	 *   - We will ship a subset; any UI string MUST be verified at
+	 *     build time against the subset cover-set (Python tool TBD).
+	 *
+	 * Font candidate: NanumGothicCoding (SIL OFL, monospace, 12px ok),
+	 * with Latin glyphs replaced by an ASCII bitmap font (DejaVu Sans
+	 * Mono 8px) to keep address rendering compact.
+	 */
 	return -ENOSYS;
 }
 

@@ -1,28 +1,49 @@
+# Build artefacts
 node_modules/
 dist/
 build/
 .turbo/
 .next/
 .cache/
+.output/
+.wxt/
+web-ext-artifacts/
 .tsbuildinfo
 *.tsbuildinfo
 coverage/
+
+# Env / secrets — NEVER commit
 .env
 .env.*
 !.env.example
-.DS_Store
-Thumbs.db
-*.log
-.pnpm-store/
+*.env
+**/mnemonic.txt
+**/seed.txt
+**/recovery.txt
+**/secrets/
 
-# Secrets / keys — NEVER commit
+# Signing / crypto keys — NEVER commit
 *.pem
 *.key
+*-priv.pem
+mcuboot_priv.pem
 *.keystore
-mnemonic.txt
-seed.txt
+!debug.keystore
+*.jks
+*.p12
+*.mobileprovision
 
-# IDE
+# Service / CLI auth
+.tursorc
+.netlify/
+
+# Logs / OS junk
+*.log
+.DS_Store
+Thumbs.db
+.pnpm-store/
+
+# IDE — keep shared config, ignore machine-specific
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.shared.json

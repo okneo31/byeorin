@@ -7,6 +7,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   EncryptedKeystoreStore,
+  KEYSTORE_PARAMS_DEFAULT,
+  KEYSTORE_PARAMS_FAST,
   decryptKeystore,
   encryptKeystore,
   type EncryptedBlob,
@@ -81,6 +83,31 @@ describe('encryptKeystore / decryptKeystore', () => {
       kdf: 'pbkdf2' as unknown as 'scrypt',
     };
     await expect(decryptKeystore(blob, PASS)).rejects.toThrow(/unknown kdf/);
+  });
+
+  it('exports KEYSTORE_PARAMS_DEFAULT at N=2**17 (data-center grade)', () => {
+    expect(KEYSTORE_PARAMS_DEFAULT.N).toBe(2 ** 17);
+    expect(KEYSTORE_PARAMS_DEFAULT.r).toBe(8);
+    expect(KEYSTORE_PARAMS_DEFAULT.p).toBe(1);
+    // Frozen so callers can't mutate the shared preset.
+    expect(Object.isFrozen(KEYSTORE_PARAMS_DEFAULT)).toBe(true);
+  });
+
+  it('exports KEYSTORE_PARAMS_FAST at N=2**16 (BIP-38 equivalent)', () => {
+    expect(KEYSTORE_PARAMS_FAST.N).toBe(2 ** 16);
+    expect(KEYSTORE_PARAMS_FAST.r).toBe(8);
+    expect(KEYSTORE_PARAMS_FAST.p).toBe(1);
+    expect(Object.isFrozen(KEYSTORE_PARAMS_FAST)).toBe(true);
+  });
+
+  it('round-trips with KEYSTORE_PARAMS_FAST preset', async () => {
+    // FAST preset is BIP-38 equivalent — still ~hundreds of ms, but doable
+    // in CI. The DEFAULT preset (256 MB scrypt) is too heavy for CI; we
+    // verify it round-trips via TEST_PARAMS above.
+    const blob = await encryptKeystore(MNEMONIC, PASS, KEYSTORE_PARAMS_FAST);
+    expect(blob.N).toBe(2 ** 16);
+    const out = await decryptKeystore(blob, PASS);
+    expect(out).toBe(MNEMONIC);
   });
 });
 

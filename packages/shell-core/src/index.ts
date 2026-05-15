@@ -15,6 +15,8 @@ export {
   EncryptedKeystoreStore,
   LocalStorageBackend,
   ChromeLocalBackend,
+  KEYSTORE_PARAMS_DEFAULT,
+  KEYSTORE_PARAMS_FAST,
   type KeystoreParams,
   type EncryptedBlob,
   type PersistentBackend,

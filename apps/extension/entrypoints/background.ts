@@ -36,6 +36,9 @@ import {
 type PendingConnect = {
   origin: string;
   address: string;
+  // 보안: popup URL 에 동봉되는 1회용 nonce. dApp 이 connect.html 을 직접 열어 우회하려 해도
+  // nonce 를 알 수 없으므로 context 조회/결과 전송이 모두 거부된다.
+  nonce: string;
   resolve: (decision: 'approve' | 'reject') => void;
   windowId?: number;
   timeout: ReturnType<typeof setTimeout>;
@@ -50,6 +53,8 @@ const CONNECT_TIMEOUT_MS = 2 * 60 * 1000;
 // 서명/전송 확인 popup 슬롯. ConfirmContext 자체를 들고 있고, 결과만 Promise 로 해소.
 type PendingConfirm = {
   context: ConfirmContext;
+  // 보안: connect 와 동일한 nonce 검증 메커니즘.
+  nonce: string;
   resolve: (decision: 'approve' | 'reject') => void;
   windowId?: number;
   timeout: ReturnType<typeof setTimeout>;
@@ -71,6 +76,15 @@ export default defineBackground({
       if (m && typeof (m as BackgroundMessage).type === 'string') {
         const bm = m as BackgroundMessage;
         if (bm.type === 'rpc') {
+          // RPC 는 content script(=웹 페이지에 주입된) 에서 온다 — sender.id 는 본 확장이며 sender.tab 이 존재.
+          // 본 분기에서는 sender.id 검증 후, senderOrigin 으로 dApp origin 을 산출한다.
+          if (sender.id !== chrome.runtime.id) {
+            sendResponse({
+              id: bm.payload?.id ?? 0,
+              error: { code: RPC_ERRORS.UNAUTHORIZED.code, message: '미인증 발신자' },
+            } satisfies JsonRpcResponse);
+            return false;
+          }
           handleRpc(bm.payload, sender)
             .then(sendResponse)
             .catch((err) => {
@@ -81,31 +95,47 @@ export default defineBackground({
             });
           return true;
         }
+        // 이하 connect/confirm 메시지는 우리 확장의 popup(connect.html / confirm.html) 에서만 와야 한다.
+        // sender.id 는 항상 본 확장의 id 이어야 하며(외부 확장 격리), nonce 도 일치해야 한다.
+        if (sender.id !== chrome.runtime.id) {
+          sendResponse(null);
+          return false;
+        }
         if (bm.type === 'connect-result') {
-          handleConnectResult(bm.requestId, bm.decision);
+          handleConnectResult(bm.requestId, bm.nonce, bm.decision);
           sendResponse({ ok: true });
           return false;
         }
         if (bm.type === 'connect-context-get') {
           const ctx = pendingConnects.get(bm.requestId);
-          const out: ConnectContext | null = ctx
-            ? { requestId: bm.requestId, origin: ctx.origin, address: ctx.address }
-            : null;
+          // nonce 가 일치하지 않으면(또는 슬롯이 없으면) 컨텍스트를 노출하지 않는다.
+          // dApp 이 chrome-extension://<id>/connect.html?requestId=... 을 직접 연 경우의 핵심 차단점.
+          const out: ConnectContext | null =
+            ctx && ctx.nonce === bm.nonce
+              ? { requestId: bm.requestId, origin: ctx.origin, address: ctx.address }
+              : null;
           sendResponse(out);
           return false;
         }
         if (bm.type === 'confirm-result') {
-          handleConfirmResult(bm.requestId, bm.decision);
+          handleConfirmResult(bm.requestId, bm.nonce, bm.decision);
           sendResponse({ ok: true });
           return false;
         }
         if (bm.type === 'confirm-context-get') {
           const slot = pendingConfirms.get(bm.requestId);
-          sendResponse(slot ? slot.context : null);
+          sendResponse(slot && slot.nonce === bm.nonce ? slot.context : null);
           return false;
         }
       } else {
-        // 레거시: raw JsonRpcRequest
+        // 레거시: raw JsonRpcRequest. content script 경유 외에는 신뢰하지 않는다.
+        if (sender.id !== chrome.runtime.id) {
+          sendResponse({
+            id: (m as JsonRpcRequest)?.id ?? 0,
+            error: { code: RPC_ERRORS.UNAUTHORIZED.code, message: '미인증 발신자' },
+          } satisfies JsonRpcResponse);
+          return false;
+        }
         handleRpc(m as JsonRpcRequest, sender)
           .then(sendResponse)
           .catch((err) => {
@@ -117,6 +147,15 @@ export default defineBackground({
         return true;
       }
       return false;
+    });
+
+    // SW 종료 안전망 — 휴면 직전 모든 대기 슬롯을 reject 한다.
+    // MV3 service worker 는 짧게 살므로 popup 미응답 상태에서 SW 가 잠들면
+    // pending Promise 가 영영 해소되지 않는다(=dApp 요청이 hang).
+    // onSuspend 는 모든 환경에서 보장되지는 않으나, 보장되는 경우 깔끔히 거절한다.
+    // (보장되지 않는 경우에도, 재기동 시 메모리는 비어있어 새 요청은 정상 흐름을 탄다.)
+    chrome.runtime.onSuspend.addListener(() => {
+      rejectAllPending('SW 종료로 인한 요청 취소');
     });
   },
 });
@@ -349,6 +388,9 @@ async function handleRpc(
       }
 
       // chainId 가드 — 명시되었다면 TTL(7777) 이어야 한다.
+      // v0.2 정책: chainId 미지정 시 TTL 로 간주한다 — 본 확장은 단일 체인(TTL) 전용이므로 안전.
+      // TODO(v0.3): 멀티체인 도입 시, chainId 미지정 요청은 "현재 활성 체인" 으로 라우팅하되
+      // dApp 이 명시적 chainId 를 보내도록 유도하는 경고를 confirm popup 에 표시한다.
       if (tx.chainId) {
         let cid: number;
         try {
@@ -432,9 +474,56 @@ function makeRequestId(): string {
   return 'req-' + Math.random().toString(36).slice(2) + '-' + Date.now().toString(36);
 }
 
+/**
+ * popup 접근을 검증하기 위한 1회용 nonce.
+ * crypto.getRandomValues 로 16바이트(=128bit) 무작위, hex 32자.
+ * dApp 이 chrome-extension://<id>/{connect,confirm}.html?requestId=... 를 직접 열어 우회 시
+ * URL 의 nonce 가 일치해야만 context 조회/결정 전송이 허용된다.
+ */
+function makeNonce(): string {
+  if (typeof crypto !== 'undefined' && 'getRandomValues' in crypto) {
+    const buf = new Uint8Array(16);
+    crypto.getRandomValues(buf);
+    let hex = '';
+    for (let i = 0; i < buf.length; i++) {
+      hex += buf[i]!.toString(16).padStart(2, '0');
+    }
+    return hex;
+  }
+  // 폴백 — crypto 가 없으면 약하지만 randomUUID 로 대체.
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+/** SW 종료 등 비정상 경로에서 모든 대기 슬롯을 reject. */
+function rejectAllPending(reason: string): void {
+  for (const [, slot] of pendingConnects) {
+    clearTimeout(slot.timeout);
+    try {
+      if (slot.windowId != null) chrome.windows.remove(slot.windowId);
+    } catch {
+      /* noop */
+    }
+    slot.resolve('reject');
+  }
+  pendingConnects.clear();
+  for (const [, slot] of pendingConfirms) {
+    clearTimeout(slot.timeout);
+    try {
+      if (slot.windowId != null) chrome.windows.remove(slot.windowId);
+    } catch {
+      /* noop */
+    }
+    slot.resolve('reject');
+  }
+  pendingConfirms.clear();
+  // 명시적으로 reason 을 로깅(개발자 도구) — 외부에 노출되지 않음.
+  console.warn('[nodong] pending 요청 정리:', reason);
+}
+
 function requestUserConsent(origin: string, address: string): Promise<'approve' | 'reject'> {
   return new Promise<'approve' | 'reject'>((resolve) => {
     const requestId = makeRequestId();
+    const nonce = makeNonce();
     const timeout = setTimeout(() => {
       const slot = pendingConnects.get(requestId);
       if (!slot) return;
@@ -447,13 +536,15 @@ function requestUserConsent(origin: string, address: string): Promise<'approve' 
       resolve('reject');
     }, CONNECT_TIMEOUT_MS);
 
-    const slot: PendingConnect = { origin, address, resolve, timeout };
+    const slot: PendingConnect = { origin, address, nonce, resolve, timeout };
     pendingConnects.set(requestId, slot);
 
+    // nonce 를 URL 에 동봉. popup 은 이 값을 그대로 message 에 실어 background 로 보낸다.
     const url =
       chrome.runtime.getURL('connect.html') +
       '?origin=' + encodeURIComponent(origin) +
-      '&requestId=' + encodeURIComponent(requestId);
+      '&requestId=' + encodeURIComponent(requestId) +
+      '&nonce=' + encodeURIComponent(nonce);
 
     chrome.windows.create(
       { url, type: 'popup', width: 400, height: 600 },
@@ -482,9 +573,15 @@ function requestUserConsent(origin: string, address: string): Promise<'approve' 
   });
 }
 
-function handleConnectResult(requestId: string, decision: 'approve' | 'reject'): void {
+function handleConnectResult(
+  requestId: string,
+  nonce: string,
+  decision: 'approve' | 'reject',
+): void {
   const slot = pendingConnects.get(requestId);
   if (!slot) return;
+  // 보안: nonce 불일치 시 결과를 무시. 어떤 슬롯도 종료하지 않는다(우회 시도 차단).
+  if (slot.nonce !== nonce) return;
   pendingConnects.delete(requestId);
   clearTimeout(slot.timeout);
   if (slot.windowId != null) {
@@ -508,6 +605,7 @@ function handleConnectResult(requestId: string, decision: 'approve' | 'reject'):
 function openConfirm(ctxInput: ConfirmContext): Promise<'approve' | 'reject'> {
   return new Promise<'approve' | 'reject'>((resolve) => {
     const requestId = makeRequestId();
+    const nonce = makeNonce();
     const context: ConfirmContext = { ...ctxInput, requestId };
 
     const timeout = setTimeout(() => {
@@ -522,12 +620,13 @@ function openConfirm(ctxInput: ConfirmContext): Promise<'approve' | 'reject'> {
       resolve('reject');
     }, CONFIRM_TIMEOUT_MS);
 
-    const slot: PendingConfirm = { context, resolve, timeout };
+    const slot: PendingConfirm = { context, nonce, resolve, timeout };
     pendingConfirms.set(requestId, slot);
 
     const url =
       chrome.runtime.getURL('confirm.html') +
-      '?requestId=' + encodeURIComponent(requestId);
+      '?requestId=' + encodeURIComponent(requestId) +
+      '&nonce=' + encodeURIComponent(nonce);
 
     chrome.windows.create(
       { url, type: 'popup', width: 420, height: 640 },
@@ -554,9 +653,14 @@ function openConfirm(ctxInput: ConfirmContext): Promise<'approve' | 'reject'> {
   });
 }
 
-function handleConfirmResult(requestId: string, decision: 'approve' | 'reject'): void {
+function handleConfirmResult(
+  requestId: string,
+  nonce: string,
+  decision: 'approve' | 'reject',
+): void {
   const slot = pendingConfirms.get(requestId);
   if (!slot) return;
+  if (slot.nonce !== nonce) return;
   pendingConfirms.delete(requestId);
   clearTimeout(slot.timeout);
   if (slot.windowId != null) {

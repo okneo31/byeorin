@@ -6,15 +6,25 @@
 // 위협 모델 / 정책:
 //  - autoRestoreAllowed=false  — 부팅 시 자동 복원 금지. 사용자가 passphrase 를
 //    명시적으로 입력해야 read() 가 동작한다.
-//  - KDF: scrypt (RFC 7914). 기본값 N=2**16, r=8, p=1.
-//      * N=2**17 (≈256 MB) 은 모바일/저사양 디바이스에서 OOM 위험.
-//      * N=2**16 (≈128 MB) 은 BIP-38 권장값과 동일하며, 데스크톱·노트북에서
-//        ~1초 이하로 도출 가능. 보수적 디폴트.
+//  - KDF: scrypt (RFC 7914). 기본값 N=2**17 (≈256 MB).
+//      * N=2**17 (≈256 MB) 은 데스크톱/노트북에서 1~2초. 단발성 unlock 비용은
+//        충분히 감내 가능하며, 오프라인 brute-force 비용을 GPU 대비 크게
+//        상승시킨다.
+//      * N=2**16 (≈128 MB) 은 BIP-38 권장값과 동일. 모바일/저사양 디바이스에
+//        대비한 fast preset (KEYSTORE_PARAMS_FAST) 로 노출한다.
 //      * 호출자가 환경에 따라 KeystoreParams 로 override 가능.
+//      * 잘못된 passphrase 거부 시점도 scrypt + AES-GCM verify 가 동일하게
+//        수행되므로 두 경로의 wallclock 시간이 같아 timing oracle 이 없다.
 //  - AEAD: AES-256-GCM via WebCrypto subtle. 12 바이트 nonce. GCM tag(16B) 는
 //    ciphertext 끝에 포함된다.
 //  - 매 write 마다 새 salt(16B) + 새 nonce(12B) 를 생성한다. 같은 평문/같은
 //    passphrase 라도 ciphertext 는 매번 다르다 (확률적 암호화).
+//  - Nonce 충돌 안전성: NIST SP 800-38D §8.2.2 는 random 96-bit IV 사용 시
+//    동일 키로 최대 2**32 회 암호화까지를 안전 범위로 규정한다. 본 키스토어는
+//    "사용자가 직접 wallet 을 잠갔다 풀 때" 한 번 write 가 발생하므로
+//    실세계 호출량은 2**16 (수만 회) 을 크게 넘지 않는다 — 2**32 안전선과
+//    약 16 비트 여유. 추가로 매 write 가 새 salt 로 새 키를 도출하므로
+//    실질적으로 모든 nonce-key 쌍이 일회용이다.
 //
 // 의도적 비목표:
 //  - 메모리 와이프 진짜 보장 — JS 의 GC/string interning 때문에 best-effort 만
@@ -23,24 +33,60 @@
 //    단일 scrypt 출력 32바이트를 AES-GCM 키로 직접 사용.
 
 import { scryptAsync } from '@noble/hashes/scrypt';
+// `@noble/hashes/utils` 의 `randomBytes` 는 내부적으로 WebCrypto 의
+// `crypto.getRandomValues` (없으면 Node `crypto.randomBytes`) 를 호출하는
+// CSPRNG 래퍼다. 16-byte salt 와 12-byte GCM nonce 양쪽에 충분한 엔트로피를
+// 제공한다.
 import { randomBytes } from '@noble/hashes/utils';
 import type { SessionStore } from './session.js';
 
 /**
  * scrypt 파라미터. 모두 RFC 7914 정의를 따른다.
  *
- * - N: CPU/메모리 cost. 2의 거듭제곱. 기본 2**16 (≈128 MB).
+ * - N: CPU/메모리 cost. 2의 거듭제곱. 기본 2**17 (≈256 MB).
  * - r: 블록 크기. 기본 8.
  * - p: 병렬화 인자. 기본 1.
+ *
+ * Preset 상수:
+ *   `KEYSTORE_PARAMS_DEFAULT` — 데스크톱/확장프로그램용 (보수적 보안).
+ *   `KEYSTORE_PARAMS_FAST`    — 모바일/저사양용 (BIP-38 동등).
  */
 export interface KeystoreParams {
-  /** scrypt N (CPU/memory cost). Default 2**16 (~128 MB). */
+  /** scrypt N (CPU/memory cost). Default 2**17 (~256 MB). */
   N?: number;
   /** scrypt r (block size). Default 8. */
   r?: number;
   /** scrypt p (parallelization). Default 1. */
   p?: number;
 }
+
+/**
+ * 디폴트 keystore 파라미터 — N=2**17 (≈256 MB scrypt working set).
+ *
+ * 데스크톱 / 노트북 / 브라우저 확장의 단발성 unlock 비용 (보통 1~2초) 은
+ * 사용자가 감내 가능한 수준이며, 동일 cost 의 GPU brute-force 비용을 크게
+ * 끌어올린다. `encryptKeystore({ params: KEYSTORE_PARAMS_DEFAULT })` 로
+ * 명시적으로 전달하거나 호출자가 옵션을 비워두면 동일한 값이 적용된다.
+ */
+export const KEYSTORE_PARAMS_DEFAULT: Required<KeystoreParams> = Object.freeze({
+  N: 2 ** 17,
+  r: 8,
+  p: 1,
+});
+
+/**
+ * 모바일 / 저사양 디바이스용 keystore 파라미터 — N=2**16 (≈128 MB).
+ *
+ * BIP-38 권장값과 동일. 256 MB working set 이 OOM 또는 1초+ 지연을 유발하는
+ * 환경(예: 일부 안드로이드 디바이스, embedded JS 런타임) 에서 fallback 으로
+ * 사용한다. 보안 수준은 한 단계 낮지만 여전히 GPU offline attack 에 대해
+ * 충분히 비싸다.
+ */
+export const KEYSTORE_PARAMS_FAST: Required<KeystoreParams> = Object.freeze({
+  N: 2 ** 16,
+  r: 8,
+  p: 1,
+});
 
 /**
  * 영구 스토리지에 저장되는 직렬화된 암호문 블롭.
@@ -59,9 +105,9 @@ export interface EncryptedBlob {
   ciphertext: string; // base64 — includes 16-byte GCM tag
 }
 
-const DEFAULT_N = 2 ** 16;
-const DEFAULT_R = 8;
-const DEFAULT_P = 1;
+const DEFAULT_N = KEYSTORE_PARAMS_DEFAULT.N;
+const DEFAULT_R = KEYSTORE_PARAMS_DEFAULT.r;
+const DEFAULT_P = KEYSTORE_PARAMS_DEFAULT.p;
 const DK_LEN = 32; // AES-256 key length
 const SALT_LEN = 16;
 const NONCE_LEN = 12; // GCM standard
@@ -329,10 +375,16 @@ export class EncryptedKeystoreStore implements SessionStore {
   }
 
   /**
-   * passphrase 를 메모리에 캐시한다. 즉시 복호화는 하지 않는다 (lazy on read).
+   * passphrase 를 메모리에 캐시한다. 즉시 복호화 / 재암호화는 하지 않는다
+   * (lazy on read/write).
    *
-   * 동일 인스턴스에 재호출하면 이전 캐시를 덮어쓴다. 새 passphrase 가
-   * 디스크의 블롭과 안 맞으면 read() 가 throw 한다.
+   * 의도된 시맨틱 (concern #6):
+   *  - setPassphrase 는 디스크의 블롭을 건드리지 않는다. 새 passphrase 로
+   *    "회전" 하고 싶다면 호출자가 명시적으로 read() → setPassphrase(new) →
+   *    write() 시퀀스를 실행해야 한다.
+   *  - 디스크의 블롭과 맞지 않는 passphrase 로 read() 하면
+   *    "keystore: invalid passphrase or corrupt blob" 으로 throw 한다.
+   *  - 동일 인스턴스에 재호출하면 이전 캐시를 덮어쓴다.
    */
   setPassphrase(passphrase: string): void {
     this.passphrase = passphrase;

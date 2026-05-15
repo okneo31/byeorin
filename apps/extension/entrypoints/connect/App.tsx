@@ -24,10 +24,10 @@ function getRequestIdFromUrl(): string | null {
   }
 }
 
-function getOriginFromUrl(): string | null {
+function getNonceFromUrl(): string | null {
   try {
     const params = new URLSearchParams(window.location.search);
-    return params.get('origin');
+    return params.get('nonce');
   } catch {
     return null;
   }
@@ -38,27 +38,28 @@ export function App() {
 
   useEffect(() => {
     const requestId = getRequestIdFromUrl();
-    if (!requestId) {
-      setState({ kind: 'error', message: '잘못된 연결 요청 (requestId 누락)' });
+    const nonce = getNonceFromUrl();
+    // 보안: nonce 가 없으면 dApp 이 직접 popup URL 을 연 시나리오. 친절한 안내 메시지.
+    if (!requestId || !nonce) {
+      setState({
+        kind: 'error',
+        message: '이 페이지는 지갑이 직접 열어야 합니다. 사이트에서 연결 요청을 다시 시도해 주세요.',
+      });
       return;
     }
-    const msg: BackgroundMessage = { type: 'connect-context-get', requestId };
+    const msg: BackgroundMessage = { type: 'connect-context-get', requestId, nonce };
     chrome.runtime.sendMessage(msg, (ctx: ConnectContext | null) => {
       if (chrome.runtime.lastError) {
         setState({ kind: 'error', message: chrome.runtime.lastError.message ?? '컨텍스트 조회 실패' });
         return;
       }
       if (!ctx) {
-        // background 슬롯이 없거나 만료된 상태 — URL 파라미터로 폴백 표시.
-        const fallbackOrigin = getOriginFromUrl();
-        if (fallbackOrigin) {
-          setState({
-            kind: 'ready',
-            ctx: { requestId, origin: fallbackOrigin, address: '(로딩 실패)' },
-          });
-          return;
-        }
-        setState({ kind: 'error', message: '연결 요청이 만료되었거나 존재하지 않습니다' });
+        // background 슬롯이 없거나 만료된 상태 — 또는 nonce 불일치(우회 시도).
+        // 보안상 폴백으로 URL 의 origin 만 신뢰해 표시하지 않는다(스푸핑 방지).
+        setState({
+          kind: 'error',
+          message: '연결 요청이 만료되었거나 존재하지 않습니다. 사이트에서 다시 요청해 주세요.',
+        });
         return;
       }
       setState({ kind: 'ready', ctx });
@@ -67,8 +68,9 @@ export function App() {
 
   function send(decision: 'approve' | 'reject'): void {
     const requestId = getRequestIdFromUrl();
-    if (!requestId) return;
-    const msg: BackgroundMessage = { type: 'connect-result', requestId, decision };
+    const nonce = getNonceFromUrl();
+    if (!requestId || !nonce) return;
+    const msg: BackgroundMessage = { type: 'connect-result', requestId, nonce, decision };
     chrome.runtime.sendMessage(msg, () => {
       setState({ kind: 'submitted', decision });
       // background 가 popup window 를 닫지만, 안전망으로 자체 close.

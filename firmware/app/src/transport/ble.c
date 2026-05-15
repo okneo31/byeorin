@@ -1,5 +1,6 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
+ * SECURITY-CRITICAL: changes require security review.
  * 노동자의 지갑 Cold — BLE GATT skeleton.
  */
 #include "transport/ble.h"
@@ -10,6 +11,7 @@
 #include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/att.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/uuid.h>
@@ -43,8 +45,31 @@ static ssize_t on_write_apdu(struct bt_conn *conn,
 			     const void *buf, uint16_t len,
 			     uint16_t offset, uint8_t flags)
 {
-	(void)conn; (void)attr; (void)offset; (void)flags;
-	if (m_cb && buf && len > 0) {
+	(void)conn; (void)attr; (void)flags;
+
+	/*
+	 * GATT writes carry an `offset` for long-write / prepare-write
+	 * sequences. We do NOT support reassembly across multiple GATT
+	 * writes — each write must be a complete framed fragment. Reject
+	 * non-zero offsets so a peer cannot smuggle bytes past our length
+	 * check by issuing prepare-writes.
+	 */
+	if (offset != 0) {
+		return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+	}
+	if (!buf || len == 0) {
+		return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+	}
+	/*
+	 * MUST validate length BEFORE handing the pointer to the next
+	 * layer. CONFIG_NODONG_MAX_APDU_LEN is the hard ceiling shared
+	 * with the USB-HID transport and the main-thread queue buffer.
+	 */
+	if (len > (uint16_t)CONFIG_NODONG_MAX_APDU_LEN) {
+		ND_LOG_WRN("ble: oversize write len=%u, rejecting", len);
+		return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+	}
+	if (m_cb) {
 		/* TODO: feed into the same reassembler used by USB-HID
 		 *       (Ledger-style framing, but MTU-sized). */
 		m_cb((const uint8_t *)buf, len);
