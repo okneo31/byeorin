@@ -7,6 +7,7 @@ import {
   type WcSession,
   type WcSessionProposal,
 } from '@nodong/wallet-sdk';
+import { useT } from '@nodong/i18n/react';
 import { hashTypedData, hexToBytes, bytesToHex, type Hex } from 'viem';
 import { walletStore } from '../wallet-store.js';
 
@@ -25,21 +26,13 @@ const PROJECT_ID =
   (import.meta.env.VITE_WC_PROJECT_ID as string | undefined) ??
   '__nodong_dev_placeholder__';
 
-const WC_METADATA = {
-  name: '노동자의 지갑 (Desktop)',
-  description: 'TTL 생태계 멀티체인 월릿',
-  url: 'https://ttl1.top',
-  // Mutable array on purpose — Reown's metadata.icons is typed as
-  // `string[]`, so `as const` would force a readonly mismatch.
-  icons: ['https://ttl1.top/icon.png'],
-};
-
 type ProposalView = {
   proposal: WcSessionProposal;
   decide: (approve: boolean) => void;
 };
 
 export function DApp({ unlocked, onGoWallet }: Props) {
+  const t = useT();
   const [signer, setSigner] = useState<WalletConnectSigner | null>(null);
   const [signerError, setSignerError] = useState<string | null>(null);
   const [uri, setUri] = useState('');
@@ -60,7 +53,15 @@ export function DApp({ unlocked, onGoWallet }: Props) {
       try {
         const s = await WalletConnectSigner.create({
           projectId: PROJECT_ID,
-          metadata: WC_METADATA,
+          metadata: {
+            // Brand name stays Korean in both locales (see brand identity policy).
+            name: t('dapp.wc_name_desktop'),
+            description: t('dapp.wc_description'),
+            url: 'https://ttl1.top',
+            // Mutable array on purpose — Reown's metadata.icons is typed as
+            // `string[]`, so `as const` would force a readonly mismatch.
+            icons: ['https://ttl1.top/icon.png'],
+          },
           chainId: 7777,
         });
         if (cancelled) return;
@@ -90,7 +91,7 @@ export function DApp({ unlocked, onGoWallet }: Props) {
       } catch (err) {
         if (cancelled) return;
         setSignerError(
-          err instanceof Error ? err.message : '초기화 실패: ' + String(err),
+          err instanceof Error ? err.message : t('dapp.init_failed', { detail: String(err) }),
         );
         // Re-arm so a future unlock retries.
         initRef.current = false;
@@ -99,6 +100,9 @@ export function DApp({ unlocked, onGoWallet }: Props) {
     return () => {
       cancelled = true;
     };
+    // t is intentionally stable across renders within a locale; we capture it
+    // at mount so the metadata text is set once for this signer instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unlocked]);
 
   const refreshSessions = useCallback(async (s: WalletConnectSigner) => {
@@ -113,12 +117,12 @@ export function DApp({ unlocked, onGoWallet }: Props) {
   const onPair = async () => {
     setPairError(null);
     if (!signer) {
-      setPairError('지갑이 준비되지 않았습니다. 잠금을 해제해 주세요.');
+      setPairError(t('dapp.signer_not_ready'));
       return;
     }
     const trimmed = uri.trim();
     if (!trimmed.startsWith('wc:')) {
-      setPairError('wc: 로 시작하는 페어링 URI 를 붙여 넣어 주세요.');
+      setPairError(t('dapp.uri_invalid'));
       return;
     }
     setPairing(true);
@@ -149,12 +153,12 @@ export function DApp({ unlocked, onGoWallet }: Props) {
     return (
       <div className="nd-view">
         <header className="nd-view__header">
-          <h1 className="nd-h1">dApp 연결</h1>
-          <p className="nd-lead">먼저 지갑을 열거나 복원해 주세요.</p>
+          <h1 className="nd-h1">{t('dapp.title')}</h1>
+          <p className="nd-lead">{t('send.locked_lead')}</p>
         </header>
         <Card as="section">
           <Button variant="primary" className="nd-button--block" onClick={onGoWallet}>
-            지갑으로 이동
+            {t('send.go_to_wallet')}
           </Button>
         </Card>
       </div>
@@ -164,31 +168,30 @@ export function DApp({ unlocked, onGoWallet }: Props) {
   return (
     <div className="nd-view">
       <header className="nd-view__header">
-        <h1 className="nd-h1">dApp 연결 (WalletConnect)</h1>
+        <h1 className="nd-h1">{t('dapp.title_full')}</h1>
         <p className="nd-lead">
-          dApp 에서 표시되는 wc: URI 를 아래에 붙여넣고 페어링을 시작합니다.
+          {t('dapp.lead')}
         </p>
       </header>
 
       {PROJECT_ID === '__nodong_dev_placeholder__' && (
         <Card as="section" style={{ marginBottom: 16 }}>
           <p className="nd-warn" style={{ margin: 0 }}>
-            ⚠ Reown projectId 가 설정되지 않았습니다. <code>VITE_WC_PROJECT_ID</code>
-            환경 변수를 설정하지 않으면 일부 dApp 페어링이 실패할 수 있습니다.
+            {t('dapp.projectid_warn_pre')}<code>VITE_WC_PROJECT_ID</code>{t('dapp.projectid_warn_post')}
           </p>
         </Card>
       )}
 
       {signerError && (
         <Card as="section" style={{ marginBottom: 16 }}>
-          <div className="nd-error">초기화 실패: {signerError}</div>
+          <div className="nd-error">{t('dapp.init_failed', { detail: signerError })}</div>
         </Card>
       )}
 
       <Card as="section">
         <Input
           id="wc-uri"
-          label="페어링 URI"
+          label={t('dapp.uri_label')}
           value={uri}
           onChange={(e) => setUri(e.target.value)}
           placeholder="wc:..."
@@ -205,37 +208,38 @@ export function DApp({ unlocked, onGoWallet }: Props) {
             loading={pairing}
             disabled={pairing || !signer}
           >
-            {pairing ? '페어링 중…' : '페어링'}
+            {pairing ? t('dapp.pairing') : t('dapp.pair_button')}
           </Button>
         </div>
       </Card>
 
       {proposal && (
         <Card as="section" style={{ marginTop: 16 }}>
-          <div className="nd-label">연결 요청</div>
+          <div className="nd-label">{t('dapp.proposal_label')}</div>
           <p>
-            <strong>{proposal.proposal.proposer.metadata.name}</strong> 가 본 지갑에
-            연결을 요청합니다.
+            <strong>{proposal.proposal.proposer.metadata.name}</strong>{t('dapp.proposal_text_suffix')}
           </p>
           <p className="nd-muted">{proposal.proposal.proposer.metadata.url}</p>
           <p className="nd-muted small">
-            요청 메서드: {proposal.proposal.requiredMethods.join(', ') || '(없음)'}
+            {t('dapp.requested_methods', {
+              methods: proposal.proposal.requiredMethods.join(', ') || t('dapp.methods_none'),
+            })}
           </p>
           <div className="nd-row" style={{ marginTop: 12 }}>
             <Button variant="ghost" onClick={() => proposal.decide(false)}>
-              거부
+              {t('confirm.btn.reject')}
             </Button>
             <Button variant="primary" onClick={() => proposal.decide(true)}>
-              승인
+              {t('confirm.btn.approve')}
             </Button>
           </div>
         </Card>
       )}
 
       <Card as="section" style={{ marginTop: 16 }}>
-        <div className="nd-label">활성 세션</div>
+        <div className="nd-label">{t('dapp.sessions_label')}</div>
         {sessions.length === 0 ? (
-          <p className="nd-muted">아직 연결된 dApp 이 없습니다.</p>
+          <p className="nd-muted">{t('dapp.no_active_sessions')}</p>
         ) : (
           <ul className="nd-wc-list">
             {sessions.map((s) => (
@@ -248,7 +252,7 @@ export function DApp({ unlocked, onGoWallet }: Props) {
                   </div>
                 </div>
                 <Button variant="ghost" onClick={() => onDisconnect(s.topic)}>
-                  연결 해제
+                  {t('popup.connected_sites.revoke')}
                 </Button>
               </li>
             ))}

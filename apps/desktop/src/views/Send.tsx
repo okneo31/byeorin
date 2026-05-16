@@ -8,6 +8,7 @@ import {
   type WalletAccount,
 } from '@nodong/wallet-sdk';
 import { AddressDisplay, Button, Card, Input } from '@nodong/design-system';
+import { useT } from '@nodong/i18n/react';
 import { walletStore } from '../wallet-store.js';
 
 interface Props {
@@ -26,6 +27,7 @@ type AssetKey = 'native' | string;
 const TTL_DECIMALS = 18;
 
 export function Send({ unlocked, onGoWallet }: Props) {
+  const t = useT();
   const [account, setAccount] = useState<WalletAccount | null>(null);
   const [to, setTo] = useState('');
   const [amount, setAmount] = useState('');
@@ -67,12 +69,12 @@ export function Send({ unlocked, onGoWallet }: Props) {
     return (
       <div className="nd-view">
         <header className="nd-view__header">
-          <h1 className="nd-h1">송수신</h1>
-          <p className="nd-lead">먼저 지갑을 열거나 복원해 주세요.</p>
+          <h1 className="nd-h1">{t('send.title_desktop')}</h1>
+          <p className="nd-lead">{t('send.locked_lead')}</p>
         </header>
         <Card as="section">
           <Button variant="primary" className="nd-button--block" onClick={onGoWallet}>
-            지갑으로 이동
+            {t('send.go_to_wallet')}
           </Button>
         </Card>
       </div>
@@ -89,18 +91,18 @@ export function Send({ unlocked, onGoWallet }: Props) {
     setAmountError(null);
 
     if (!/^0x[0-9a-fA-F]{40}$/.test(to.trim())) {
-      setToError('받는 주소가 올바르지 않습니다.');
+      setToError(t('send.to_invalid_desktop'));
       return;
     }
     let value: bigint;
     try {
       value = parseAmountToBase(amount.trim(), decimals);
-    } catch (e) {
-      setAmountError(e instanceof Error ? e.message : String(e));
+    } catch {
+      setAmountError(t('send.amount_invalid'));
       return;
     }
     if (value <= 0n) {
-      setAmountError('금액은 0보다 커야 합니다.');
+      setAmountError(t('send.amount_invalid_positive'));
       return;
     }
 
@@ -130,22 +132,22 @@ export function Send({ unlocked, onGoWallet }: Props) {
   return (
     <div className="nd-view">
       <header className="nd-view__header">
-        <h1 className="nd-h1">송수신</h1>
+        <h1 className="nd-h1">{t('send.title_desktop')}</h1>
         <p className="nd-lead">
           {selectedToken
-            ? `${selectedToken.token.symbol} 토큰을 송금합니다.`
-            : 'TTL을 송금합니다. 수수료는 자동 추정됩니다.'}
+            ? t('send.lead_token_desktop', { symbol: selectedToken.token.symbol })
+            : t('send.lead_native_desktop')}
         </p>
       </header>
 
       <Card as="section">
-        <div className="nd-label">보내는 주소</div>
+        <div className="nd-label">{t('send.from_label')}</div>
         <AddressDisplay address={account.address} head={8} tail={6} />
       </Card>
 
       <Card as="section" style={{ marginTop: 16 }}>
         <label className="nd-label" htmlFor="nd-asset-select-d">
-          어떤 토큰?
+          {t('send.asset_label')}
         </label>
         <select
           id="nd-asset-select-d"
@@ -154,10 +156,10 @@ export function Send({ unlocked, onGoWallet }: Props) {
           onChange={(e) => setAsset(e.target.value as AssetKey)}
           disabled={sending}
         >
-          <option value="native">TTL (네이티브)</option>
-          {tokens.map((t) => (
-            <option key={t.token.address} value={t.token.address}>
-              {t.token.symbol} · {t.token.name}
+          <option value="native">{t('send.asset_native_option')}</option>
+          {tokens.map((tok) => (
+            <option key={tok.token.address} value={tok.token.address}>
+              {tok.token.symbol} · {tok.token.name}
             </option>
           ))}
         </select>
@@ -166,7 +168,7 @@ export function Send({ unlocked, onGoWallet }: Props) {
 
         <Input
           id="to"
-          label="받는 주소"
+          label={t('send.to_label')}
           value={to}
           onChange={(e) => setTo(e.target.value)}
           placeholder="0x..."
@@ -180,7 +182,7 @@ export function Send({ unlocked, onGoWallet }: Props) {
 
         <Input
           id="amount"
-          label={`금액 (${symbol})`}
+          label={t('send.amount_label', { symbol })}
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           inputMode="decimal"
@@ -192,7 +194,7 @@ export function Send({ unlocked, onGoWallet }: Props) {
         {error && <div className="nd-error">{error}</div>}
         {txHash && (
           <div className="nd-success">
-            전송 완료 · 트랜잭션 해시:
+            {t('send.completed_inline')}
             <br />
             <code style={{ wordBreak: 'break-all' }}>{txHash}</code>
           </div>
@@ -206,7 +208,7 @@ export function Send({ unlocked, onGoWallet }: Props) {
             loading={sending}
             disabled={sending}
           >
-            {sending ? '전송 중…' : '서명하고 전송'}
+            {sending ? t('send.sending_short') : t('send.sign_and_send')}
           </Button>
         </div>
       </Card>
@@ -220,7 +222,9 @@ export function Send({ unlocked, onGoWallet }: Props) {
  */
 function parseAmountToBase(s: string, decimals: number): bigint {
   if (!/^\d+(\.\d+)?$/.test(s)) {
-    throw new Error('금액 형식이 올바르지 않습니다.');
+    // The caller renders a localized message; this sentinel just signals
+    // "amount format invalid" without leaking a hardcoded locale.
+    throw new Error('INVALID_AMOUNT_FORMAT');
   }
   const [whole, frac = ''] = s.split('.');
   const fracPadded = (frac + '0'.repeat(decimals)).slice(0, decimals);

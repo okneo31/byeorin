@@ -17,6 +17,7 @@
 import { useEffect, useState } from 'react';
 import type { HwAppName } from '@nodong/wallet-sdk';
 import { AddressDisplay, Button, Card } from '@nodong/design-system';
+import { useT } from '@nodong/i18n/react';
 import {
   connectHardware,
   disconnectHardware,
@@ -26,6 +27,7 @@ import {
 } from '../wallet-store.js';
 
 export function Hardware() {
+  const t = useT();
   const [hw, setHw] = useState<HwAccountState | null>(getHwAccount());
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,36 +62,35 @@ export function Hardware() {
   return (
     <div className="nd-view">
       <header className="nd-view__header">
-        <h1 className="nd-h1">하드웨어 월릿</h1>
+        <h1 className="nd-h1">{t('hw.label.title')}</h1>
         <p className="nd-lead">
-          Ledger Nano X / S+ 디바이스를 USB 로 연결한 뒤, 사용할 체인의 앱을 디바이스에서 열고 아래
-          버튼을 누르세요.
+          {t('hw.lead_desktop')}
         </p>
       </header>
 
       {hw ? (
         <Card as="section">
-          <div className="nd-label">연결됨 · {hw.appName.toUpperCase()}</div>
+          <div className="nd-label">{t('hw.connected_label', { appName: hw.appName.toUpperCase() })}</div>
           <AddressDisplay address={hw.address} head={8} tail={6} />
           <div className="nd-muted" style={{ marginTop: 8 }}>
-            파생 경로: {hw.derivationPath}
+            {t('hw.derivation_path_long', { path: hw.derivationPath })}
           </div>
           <div className="nd-row" style={{ marginTop: 16 }}>
             <Button variant="secondary" onClick={disconnect} disabled={busy}>
-              {busy ? '분리 중…' : '하드웨어 분리'}
+              {busy ? t('hw.disconnecting') : t('hw.disconnect')}
             </Button>
           </div>
         </Card>
       ) : (
         <Card as="section">
-          <div className="nd-label">연결</div>
+          <div className="nd-label">{t('hw.connect_label')}</div>
           <Button
             variant="primary"
             className="nd-button--block"
             onClick={() => connect('solana')}
             disabled={busy}
           >
-            {busy ? '연결 중…' : 'Solana 로 연결'}
+            {busy ? t('hw.connecting') : t('hw.connect.solana_short')}
           </Button>
           <div style={{ height: 10 }} />
           <Button
@@ -98,7 +99,7 @@ export function Hardware() {
             onClick={() => connect('cosmos')}
             disabled={busy}
           >
-            {busy ? '연결 중…' : 'Cosmos 로 연결'}
+            {busy ? t('hw.connecting') : t('hw.connect.cosmos')}
           </Button>
           {error && (
             <div className="nd-error" style={{ marginTop: 12 }}>
@@ -106,9 +107,7 @@ export function Hardware() {
             </div>
           )}
           <div className="nd-muted" style={{ marginTop: 12 }}>
-            TTL(EVM) 과 BTC 하드웨어 서명은 v0.5 에서 지원됩니다. — Ledger Eth 앱은 digest
-            대신 raw 트랜잭션을 요구하기 때문에 Wallet 측의 서명 콜백 리팩터가 선행되어야
-            합니다.
+            {t('hw.evm_btc_v05_note')}
           </div>
         </Card>
       )}

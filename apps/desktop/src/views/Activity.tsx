@@ -12,6 +12,7 @@ import {
   type WalletAccount,
 } from '@nodong/wallet-sdk';
 import { AmountDisplay, Button, Card } from '@nodong/design-system';
+import { useT } from '@nodong/i18n/react';
 import { walletStore } from '../wallet-store.js';
 
 interface Props {
@@ -38,6 +39,7 @@ function shortAddr(a: string): string {
 }
 
 export function Activity({ unlocked, onGoWallet }: Props) {
+  const t = useT();
   const [account, setAccount] = useState<WalletAccount | null>(null);
   const [items, setItems] = useState<ActivityT[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -75,7 +77,7 @@ export function Activity({ unlocked, onGoWallet }: Props) {
       .catch((err: unknown) => {
         if (!cancelled) {
           setItems([]);
-          setError(err instanceof Error ? err.message : '활동을 불러오지 못했습니다.');
+          setError(err instanceof Error ? err.message : t('activity.failed'));
         }
       })
       .finally(() => {
@@ -92,12 +94,12 @@ export function Activity({ unlocked, onGoWallet }: Props) {
     return (
       <div className="nd-view">
         <header className="nd-view__header">
-          <h1 className="nd-h1">활동</h1>
-          <p className="nd-lead">먼저 지갑을 열거나 복원해 주세요.</p>
+          <h1 className="nd-h1">{t('activity.title')}</h1>
+          <p className="nd-lead">{t('send.locked_lead')}</p>
         </header>
         <Card as="section">
           <Button variant="primary" className="nd-button--block" onClick={onGoWallet}>
-            지갑으로 이동
+            {t('send.go_to_wallet')}
           </Button>
         </Card>
       </div>
@@ -107,8 +109,8 @@ export function Activity({ unlocked, onGoWallet }: Props) {
   return (
     <div className="nd-view">
       <header className="nd-view__header">
-        <h1 className="nd-h1">활동</h1>
-        <p className="nd-lead">최근 송금 및 토큰 전송 기록.</p>
+        <h1 className="nd-h1">{t('activity.title')}</h1>
+        <p className="nd-lead">{t('activity.lead_short')}</p>
       </header>
 
       <Card as="section">
@@ -120,10 +122,12 @@ export function Activity({ unlocked, onGoWallet }: Props) {
           }}
         >
           <span className="nd-muted">
-            {loading ? '불러오는 중…' : `${items?.length ?? 0}건 (최근 20)`}
+            {loading
+              ? t('common.loading_ellipsis')
+              : t('activity.count_with_max', { n: items?.length ?? 0 })}
           </span>
           <Button variant="ghost" size="sm" onClick={reload} disabled={loading}>
-            새로고침
+            {t('common.refresh')}
           </Button>
         </div>
 
@@ -131,7 +135,7 @@ export function Activity({ unlocked, onGoWallet }: Props) {
 
         {!loading && items && items.length === 0 && !error && (
           <p className="nd-muted" style={{ marginTop: 12 }}>
-            아직 기록이 없습니다.
+            {t('activity.empty')}
           </p>
         )}
 
@@ -139,11 +143,11 @@ export function Activity({ unlocked, onGoWallet }: Props) {
           <table className="nd-activity-table">
             <thead>
               <tr>
-                <th>시간</th>
-                <th>타입</th>
-                <th>상대</th>
-                <th>금액</th>
-                <th>상태</th>
+                <th>{t('activity.col.time')}</th>
+                <th>{t('activity.col.type')}</th>
+                <th>{t('activity.col.counterparty')}</th>
+                <th>{t('activity.col.amount')}</th>
+                <th>{t('activity.col.status')}</th>
               </tr>
             </thead>
             <tbody>
@@ -152,12 +156,12 @@ export function Activity({ unlocked, onGoWallet }: Props) {
                   account.address.toLowerCase() === it.from.toLowerCase();
                 const counterparty = isOutgoing ? it.to : it.from;
                 const sign = isOutgoing ? '-' : '+';
-                const tokenLabel = it.token ? '토큰' : 'TTL';
+                const tokenLabel = it.token ? t('activity.label.token') : t('activity.label.native');
                 return (
                   <tr key={`${it.hash}-${it.blockNumber}`}>
                     <td>{fmtTime(it.timestamp)}</td>
                     <td>
-                      {isOutgoing ? '보냄' : '받음'} · {tokenLabel}
+                      {isOutgoing ? t('activity.outgoing') : t('activity.incoming')} · {tokenLabel}
                     </td>
                     <td className="nd-mono">{shortAddr(counterparty)}</td>
                     <td className="nd-mono" style={{ textAlign: 'right' }}>
@@ -176,7 +180,7 @@ export function Activity({ unlocked, onGoWallet }: Props) {
                         target="_blank"
                         rel="noreferrer"
                       >
-                        {it.status === 'failed' ? '실패' : '확인'}
+                        {it.status === 'failed' ? t('activity.status_failed') : t('activity.status_confirmed')}
                       </a>
                     </td>
                   </tr>

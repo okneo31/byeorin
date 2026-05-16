@@ -7,6 +7,7 @@ import {
   type WcSession,
   type WcSessionProposal,
 } from '@nodong/wallet-sdk';
+import { useT } from '@nodong/i18n/react';
 import { walletStore } from '../store';
 import { colors, radius, spacing, theme } from '../theme';
 import { Button, Card, Input } from '../ui';
@@ -39,19 +40,13 @@ interface Props {
 const PROJECT_ID =
   (process.env.WC_PROJECT_ID as string | undefined) ?? '__nodong_dev_placeholder__';
 
-const WC_METADATA = {
-  name: '노동자의 지갑 (Mobile)',
-  description: 'TTL 생태계 멀티체인 월릿',
-  url: 'https://ttl1.top',
-  icons: ['https://ttl1.top/icon.png'],
-};
-
 type ProposalView = {
   proposal: WcSessionProposal;
   decide: (approve: boolean) => void;
 };
 
 export function DApp({ onBack }: Props) {
+  const t = useT();
   const [signer, setSigner] = useState<WalletConnectSigner | null>(null);
   const [signerError, setSignerError] = useState<string | null>(null);
   const [uri, setUri] = useState('');
@@ -79,11 +74,17 @@ export function DApp({ onBack }: Props) {
       try {
         const s = await WalletConnectSigner.create({
           projectId: PROJECT_ID,
-          metadata: WC_METADATA,
+          metadata: {
+            // Brand name stays Korean in both locales (see brand identity policy).
+            name: t('dapp.wc_name_mobile'),
+            description: t('dapp.wc_description'),
+            url: 'https://ttl1.top',
+            icons: ['https://ttl1.top/icon.png'],
+          },
           chainId: 7777,
         });
         if (cancelled) return;
-        bindDelegate(s);
+        bindDelegate(s, t);
         s.onSessionProposal((p) => {
           return new Promise((resolve) => {
             setProposal({
@@ -117,12 +118,12 @@ export function DApp({ onBack }: Props) {
   const onPair = async () => {
     setPairError(null);
     if (!signer) {
-      setPairError('지갑이 준비되지 않았습니다.');
+      setPairError(t('dapp.signer_not_ready_short'));
       return;
     }
     const trimmed = uri.trim();
     if (!trimmed.startsWith('wc:')) {
-      setPairError('wc: 로 시작하는 URI 를 붙여넣어 주세요.');
+      setPairError(t('dapp.uri_invalid_short'));
       return;
     }
     setPairing(true);
@@ -149,18 +150,15 @@ export function DApp({ onBack }: Props) {
 
   // QR 페어링은 네이티브 카메라 권한이 필요해 v0.3 에서는 placeholder.
   const onQrPlaceholder = () => {
-    setPairError(
-      'QR 페어링은 네이티브 카메라 권한 설정이 필요해 다음 릴리스에서 지원됩니다. ' +
-        '현재는 wc: URI 를 직접 붙여넣어 주세요.',
-    );
+    setPairError(t('dapp.qr_placeholder_msg'));
   };
 
   if (!walletStore.isUnlocked()) {
     return (
       <View style={styles.center}>
-        <Text style={styles.lead}>지갑이 잠겨 있습니다.</Text>
+        <Text style={styles.lead}>{t('account.locked_msg')}</Text>
         <Button variant="primary" onPress={onBack}>
-          돌아가기
+          {t('dapp.back')}
         </Button>
       </View>
     );
@@ -168,25 +166,25 @@ export function DApp({ onBack }: Props) {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.h1}>dApp 연결</Text>
-      <Text style={styles.lead}>WalletConnect v2 — dApp 에 안전하게 연결합니다.</Text>
+      <Text style={styles.h1}>{t('dapp.title')}</Text>
+      <Text style={styles.lead}>{t('dapp.lead_mobile')}</Text>
 
       {PROJECT_ID === '__nodong_dev_placeholder__' && (
         <View style={styles.warn}>
           <Text style={styles.warnText}>
-            ⚠ Reown projectId 미설정. WC_PROJECT_ID 환경변수 필요.
+            {t('dapp.projectid_missing_mobile')}
           </Text>
         </View>
       )}
 
       {signerError && (
         <View style={styles.error}>
-          <Text style={styles.errorText}>초기화 실패: {signerError}</Text>
+          <Text style={styles.errorText}>{t('dapp.init_failed', { detail: signerError })}</Text>
         </View>
       )}
 
       <Card style={styles.section}>
-        <Text style={styles.label}>페어링 URI</Text>
+        <Text style={styles.label}>{t('dapp.uri_label')}</Text>
         <Input
           value={uri}
           onChangeText={setUri}
@@ -202,37 +200,37 @@ export function DApp({ onBack }: Props) {
         )}
         <View style={{ height: spacing.sm }} />
         <Button variant="primary" fullWidth onPress={onPair} disabled={pairing || !signer}>
-          {pairing ? '페어링 중…' : '페어링'}
+          {pairing ? t('dapp.pairing') : t('dapp.pair_button')}
         </Button>
         <View style={{ height: spacing.sm }} />
         <Button variant="ghost" fullWidth onPress={onQrPlaceholder}>
-          QR로 페어링 (예정)
+          {t('dapp.qr_pair_coming_soon')}
         </Button>
       </Card>
 
       {proposal && (
         <Card style={styles.section}>
-          <Text style={styles.label}>연결 요청</Text>
+          <Text style={styles.label}>{t('dapp.proposal_label')}</Text>
           <Text style={styles.body}>
-            <Text style={styles.bold}>{proposal.proposal.proposer.metadata.name}</Text> 가
-            본 지갑에 연결을 요청합니다.
+            <Text style={styles.bold}>{proposal.proposal.proposer.metadata.name}</Text>
+            {t('dapp.proposal_text_suffix')}
           </Text>
           <Text style={styles.muted}>{proposal.proposal.proposer.metadata.url}</Text>
           <View style={{ height: spacing.sm }} />
           <Button variant="primary" fullWidth onPress={() => proposal.decide(true)}>
-            승인
+            {t('confirm.btn.approve')}
           </Button>
           <View style={{ height: spacing.xs }} />
           <Button variant="ghost" fullWidth onPress={() => proposal.decide(false)}>
-            거부
+            {t('confirm.btn.reject')}
           </Button>
         </Card>
       )}
 
       <Card style={styles.section}>
-        <Text style={styles.label}>활성 세션</Text>
+        <Text style={styles.label}>{t('dapp.sessions_label')}</Text>
         {sessions.length === 0 ? (
-          <Text style={styles.muted}>아직 연결된 dApp 이 없습니다.</Text>
+          <Text style={styles.muted}>{t('dapp.no_active_sessions')}</Text>
         ) : (
           sessions.map((s) => (
             <View key={s.topic} style={styles.sessionRow}>
@@ -246,7 +244,7 @@ export function DApp({ onBack }: Props) {
                 </Text>
               </View>
               <Button variant="ghost" onPress={() => onDisconnect(s.topic)}>
-                연결 해제
+                {t('popup.connected_sites.revoke')}
               </Button>
             </View>
           ))
@@ -255,7 +253,7 @@ export function DApp({ onBack }: Props) {
 
       <View style={{ height: spacing.md }} />
       <Button variant="ghost" fullWidth onPress={onBack}>
-        돌아가기
+        {t('dapp.back')}
       </Button>
     </ScrollView>
   );
@@ -269,7 +267,10 @@ export function DApp({ onBack }: Props) {
  * if a dApp requests EIP-712 signing the delegate throws a clear error and
  * the shell upgrades in a follow-up patch.
  */
-function bindDelegate(signer: WalletConnectSigner): void {
+function bindDelegate(
+  signer: WalletConnectSigner,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): void {
   const delegate: WcDelegate = {
     getActiveEvmAddress: async () => {
       const acc = await walletStore.getAccount();
@@ -286,9 +287,7 @@ function bindDelegate(signer: WalletConnectSigner): void {
       // v0.3: surface a clear error on mobile rather than silently failing.
       // Desktop has the full viem path; mobile gets it once we settle the
       // bundle-size budget.
-      throw new Error(
-        'EIP-712 서명은 다음 모바일 릴리스에서 지원됩니다. 데스크톱 앱을 사용해 주세요.',
-      );
+      throw new Error(t('dapp.typed_data_v05_note'));
     },
     sendTransaction: async (tx) => {
       const valueWei = tx.value ? BigInt(tx.value) : 0n;

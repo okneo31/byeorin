@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { WalletAccount } from '@nodong/wallet-sdk';
 import { AmountDisplay, Button, Card } from '@nodong/design-system';
+import { useT } from '@nodong/i18n/react';
 import { walletStore } from '../wallet-store.js';
 
 interface Props {
   unlocked: boolean;
 }
 
-type ChainStatus = '연결' | '준비 중';
+/** Locale-independent status discriminant. Rendered via i18n at JSX time. */
+type ChainStatus = 'live' | 'pending';
 
 interface AssetCard {
   symbol: string;
@@ -20,17 +22,18 @@ interface AssetCard {
 }
 
 const ASSETS: readonly AssetCard[] = [
-  { symbol: 'TTL', name: 'TTL Mainnet', status: '연결', live: true, decimals: 18 },
-  { symbol: 'ETH', name: 'Ethereum', status: '준비 중' },
-  { symbol: 'BTC', name: 'Bitcoin', status: '준비 중' },
-  { symbol: 'XRP', name: 'XRP Ledger', status: '준비 중' },
-  { symbol: 'ATOM', name: 'Cosmos Hub', status: '준비 중' },
-  { symbol: 'MATIC', name: 'Polygon', status: '준비 중' },
-  { symbol: 'BNB', name: 'BNB Smart Chain', status: '준비 중' },
-  { symbol: 'AVAX', name: 'Avalanche', status: '준비 중' },
+  { symbol: 'TTL', name: 'TTL Mainnet', status: 'live', live: true, decimals: 18 },
+  { symbol: 'ETH', name: 'Ethereum', status: 'pending' },
+  { symbol: 'BTC', name: 'Bitcoin', status: 'pending' },
+  { symbol: 'XRP', name: 'XRP Ledger', status: 'pending' },
+  { symbol: 'ATOM', name: 'Cosmos Hub', status: 'pending' },
+  { symbol: 'MATIC', name: 'Polygon', status: 'pending' },
+  { symbol: 'BNB', name: 'BNB Smart Chain', status: 'pending' },
+  { symbol: 'AVAX', name: 'Avalanche', status: 'pending' },
 ];
 
 export function Portfolio({ unlocked }: Props) {
+  const t = useT();
   const [account, setAccount] = useState<WalletAccount | null>(null);
 
   useEffect(() => {
@@ -50,15 +53,15 @@ export function Portfolio({ unlocked }: Props) {
   return (
     <div className="nd-view">
       <header className="nd-view__header">
-        <h1 className="nd-h1">포트폴리오</h1>
+        <h1 className="nd-h1">{t('portfolio.title')}</h1>
         <p className="nd-lead">
-          멀티체인 자산 한 눈에 보기. TTL 외 체인은 곧 활성화됩니다.
+          {t('portfolio.lead')}
         </p>
       </header>
 
       {!unlocked && (
         <div className="nd-warn">
-          지갑을 열면 자산이 표시됩니다. 좌측 메뉴에서 지갑을 시작하세요.
+          {t('portfolio.locked_warn')}
         </div>
       )}
 
@@ -75,10 +78,10 @@ export function Portfolio({ unlocked }: Props) {
             <div
               className={
                 'nd-tile__status' +
-                (a.status === '연결' ? ' nd-tile__status--live' : ' nd-tile__status--pending')
+                (a.status === 'live' ? ' nd-tile__status--live' : ' nd-tile__status--pending')
               }
             >
-              {a.status}
+              {a.status === 'live' ? t('portfolio.status.live') : t('portfolio.status.pending')}
             </div>
           </Card>
         ))}
@@ -92,6 +95,7 @@ export function Portfolio({ unlocked }: Props) {
  * 빈 지갑(0n)과 RPC 오류를 절대 혼동하지 않도록 triple-state 패턴 적용.
  */
 function LiveTtlBalance({ address, decimals }: { address: string; decimals: number }) {
+  const t = useT();
   const [balance, setBalance] = useState<bigint | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -113,28 +117,30 @@ function LiveTtlBalance({ address, decimals }: { address: string; decimals: numb
       .catch((err: unknown) => {
         if (cancelled) return;
         setBalance(null);
-        setError(err instanceof Error ? err.message : '잔액 조회 실패');
+        setError(err instanceof Error ? err.message : t('account.balance_failed'));
         setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [address, reloadKey]);
+  }, [address, reloadKey, t]);
 
   const retry = useCallback(() => {
     setReloadKey((k) => k + 1);
   }, []);
 
   if (loading) {
-    return <div className="nd-muted" style={{ marginTop: 6 }}>잔액 조회 중…</div>;
+    return <div className="nd-muted" style={{ marginTop: 6 }}>{t('account.balance_loading')}</div>;
   }
   if (error) {
     return (
       <div style={{ marginTop: 6 }}>
-        <div className="nd-error" style={{ marginTop: 0 }}>잔액 오류 · {error}</div>
+        <div className="nd-error" style={{ marginTop: 0 }}>
+          {t('portfolio.balance_error', { reason: error })}
+        </div>
         <div style={{ marginTop: 8 }}>
           <Button variant="secondary" size="sm" onClick={retry}>
-            다시 시도
+            {t('account.retry')}
           </Button>
         </div>
       </div>
