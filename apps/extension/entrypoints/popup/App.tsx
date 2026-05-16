@@ -270,8 +270,12 @@ function ActiveGrants() {
     return () => chrome.storage.onChanged.removeListener(onChanged);
   }, [refresh]);
 
-  async function handleRevoke(origin: string, method: GrantMethod): Promise<void> {
-    await revokeGrant(origin, method);
+  async function handleRevoke(
+    origin: string,
+    method: GrantMethod,
+    address: string,
+  ): Promise<void> {
+    await revokeGrant(origin, method, address);
     refresh();
   }
 
@@ -290,7 +294,10 @@ function ActiveGrants() {
               Math.ceil((g.expiresAt - Date.now()) / 60_000),
             );
             return (
-              <li key={`${g.origin}::${g.method}`} className="origin-row">
+              <li
+                key={`${g.origin}::${g.method}::${g.address}`}
+                className="origin-row"
+              >
                 <div className="grant-info">
                   <span className="origin-text" title={g.origin}>{g.origin}</span>
                   <span className="muted small">
@@ -300,7 +307,7 @@ function ActiveGrants() {
                 <button
                   className="btn-ghost btn-sm"
                   onClick={() => {
-                    void handleRevoke(g.origin, g.method);
+                    void handleRevoke(g.origin, g.method, g.address);
                   }}
                 >
                   취소

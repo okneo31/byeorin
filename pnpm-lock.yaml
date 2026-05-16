@@ -90,6 +90,9 @@ importers:
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
+      vitest:
+        specifier: ^2.1.5
+        version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
       wxt:
         specifier: ^0.19.13
         version: 0.19.29(@types/node@22.19.17)(rollup@4.60.2)(terser@5.47.1)
@@ -129,7 +132,7 @@ importers:
         version: 0.76.9(@babel/core@7.29.0)(@babel/preset-env@7.29.5(@babel/core@7.29.0))
       '@react-native/metro-config':
         specifier: ^0.76.1
-        version: 0.76.9(@babel/core@7.29.0)(@babel/preset-env@7.29.5(@babel/core@7.29.0))
+        version: 0.76.9(@babel/core@7.29.0)(@babel/preset-env@7.29.5(@babel/core@7.29.0))(bufferutil@4.1.0)
       '@react-native/typescript-config':
         specifier: ^0.76.1
         version: 0.76.9
@@ -7402,7 +7405,7 @@ snapshots:
       - '@babel/preset-env'
       - supports-color
 
-  '@react-native/metro-config@0.76.9(@babel/core@7.29.0)(@babel/preset-env@7.29.5(@babel/core@7.29.0))':
+  '@react-native/metro-config@0.76.9(@babel/core@7.29.0)(@babel/preset-env@7.29.5(@babel/core@7.29.0))(bufferutil@4.1.0)':
     dependencies:
       '@react-native/js-polyfills': 0.76.9
       '@react-native/metro-babel-transformer': 0.76.9(@babel/core@7.29.0)(@babel/preset-env@7.29.5(@babel/core@7.29.0))
@@ -7411,7 +7414,9 @@ snapshots:
     transitivePeerDependencies:
       - '@babel/core'
       - '@babel/preset-env'
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-colors@0.76.9': {}
 

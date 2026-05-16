@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatUnits, hexToString, hexToBytes, hexToNumber, isHex, type Hex } from 'viem';
 import type { BackgroundMessage, ConfirmContext } from '../../src/lib/rpc.js';
-import { decode4Byte, SELECTOR_TABLE } from '../../src/lib/selectors.js';
+import {
+  decode4Byte,
+  decodeErc20Call,
+  detectTypedDataRisks,
+  isUnlimitedApprove,
+  isZeroAddress,
+} from '../../src/lib/selectors.js';
 
 // 노동자의 지갑 — 서명/전송 확인 popup.
 //
@@ -289,6 +295,11 @@ function PersonalSignView({
           사용합니다.
         </p>
 
+        {/* 1시간 자동 승인 — personal_sign 의 grant 는 임의 메시지를 자동 서명하게 된다. */}
+        <p className="warn small" style={{ background: '#fff7d6', padding: '6px', borderRadius: 4 }}>
+          ※ "1시간 자동 승인" 을 켜면 이 사이트가 요청하는 <strong>모든 메시지</strong> 가
+          자동으로 서명됩니다. 신뢰할 수 있는 사이트에서만 켜세요.
+        </p>
         <RememberToggle method={ctx.method} checked={remember} onChange={setRemember} />
 
         <div className="actions">
@@ -321,6 +332,22 @@ function SendTxView({
     ctx.data,
     dataNonEmpty,
   ]);
+  // ERC-20 transfer / approve / transferFrom 의 인자(주소+금액) 추출.
+  // 실패(셀렉터 미일치 또는 길이 부족) 시 null. UI 는 fallback 으로 raw hex 만 표시.
+  const erc20 = useMemo(
+    () => (dataNonEmpty ? decodeErc20Call(ctx.data) : null),
+    [ctx.data, dataNonEmpty],
+  );
+  // 무제한 권한 위임 휴리스틱 — approve 의 amount 가 2^200 이상.
+  const unlimitedApprove = !!(erc20 && erc20.kind === 'approve' && isUnlimitedApprove(erc20.amount));
+  // 자기 자신/0주소 위험 — transfer/transferFrom 의 to 가 from 과 같거나 0x00..00.
+  const transferTo: string | null =
+    erc20 && (erc20.kind === 'transfer' || erc20.kind === 'transferFrom')
+      ? erc20.to
+      : null;
+  const transferToSelf =
+    transferTo !== null && transferTo.toLowerCase() === ctx.from.toLowerCase();
+  const transferToZero = transferTo !== null && isZeroAddress(transferTo);
   const [showFullData, setShowFullData] = useState(false);
   const [remember, setRemember] = useState(false);
 
@@ -395,6 +422,75 @@ function SendTxView({
           </div>
         ) : null}
 
+        {/* ERC-20 인자 파싱 결과: transfer/approve/transferFrom 각각에 대해
+            사람이 읽을 수 있는 주소+금액을 직접 보여준다. raw calldata 만으로는
+            대상 주소가 어디 박혀있는지 사용자가 식별하기 어렵다. */}
+        {erc20 ? (
+          <>
+            {erc20.kind === 'transfer' ? (
+              <>
+                <div className="row">
+                  <span className="label">토큰 받는 주소</span>
+                  <span className="addr" title={erc20.to}>{erc20.to}</span>
+                </div>
+                <div className="row">
+                  <span className="label">토큰 수량 (raw)</span>
+                  <span className="value-sub">{erc20.amount.toString()}</span>
+                </div>
+              </>
+            ) : null}
+            {erc20.kind === 'approve' ? (
+              <>
+                <div className="row">
+                  <span className="label">권한 부여 대상(spender)</span>
+                  <span className="addr" title={erc20.spender}>{erc20.spender}</span>
+                </div>
+                <div className="row">
+                  <span className="label">권한 금액 (raw)</span>
+                  <span className="value-sub">{erc20.amount.toString()}</span>
+                </div>
+              </>
+            ) : null}
+            {erc20.kind === 'transferFrom' ? (
+              <>
+                <div className="row">
+                  <span className="label">토큰 보내는 주소(from)</span>
+                  <span className="addr" title={erc20.from}>{erc20.from}</span>
+                </div>
+                <div className="row">
+                  <span className="label">토큰 받는 주소(to)</span>
+                  <span className="addr" title={erc20.to}>{erc20.to}</span>
+                </div>
+                <div className="row">
+                  <span className="label">토큰 수량 (raw)</span>
+                  <span className="value-sub">{erc20.amount.toString()}</span>
+                </div>
+              </>
+            ) : null}
+          </>
+        ) : null}
+
+        {unlimitedApprove ? (
+          <p className="warn small" style={{ background: '#fff7d6', padding: '8px', borderRadius: 4 }}>
+            ⚠ 무제한 권한 위임(approve) 이 감지되었습니다. 본 사이트(spender) 가 해당 토큰의
+            잔고 전체를 언제든 인출할 수 있게 됩니다. 의도한 바가 아니라면 거부하세요.
+          </p>
+        ) : null}
+
+        {transferToZero ? (
+          <p className="warn small" style={{ background: '#ffe0e0', padding: '8px', borderRadius: 4 }}>
+            ⚠ 받는 주소가 0x000…000(영주소) 입니다. 토큰을 영구적으로 소각하는 호출일 수
+            있습니다. 정말 보낼 의도라면 다시 한 번 확인하세요.
+          </p>
+        ) : null}
+
+        {transferToSelf ? (
+          <p className="warn small" style={{ background: '#fff7d6', padding: '8px', borderRadius: 4 }}>
+            ⚠ 받는 주소가 보내는 주소와 동일합니다. 일부 dApp 이 이런 패턴을 미끼로 사용하는
+            경우가 있으니 의도를 다시 확인하세요.
+          </p>
+        ) : null}
+
         {dataNonEmpty ? (
           <div className="row">
             <span className="label">Raw calldata</span>
@@ -419,6 +515,14 @@ function SendTxView({
           없습니다.
         </p>
 
+        {/* 1시간 자동 승인 토글 — eth_sendTransaction 의 grant 는 method 레벨이므로
+            이 사이트가 보낼 모든 트랜잭션(다른 to/value/data 포함) 이 자동 승인된다.
+            사용자가 이 점을 정확히 알 수 있도록 별도 경고를 토글 바로 위에 표시. */}
+        <p className="warn small" style={{ background: '#fff7d6', padding: '6px', borderRadius: 4 }}>
+          ※ "1시간 자동 승인" 을 켜면 이 사이트가 보내는 <strong>모든 트랜잭션</strong> 이
+          (받는 주소·금액·calldata 와 관계없이) 자동 승인됩니다. 신뢰할 수 있는 사이트에서만
+          켜세요.
+        </p>
         <RememberToggle method={ctx.method} checked={remember} onChange={setRemember} />
 
         <div className="actions">
@@ -449,6 +553,17 @@ function SignTypedDataView({
     if (ctx.domain.chainId === undefined || ctx.domain.chainId === null) return null;
     return String(ctx.domain.chainId);
   }, [ctx.domain.chainId]);
+
+  // 위험 패턴: Permit(EIP-2612 권한 위임), Seaport(NFT 양도 위임), Unicode 동형이의어.
+  const risks = useMemo(
+    () =>
+      detectTypedDataRisks({
+        primaryType: ctx.primaryType,
+        domainName: ctx.domain.name,
+        verifyingContract: ctx.domain.verifyingContract,
+      }),
+    [ctx.primaryType, ctx.domain.name, ctx.domain.verifyingContract],
+  );
 
   return (
     <main className="confirm">
@@ -534,11 +649,40 @@ function SignTypedDataView({
           )}
         </div>
 
+        {risks.includes('permit') ? (
+          <p className="warn small" style={{ background: '#ffe0e0', padding: '8px', borderRadius: 4 }}>
+            ⚠ 토큰 사용 권한 위임(Permit) 서명입니다. 본 서명을 제출하면 spender 가
+            해당 토큰을 본 지갑에서 인출할 수 있게 됩니다. <strong>위조 사이트 주의</strong> —
+            도메인과 spender 주소를 반드시 확인하세요.
+          </p>
+        ) : null}
+
+        {risks.includes('seaport') ? (
+          <p className="warn small" style={{ background: '#ffe0e0', padding: '8px', borderRadius: 4 }}>
+            ⚠ Seaport(OpenSea) 주문 서명입니다. 본 서명은 NFT/토큰 양도 권한을 위임합니다.
+            제출하면 되돌릴 수 없습니다. 메시지의 항목(offer/consideration) 을 반드시 확인하세요.
+          </p>
+        ) : null}
+
+        {risks.includes('unicode') ? (
+          <p className="warn small" style={{ background: '#fff7d6', padding: '8px', borderRadius: 4 }}>
+            ⚠ 도메인 이름 또는 primaryType 에 ASCII 가 아닌 문자가 포함되어 있습니다. 익숙한
+            서비스(예: "Permit") 와 비슷한 동형이의어(예: "Permіt", Cyrillic "і") 일 수 있으니
+            서비스 이름의 철자를 다시 확인하세요.
+          </p>
+        ) : null}
+
         <p className="warn small">
           ※ EIP-712 서명은 자산 이동/권한 부여(예: Permit, Seaport 주문) 의 인증 수단으로
           쓰일 수 있습니다. 도메인과 메시지 내용을 반드시 확인하세요.
         </p>
 
+        {/* 1시간 자동 승인 — typed-data 자체는 자유 형식이므로 매우 위험하다. 반드시
+            "이 사이트가 다음 한 시간 동안 임의의 메시지를 자동 서명받게 된다" 임을 명시. */}
+        <p className="warn small" style={{ background: '#fff7d6', padding: '6px', borderRadius: 4 }}>
+          ※ "1시간 자동 승인" 을 켜면 이 사이트가 요청하는 <strong>모든 EIP-712 메시지</strong>
+          (Permit 등 권한 위임 포함) 가 자동 서명됩니다. 신뢰할 수 있는 사이트에서만 켜세요.
+        </p>
         <RememberToggle method={ctx.method} checked={remember} onChange={setRemember} />
 
         <div className="actions">

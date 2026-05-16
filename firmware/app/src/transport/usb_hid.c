@@ -74,6 +74,59 @@ BUILD_ASSERT(HID_REPORT_LEN >= 32 && HID_REPORT_LEN <= 1024,
 BUILD_ASSERT(MAX_APDU_LEN >= HID_REPORT_LEN,
 	     "MAX_APDU_LEN must fit at least one HID report");
 
+/*
+ * Why we cap the report at 64 bytes even though USB HS interrupt endpoints
+ * support up to 1024-byte packets: 64 is the Ledger-protocol convention and
+ * what every companion SDK in the wild assumes. Widening this would force
+ * SDK changes on every host platform we support. If we ever need to push
+ * larger reports, bump CONFIG_NODONG_USB_HID_REPORT_LEN and pin the
+ * companion SDK version simultaneously.
+ */
+
+/*
+ * HID is interface 0 of the composite USB device. Today there is only HID,
+ * but if a future build adds another USB class (MSC for a "files" mode, CDC
+ * for a debug shell, etc.), the host driver enumerates by interface number
+ * and the companion SDK keys off interface 0 == HID. Pin it here so a
+ * reordering shows up at build time, not as a silent enumeration breakage
+ * in the field.
+ */
+#define NODONG_HID_INTERFACE 0
+#if defined(CONFIG_USB_CDC_ACM) || defined(CONFIG_USB_MASS_STORAGE)
+/*
+ * If another USB class lands in the build, the linker order determines the
+ * interface number assignment. We cannot statically prove HID == 0 from the
+ * legacy stack's macros, so leave a loud reminder for the embedded dev to
+ * re-verify with `lsusb -v` after enabling the additional class.
+ */
+#warning "Additional USB class enabled — verify NODONG_HID_INTERFACE is still 0"
+#endif
+
+/*
+ * VID/PID hygiene.
+ *
+ * CONFIG_USB_DEVICE_VID=0x2C97 is **Ledger SAS**'s registered USB-IF vendor
+ * ID. We are using it as a placeholder so the companion SDK (forked from
+ * Ledger's) doesn't need to be re-keyed during bench bring-up, but shipping
+ * a product on someone else's VID is both legally questionable and a
+ * support-burden landmine (USB-IF database collisions, host udev rules,
+ * etc.). Before any external distribution we MUST either:
+ *   (a) obtain our own VID from USB-IF (~$6k/year membership), or
+ *   (b) license a sub-VID from a USB-IF member program, or
+ *   (c) use a pid.codes / openmoko community VID for hobbyist builds.
+ *
+ * We deliberately use BUILD_ASSERT rather than #warning so a release build
+ * cannot accidentally ship with the squatted VID; if you are doing bench
+ * work, define NODONG_VID_SQUAT_ACK in the per-developer overlay file.
+ */
+#if !defined(NODONG_VID_SQUAT_ACK)
+BUILD_ASSERT(CONFIG_USB_DEVICE_VID != 0x2C97,
+	     "CONFIG_USB_DEVICE_VID=0x2C97 is Ledger's VID. "
+	     "Allocate our own VID before release, or define "
+	     "NODONG_VID_SQUAT_ACK in a per-developer overlay to silence "
+	     "this for bench work only. See TODO in usb_hid.c.");
+#endif
+
 /* ----------------------- RX reassembly ---------------------------------- */
 
 enum rx_state {

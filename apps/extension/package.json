@@ -8,7 +8,8 @@
     "dev": "wxt",
     "build": "wxt build",
     "zip": "wxt zip",
-    "typecheck": "wxt prepare && tsc --noEmit"
+    "typecheck": "wxt prepare && tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@nodong/shell-core": "workspace:*",
@@ -23,6 +24,7 @@
     "@types/react-dom": "^18.3.1",
     "@wxt-dev/module-react": "^1.1.0",
     "typescript": "^5.6.3",
+    "vitest": "^2.1.5",
     "wxt": "^0.19.13"
   }
 }

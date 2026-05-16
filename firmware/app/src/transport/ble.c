@@ -223,10 +223,23 @@ static void on_connected(struct bt_conn *conn, uint8_t err)
 	 * The characteristic permission would refuse the write anyway, but
 	 * raising the security here gives us a deterministic point to
 	 * react to authentication failure.
+	 *
+	 * -EBUSY means a security procedure is already in flight (e.g. the
+	 * central kicked one off first) — that's benign; the security_changed
+	 * callback will still fire when it completes.
+	 *
+	 * Any other negative rc means we could not even *initiate* the
+	 * upgrade — at that point the link is plaintext from our perspective
+	 * and the GATT permissions would block reads/writes, but holding a
+	 * plaintext link around is pointless attack surface (and may also
+	 * keep us out of advertising). Drop it.
 	 */
 	int rc = bt_conn_set_security(conn, BT_SECURITY_L2);
 	if (rc && rc != -EBUSY) {
-		ND_LOG_ERR("ble: bt_conn_set_security rc=%d", rc);
+		ND_LOG_ERR("ble: bt_conn_set_security rc=%d — disconnecting", rc);
+		(void)bt_conn_disconnect(conn,
+				BT_HCI_ERR_AUTH_FAIL);
+		return;
 	}
 	ND_LOG_INF("ble: connected");
 }
@@ -252,9 +265,24 @@ static void on_security_changed(struct bt_conn *conn,
 				bt_security_t level,
 				enum bt_security_err err)
 {
-	(void)conn;
 	if (err) {
-		ND_LOG_ERR("ble: security level change failed, err=%d", err);
+		/*
+		 * Pairing failed or the central refused the upgrade. Per
+		 * security policy we MUST NOT allow GATT activity over a
+		 * plaintext link — drop the conn and let advertising restart.
+		 * Even though BT_GATT_PERM_WRITE_ENCRYPT would refuse the
+		 * write, holding the link reserves a connection slot and
+		 * burns radio time.
+		 */
+		ND_LOG_ERR("ble: security level change failed, err=%d "
+			   "— disconnecting", err);
+		(void)bt_conn_disconnect(conn, BT_HCI_ERR_AUTH_FAIL);
+		return;
+	}
+	if (level < BT_SECURITY_L2) {
+		ND_LOG_ERR("ble: security level %u below L2 — disconnecting",
+			   (unsigned)level);
+		(void)bt_conn_disconnect(conn, BT_HCI_ERR_AUTH_FAIL);
 		return;
 	}
 	ND_LOG_INF("ble: security level = %u", (unsigned)level);
@@ -327,8 +355,20 @@ static const struct bt_conn_auth_cb m_auth_cb = {
 	 * passkey_display/passkey_entry intentionally left NULL — we use
 	 * CONFIG_BT_FIXED_PASSKEY (set in prj.conf) which causes the stack
 	 * to show a fixed passkey set with bt_passkey_set() at init.
-	 * TODO(embedded dev): wire bt_passkey_set() from a per-device
-	 * provisioning blob in keystore-meta.
+	 *
+	 * TODO(WAVE-7, embedded dev): default behaviour today is Just Works
+	 * pairing because bt_passkey_set() has NOT been called yet — that
+	 * is unauthenticated and vulnerable to a MITM during the pairing
+	 * window. Before shipping:
+	 *   1) provision a per-device 6-digit passkey into keystore-meta
+	 *      at manufacture time,
+	 *   2) call bt_passkey_set() from nodong_ble_init() before
+	 *      bt_enable() (or immediately after, per Zephyr docs),
+	 *   3) wire a passkey_display callback that paints the passkey on
+	 *      the e-ink during the pairing exchange so the user can
+	 *      compare it against the value shown by the companion app.
+	 * Until (1)–(3) ship, BLE pairing MUST be considered untrusted and
+	 * SIGN_HASH over BLE MUST stay off (see CONFIG_NODONG_ALLOW_BLE_SIGNING).
 	 */
 };
 
@@ -390,6 +430,25 @@ int nodong_ble_init(void)
 	return 0;
 }
 
+/*
+ * Shutdown semantics on MCU reset / firmware upgrade.
+ *
+ * We deliberately do NOT call bt_disable() on the firmware-upgrade or
+ * reboot path. Rationale:
+ *   - sys_reboot() (Zephyr's controlled reset) drops the BLE controller
+ *     hardware into reset along with the CPU, which the central observes
+ *     as a supervision-timeout link loss — the same as a battery pull.
+ *     The peer-side reconnect logic must already cope with this.
+ *   - bt_disable() on Zephyr v3.7 is the explicit "tear down stack" path
+ *     and is intended for the rare case where a wallet stays running
+ *     while a sub-system reboots. It is NOT required (and not safe to
+ *     call from a reboot ISR; it sleeps).
+ *
+ * If a future code path stays running across a partial reset (e.g. soft
+ * MCUboot swap that does NOT reboot), THAT path should bt_disable()
+ * cleanly before swapping, then bt_enable() again afterwards.
+ */
+
 int nodong_ble_start_advertising(void)
 {
 	if (!m_bt_enabled) {
@@ -399,7 +458,35 @@ int nodong_ble_start_advertising(void)
 		return 0;
 	}
 
-	int rc = bt_le_adv_start(BT_LE_ADV_CONN_NAME,
+	/*
+	 * Advertising interval tuning.
+	 *
+	 * Zephyr's `BT_LE_ADV_CONN_NAME` macro defaults to BT_GAP_ADV_FAST_INT_MIN_2
+	 * / _MAX_2 (~100–150 ms) which is fine for a "user just pressed the
+	 * pair button" window but drains battery if we keep running it
+	 * forever waiting for a central. A future refinement is to drop to
+	 * BT_GAP_ADV_SLOW_INT_MIN/MAX (~1 s) after ~5 s of unanswered
+	 * advertising; for now we pin the fast interval explicitly so the
+	 * value cannot silently change if the Zephyr default shifts.
+	 *
+	 * Flags:
+	 *   BT_LE_ADV_OPT_CONNECTABLE — central may connect to us
+	 *   BT_LE_ADV_OPT_USE_NAME    — advertise CONFIG_BT_DEVICE_NAME
+	 *                               (kept for parity with the macro
+	 *                               version we replaced; also redundant
+	 *                               with the BT_DATA_NAME_COMPLETE entry
+	 *                               in k_adv, but explicit is fine)
+	 *
+	 * TODO(power): start a k_work_delayable on no-peer that re-arms
+	 * advertising with BT_GAP_ADV_SLOW_INT_MIN / _MAX after 5 s.
+	 */
+	static const struct bt_le_adv_param k_adv_param = BT_LE_ADV_PARAM_INIT(
+		BT_LE_ADV_OPT_CONNECTABLE | BT_LE_ADV_OPT_USE_NAME,
+		BT_GAP_ADV_FAST_INT_MIN_2,
+		BT_GAP_ADV_FAST_INT_MAX_2,
+		NULL);
+
+	int rc = bt_le_adv_start(&k_adv_param,
 				 k_adv, ARRAY_SIZE(k_adv),
 				 k_scan_rsp, ARRAY_SIZE(k_scan_rsp));
 	if (rc == -EALREADY) {
@@ -502,11 +589,14 @@ int nodong_ble_send(const uint8_t *apdu, size_t len)
 /*
  * --- API drift notes for the embedded dev (DOUBLE-CHECK on real toolchain):
  *
- *   1) `BT_LE_ADV_CONN_NAME` is the v3.7 spelling. Some NCS branches use
- *      `BT_LE_ADV_CONN` + setting the name via `bt_set_name()` instead.
- *      If the symbol is missing, swap to BT_LE_ADV_CONN — both will
- *      produce a connectable advertisement, but the latter relies on
- *      the GAP name characteristic to surface the device name.
+ *   1) We previously used the convenience macro `BT_LE_ADV_CONN_NAME`; we
+ *      now pass an explicit `bt_le_adv_param` so the advertising interval
+ *      is pinned to BT_GAP_ADV_FAST_INT_MIN_2 / _MAX_2 rather than
+ *      whatever the macro's default happens to be on a given Zephyr
+ *      revision. If `BT_LE_ADV_OPT_USE_NAME` is renamed (some NCS forks
+ *      strip the option in favour of relying on BT_DATA_NAME_COMPLETE in
+ *      the adv-data array), drop it from the flags — k_adv already
+ *      carries the complete-name AD type.
  *
  *   2) `BT_GATT_WRITE_FLAG_PREPARE` is the canonical name in v3.7.
  *      Older Zephyr called it BT_GATT_WRITE_FLAG_CMD; this is the

@@ -407,9 +407,19 @@ async function handleRpc(
       if (!isHex(dataHex)) {
         return fail(RPC_ERRORS.INVALID_PARAMS.code, '잘못된 data hex');
       }
-      // hex 길이는 0x + 짝수 자리. 셀렉터만 있어도(4바이트=8자) 허용.
+      // hex 길이는 0x + 짝수 자리.
       if (dataHex !== '0x' && dataHex.length % 2 !== 0) {
         return fail(RPC_ERRORS.INVALID_PARAMS.code, 'data hex 길이 홀수');
+      }
+      // 보안: 셀렉터 4바이트 미만(=0x + 8 hex chars 미만, 단 '0x' 자체는 제외)인
+      // calldata 는 거부. 1~3바이트는 어떤 표준 함수 호출에도 해당하지 않으며,
+      // 노출되면 사용자가 confirm popup 에서 어떤 함수가 호출되는지 알 수 없다.
+      // (어떤 dApp 이든 '0x12' 같은 데이터를 보낼 정상적 이유가 없다.)
+      if (dataHex !== '0x' && dataHex.length < 10) {
+        return fail(
+          RPC_ERRORS.INVALID_PARAMS.code,
+          'calldata 가 셀렉터(4바이트) 보다 짧습니다',
+        );
       }
 
       const valueHex = tx.value ?? '0x0';
@@ -765,20 +775,42 @@ function handleConnectResult(
  *  - grant 는 메서드 호출 자체를 자동승인할 뿐 서명 대상(메시지 내용)에 묶이지 않음.
  *    UX 상 사용자에게 "임의 메시지 자동 서명 가능" 임을 popup 에 명시 경고.
  */
+/**
+ * grant 키에 박을 계정 주소 추출. eth_sendTransaction 은 `from`, 그 외는 `address`.
+ * 추출 실패(주소가 비어있거나 잘못된 형식) 시 null — 호출부는 grant 경로 자체를
+ * 건너뛰고 popup 으로 폴백한다.
+ */
+function grantSubject(ctx: ConfirmContext): string | null {
+  const addr =
+    ctx.method === 'eth_sendTransaction' ? ctx.from : ctx.address;
+  if (typeof addr !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(addr)) return null;
+  return addr.toLowerCase();
+}
+
 function openConfirm(ctxInput: ConfirmContext): Promise<'approve' | 'reject'> {
   return new Promise<'approve' | 'reject'>((resolve) => {
     const requestId = makeRequestId();
     const nonce = makeNonce();
     const context: ConfirmContext = { ...ctxInput, requestId };
 
-    // 자동 승인 path: origin+method 유효 grant 가 있으면 popup 건너뛰고 즉시 통과.
+    // 자동 승인 path: origin+method+address 유효 grant 가 있으면 popup 건너뛰고 즉시 통과.
     // grant 체크 자체는 async — 비동기로 검사한 뒤, 결과에 따라 popup 을 띄울지 결정.
+    //
+    // address 는 ctxInput 의 메서드별 필드에서 추출. eth_sendTransaction 은 from,
+    // 그 외는 address. 누락된 경우는 grant 체크를 건너뛰고(=popup 표시) 보수적으로 처리.
+    const grantAddress = grantSubject(ctxInput);
     void (async () => {
       try {
-        const ok = await hasGrant(ctxInput.origin, ctxInput.method as GrantMethod);
-        if (ok) {
-          resolve('approve');
-          return;
+        if (grantAddress) {
+          const ok = await hasGrant(
+            ctxInput.origin,
+            ctxInput.method as GrantMethod,
+            grantAddress,
+          );
+          if (ok) {
+            resolve('approve');
+            return;
+          }
         }
       } catch {
         // storage 조회 실패는 보수적으로 popup 으로 폴백.
@@ -797,9 +829,13 @@ function openConfirm(ctxInput: ConfirmContext): Promise<'approve' | 'reject'> {
       }, CONFIRM_TIMEOUT_MS);
 
       const slotResolve = (d: ConfirmDecision): void => {
-        // grant 발급은 approve 이고 rememberFor1h 가 true 인 경우에만.
-        if (d.decision === 'approve' && d.rememberFor1h) {
-          void addGrant(ctxInput.origin, ctxInput.method as GrantMethod);
+        // grant 발급은 approve 이고 rememberFor1h 가 true 이고 address 가 확보된 경우에만.
+        if (d.decision === 'approve' && d.rememberFor1h && grantAddress) {
+          void addGrant(
+            ctxInput.origin,
+            ctxInput.method as GrantMethod,
+            grantAddress,
+          );
         }
         resolve(d.decision);
       };
