@@ -60,10 +60,24 @@ const ICON_DATA_URL = 'data:image/svg+xml,' + encodeURIComponent(ICON_SVG);
 const BRAND_NAME = codesToString([0xB178, 0xB3D9, 0xC790, 0xC758, 0x20, 0xC9C0, 0xAC11]);
 
 class NodongInpageProvider {
+  // ── 식별 플래그 ────────────────────────────────────────────
+  // 우리는 MetaMask 가 *아니다*. 사칭 금지 — 일부 dApp 이 isMetaMask 만 보고
+  // legacy MM 분기를 타려고 해도 EIP-6963 / isNodong 으로 우리를 구분해야 한다.
   readonly isMetaMask = false;
   readonly isNodong = true;
-  readonly chainId = '0x1e61'; // 7777 — 정적 노출(부팅 직후 일부 dApp 이 동기적으로 읽음)
-  readonly networkVersion = '7777';
+
+  // ── eager (legacy) 표면 ───────────────────────────────────
+  // EIP-1193 은 chainId/selectedAddress 를 *권장* 사항으로만 두지만, 실제 dApp
+  // (MetaMask test-dapp 포함)이 sync property 로 읽기에 호환성 차원에서 노출한다.
+  // 값은 request() 결과로 자동 갱신된다.
+  chainId: string = '0x1e61';   // 7777 — TTL 메인넷
+  networkVersion: string = '7777';
+  selectedAddress: string | null = null;
+
+  // EIP-1193 isConnected(): provider 자체가 RPC 를 받을 수 있는 상태인지.
+  // 본 inpage 는 background SW 가 살아있는 한 항상 routing 가능하므로 true.
+  // (계정 unlock 여부는 별개 — 이는 selectedAddress / eth_accounts 가 표현한다.)
+  isConnected = (): boolean => true;
 
   private nextId = 1;
   private readonly pending = new Map<
@@ -91,6 +105,10 @@ class NodongInpageProvider {
           slot.resolve(res.result);
         }
       } else if (data.dir === 'cs-to-page-event') {
+        // background → content → inpage 로 흘러온 푸시 이벤트
+        // (예: 사용자가 popup 에서 잠금 → accountsChanged([]) 푸시).
+        // 본 분기에서는 eager state 도 함께 갱신한다.
+        this.applyEventSideEffects(data.event, data.data);
         this.emit(data.event, data.data);
       }
     });
@@ -108,10 +126,15 @@ class NodongInpageProvider {
     const id = this.nextId++;
     const req: JsonRpcRequest = { id, method: args.method, params: args.params };
     const envelope: WindowEnvelope = { tag: NODONG_MSG_TAG, dir: 'page-to-cs', payload: req };
-    return new Promise<unknown>((resolve, reject) => {
+    const result = await new Promise<unknown>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       window.postMessage(envelope, '*');
     });
+    // 알려진 메서드의 결과로 eager state 갱신 + 변경 시 이벤트 발사.
+    // 이로써 dApp 이 매번 chainId 를 request() 로 묻지 않아도 sync 프로퍼티만으로
+    // 최신 값을 얻을 수 있다(MetaMask test-dapp Status 필드 등).
+    this.absorbRequestResult(args.method, result);
+    return result;
   }
 
   on(event: string, fn: Listener): this {
@@ -125,15 +148,68 @@ class NodongInpageProvider {
     return this;
   }
 
-  private emit(event: string, data?: unknown): void {
+  // EIP-1193 deprecated alias. 일부 legacy dApp(예: 오래된 wallet-connect 데모)은
+  // 여전히 enable() 만 호출한다. 표준 spec 은 eth_requestAccounts 로 동등.
+  enable(): Promise<string[]> {
+    return this.request({ method: 'eth_requestAccounts' }) as Promise<string[]>;
+  }
+
+  /** 외부에서 임의 이벤트를 페이지로 알려야 할 때(테스트/디버그) 호출 가능. 내부적으로는 emit 으로 통일. */
+  emit(event: string, data?: unknown): void {
     const set = this.listeners.get(event);
     if (!set) return;
     for (const fn of set) {
       try {
         fn(data);
       } catch {
-        // listener 예외는 무시 — 다른 listener 보호.
+        // listener 예외는 무시 — 다른 listener 보호 (EIP-1193 권고).
       }
+    }
+  }
+
+  /**
+   * request() 의 결과를 eager state(chainId/networkVersion/selectedAddress) 에
+   * 흡수하고, 변경된 경우에만 EIP-1193 이벤트를 발사한다.
+   */
+  private absorbRequestResult(method: string, result: unknown): void {
+    if (method === 'eth_requestAccounts' || method === 'eth_accounts') {
+      const accounts = Array.isArray(result) ? (result as string[]) : [];
+      const newSelected = accounts[0] ?? null;
+      if (this.selectedAddress !== newSelected) {
+        this.selectedAddress = newSelected;
+        this.emit('accountsChanged', accounts);
+      }
+      return;
+    }
+    if (method === 'eth_chainId' && typeof result === 'string') {
+      const newChainId = result;
+      if (this.chainId !== newChainId) {
+        this.chainId = newChainId;
+        // networkVersion 은 10진 문자열. 0x… → number → String.
+        const n = parseInt(newChainId, 16);
+        this.networkVersion = Number.isFinite(n) ? String(n) : this.networkVersion;
+        this.emit('chainChanged', newChainId);
+      }
+    }
+  }
+
+  /**
+   * background → content → inpage 푸시 이벤트의 부수효과.
+   * TODO: 현재 content.ts 는 background 의 chrome.runtime.onMessage 를 듣지
+   * 않으므로 본 경로는 실제로 트리거되지 않는다. v0.3 에서 content 가
+   * chrome.runtime.onMessage 로 'wallet-locked' / 'accounts-changed' 를
+   * 수신해 'cs-to-page-event' envelope 로 포워딩하면 자동으로 활성화된다.
+   */
+  private applyEventSideEffects(event: string, data: unknown): void {
+    if (event === 'accountsChanged') {
+      const accounts = Array.isArray(data) ? (data as string[]) : [];
+      this.selectedAddress = accounts[0] ?? null;
+    } else if (event === 'chainChanged' && typeof data === 'string') {
+      this.chainId = data;
+      const n = parseInt(data, 16);
+      if (Number.isFinite(n)) this.networkVersion = String(n);
+    } else if (event === 'disconnect') {
+      this.selectedAddress = null;
     }
   }
 }
@@ -220,4 +296,10 @@ export default defineUnlistedScript(() => {
   }
 
   window.dispatchEvent(new Event('ethereum#initialized'));
+
+  // EIP-1193: provider 가 RPC 처리 준비를 마치면 'connect' 이벤트를 발사해야 한다.
+  // chainId 가 이미 eager 노출돼 있으므로 listener 가 등록되기 *전* 발사되어도
+  // 동기 property 로 안전하게 fallback 가능. setTimeout(0) 으로 dApp 의
+  // ethereum#initialized 핸들러가 먼저 on('connect',...) 을 걸 기회를 준다.
+  setTimeout(() => provider.emit('connect', { chainId: provider.chainId }), 0);
 });

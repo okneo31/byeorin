@@ -114,6 +114,34 @@ test.describe('노동자의 지갑 extension smoke', () => {
       expect(flags.isNodong).toBe(true);
       expect(flags.isMetaMask).toBe(false);
 
+      // EIP-1193 호환 표면 — MetaMask test-dapp 의 Network/ChainId Status 필드가 이를 읽는다.
+      const surface = await page.evaluate(() => {
+        const n = (window as unknown as {
+          nodong: {
+            networkVersion: string;
+            selectedAddress: string | null;
+            isConnected: () => boolean;
+            enable: () => Promise<string[]>;
+            on: (e: string, fn: (...a: unknown[]) => void) => unknown;
+            removeListener: (e: string, fn: (...a: unknown[]) => void) => unknown;
+          };
+        }).nodong;
+        return {
+          networkVersion: n.networkVersion,
+          selectedAddress: n.selectedAddress,
+          isConnected: typeof n.isConnected === 'function' ? n.isConnected() : null,
+          hasEnable: typeof n.enable === 'function',
+          hasOn: typeof n.on === 'function',
+          hasRemove: typeof n.removeListener === 'function',
+        };
+      });
+      expect(surface.networkVersion).toBe('7777');
+      expect(surface.selectedAddress).toBeNull();
+      expect(surface.isConnected).toBe(true);
+      expect(surface.hasEnable).toBe(true);
+      expect(surface.hasOn).toBe(true);
+      expect(surface.hasRemove).toBe(true);
+
       // window.ethereum 슬롯도 차지하고 있어야 한다(다른 지갑이 없는 경우).
       // 단 inpage.ts 는 DOMContentLoaded 후 200ms 양보 + 즉시채움 경로가 있으므로 잠깐 기다린다.
       await page.waitForFunction(() => 'ethereum' in window && (window as any).ethereum?.isNodong === true, undefined, { timeout: 5_000 });
