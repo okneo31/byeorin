@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>노동자의 지갑 — 직접 테스트</title>
+  <style>
+    :root {
+      --red: #c41e1e; --black: #0a0a0a; --yellow: #f4c430;
+      --paper: #fffaf0; --gray: #6a6a6a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      max-width: 960px; margin: 24px auto; padding: 0 16px;
+      background: var(--paper); color: var(--black);
+    }
+    h1 { color: var(--red); margin-top: 0; }
+    h2 { border-bottom: 2px solid var(--yellow); padding-bottom: 6px; margin-top: 28px; }
+    .card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin: 12px 0; }
+    button {
+      background: var(--red); color: #fff; border: 0; padding: 10px 18px;
+      border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; margin: 4px 4px 4px 0;
+    }
+    button:hover { background: #861010; }
+    button.secondary { background: #fff; color: var(--red); border: 2px solid var(--red); }
+    pre {
+      background: #1a1a1a; color: #f4f4f4; padding: 12px; border-radius: 6px;
+      overflow-x: auto; font-size: 12px; max-height: 200px;
+    }
+    .ok { color: #2d6a4f; }
+    .err { color: var(--red); }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .row > span { font-family: monospace; }
+    label { display: block; margin: 8px 0 4px; font-weight: 600; font-size: 13px; }
+    input, textarea {
+      width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 13px;
+    }
+    textarea { min-height: 80px; }
+  </style>
+</head>
+<body>
+  <h1>노동자의 지갑 — 자체 dApp 테스트</h1>
+  <p>이 페이지는 EIP-1193 + EIP-6963 모든 핵심 메서드를 직접 호출합니다. 외부 chainId 등록 의존 없음.</p>
+
+  <div class="card">
+    <h2>1. Provider 발견</h2>
+    <div class="row">
+      <button onclick="discover()">EIP-6963 announce 수집 (300ms)</button>
+      <button onclick="useNodongDirectly()" class="secondary">window.nodong 직접 사용</button>
+    </div>
+    <pre id="discover-out">대기 중…</pre>
+  </div>
+
+  <div class="card">
+    <h2>2. 동기 속성 (eager) — 팝업 없음</h2>
+    <div class="row">
+      <button onclick="readSync()">chainId / networkVersion / isMetaMask 읽기</button>
+    </div>
+    <pre id="sync-out">대기 중…</pre>
+  </div>
+
+  <div class="card">
+    <h2>3. 연결 (eth_requestAccounts)</h2>
+    <div class="row">
+      <button onclick="callMethod('eth_requestAccounts')">연결 요청 — 첫 호출 시 connect 팝업</button>
+      <button onclick="callMethod('eth_accounts')">이미 연결됐는지 (eth_accounts)</button>
+      <button onclick="callMethod('eth_chainId')">eth_chainId 조회</button>
+      <button onclick="callMethod('net_version')">net_version 조회</button>
+    </div>
+    <pre id="conn-out">대기 중…</pre>
+  </div>
+
+  <div class="card">
+    <h2>4. personal_sign — confirm 팝업 검증</h2>
+    <label>서명할 메시지 (한글 가능)</label>
+    <textarea id="msg">노동자의 지갑 첫 서명 — Hello from test dApp</textarea>
+    <div class="row">
+      <button onclick="personalSign()">personal_sign — 확인 팝업이 떠야 함</button>
+    </div>
+    <pre id="sign-out">대기 중…</pre>
+  </div>
+
+  <div class="card">
+    <h2>5. eth_signTypedData_v4 — EIP-712</h2>
+    <p style="font-size:12px;color:var(--gray)">아래 JSON 은 ERC-2612 Permit 패턴. 우리 popup 에서 빨간 경고 배너가 떠야 정상.</p>
+    <textarea id="typed" rows="14"></textarea>
+    <div class="row">
+      <button onclick="signTyped()">signTypedData_v4 — Permit 경고 팝업 검증</button>
+      <button onclick="signTypedSimple()" class="secondary">Permit 아닌 일반 typed data</button>
+    </div>
+    <pre id="typed-out">대기 중…</pre>
+  </div>
+
+  <div class="card">
+    <h2>6. eth_sendTransaction — value 송금</h2>
+    <label>수신 주소</label>
+    <input id="to" value="0x000000000000000000000000000000000000dEaD" />
+    <label>금액 (wei)</label>
+    <input id="value" value="1000000000000000" />
+    <div class="row">
+      <button onclick="sendTx()">송금 — 잔액 부족 에러 OK, 팝업이 뜨면 통과</button>
+    </div>
+    <pre id="send-out">대기 중…</pre>
+  </div>
+
+  <div class="card">
+    <h2>7. eth_sendTransaction — 컨트랙트 호출 (data)</h2>
+    <p style="font-size:12px;color:var(--gray)">ERC-20 <code>transfer(to, amount)</code> 호출. 우리 popup 에서 4-byte selector 디코드 + decoded args 표시되어야.</p>
+    <label>컨트랙트 주소 (예: USDC mock)</label>
+    <input id="contract" value="0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" />
+    <label>전송 받을 주소</label>
+    <input id="erc20-to" value="0x000000000000000000000000000000000000dEaD" />
+    <label>금액 (uint256 — 예: 1.5 USDC = 1500000)</label>
+    <input id="erc20-amount" value="1500000" />
+    <div class="row">
+      <button onclick="sendErc20()">transfer() 호출 — 4-byte 디코드 팝업 검증</button>
+    </div>
+    <pre id="erc20-out">대기 중…</pre>
+  </div>
+
+  <div class="card">
+    <h2>8. 이벤트 listener</h2>
+    <div class="row">
+      <button onclick="setupListeners()">accountsChanged / chainChanged / connect / disconnect 구독</button>
+    </div>
+    <pre id="event-out">listener 미설정</pre>
+  </div>
+
+  <script>
+    let provider = null;
+    const log = (id, data, ok = true) => {
+      const el = document.getElementById(id);
+      el.className = ok ? 'ok' : 'err';
+      el.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+    };
+
+    function discover() {
+      const wallets = [];
+      const handler = (e) => wallets.push(e.detail.info);
+      window.addEventListener('eip6963:announceProvider', handler);
+      window.dispatchEvent(new Event('eip6963:requestProvider'));
+      setTimeout(() => {
+        window.removeEventListener('eip6963:announceProvider', handler);
+        const found = wallets.find(w => w.rdns === 'top.ttl1.nodong');
+        if (found) {
+          provider = wallets[0]; // EIP-6963 detail.provider 가 진짜인데 info 만 쌓았으니 다시 모음
+          // 재시도 — provider 객체까지 캡처
+          const fullWallets = [];
+          const h2 = (e) => fullWallets.push({ info: e.detail.info, provider: e.detail.provider });
+          window.addEventListener('eip6963:announceProvider', h2);
+          window.dispatchEvent(new Event('eip6963:requestProvider'));
+          setTimeout(() => {
+            window.removeEventListener('eip6963:announceProvider', h2);
+            const ours = fullWallets.find(w => w.info.rdns === 'top.ttl1.nodong');
+            if (ours) {
+              provider = ours.provider;
+              log('discover-out', { count: fullWallets.length, wallets: fullWallets.map(w => w.info), active: ours.info });
+            } else {
+              log('discover-out', '노동자의 지갑 announce 안 됨. 확장 새로고침 + 페이지 새로고침 필요.', false);
+            }
+          }, 200);
+        } else {
+          log('discover-out', '노동자의 지갑 못 찾음. announce 이벤트 들었으나 rdns=top.ttl1.nodong 미발견. 확장 활성 확인.', false);
+        }
+      }, 300);
+    }
+
+    function useNodongDirectly() {
+      if (!window.nodong) {
+        log('discover-out', 'window.nodong 없음. 확장이 inpage 주입 안 함.', false);
+        return;
+      }
+      provider = window.nodong;
+      log('discover-out', { source: 'window.nodong', chainId: provider.chainId, isNodong: provider.isNodong });
+    }
+
+    function ensureProvider() {
+      if (!provider) provider = window.nodong;
+      if (!provider) throw new Error('Provider 미선택. 1번 박스에서 발견부터.');
+      return provider;
+    }
+
+    function readSync() {
+      try {
+        const p = ensureProvider();
+        log('sync-out', {
+          chainId: p.chainId,
+          networkVersion: p.networkVersion,
+          isMetaMask: p.isMetaMask,
+          isNodong: p.isNodong,
+          isConnected: p.isConnected?.(),
+          selectedAddress: p.selectedAddress,
+        });
+      } catch (e) { log('sync-out', String(e), false); }
+    }
+
+    async function callMethod(method, params) {
+      try {
+        const p = ensureProvider();
+        const out = (id) => document.getElementById(id);
+        const target = method.startsWith('eth_request') || method === 'eth_accounts' || method === 'eth_chainId' || method === 'net_version' ? 'conn-out' : 'sign-out';
+        out(target).className = '';
+        out(target).textContent = `${method} 요청 중…`;
+        const res = await p.request({ method, params });
+        log(target, { method, result: res });
+        return res;
+      } catch (e) {
+        const target = method.startsWith('eth_request') || method === 'eth_accounts' || method === 'eth_chainId' || method === 'net_version' ? 'conn-out' : 'sign-out';
+        log(target, { method, error: String(e), code: e.code }, false);
+      }
+    }
+
+    async function personalSign() {
+      try {
+        const p = ensureProvider();
+        const msg = document.getElementById('msg').value;
+        const accounts = await p.request({ method: 'eth_accounts' });
+        if (!accounts || accounts.length === 0) {
+          log('sign-out', '먼저 3번 박스에서 eth_requestAccounts 호출 후 다시.', false);
+          return;
+        }
+        const hex = '0x' + Array.from(new TextEncoder().encode(msg)).map(b => b.toString(16).padStart(2,'0')).join('');
+        const res = await p.request({ method: 'personal_sign', params: [hex, accounts[0]] });
+        log('sign-out', { method: 'personal_sign', message: msg, signer: accounts[0], signature: res });
+      } catch (e) { log('sign-out', { error: String(e), code: e.code }, false); }
+    }
+
+    const permitJson = {
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'version', type: 'string' },
+          { name: 'chainId', type: 'uint256' },
+          { name: 'verifyingContract', type: 'address' },
+        ],
+        Permit: [
+          { name: 'owner', type: 'address' },
+          { name: 'spender', type: 'address' },
+          { name: 'value', type: 'uint256' },
+          { name: 'nonce', type: 'uint256' },
+          { name: 'deadline', type: 'uint256' },
+        ],
+      },
+      primaryType: 'Permit',
+      domain: {
+        name: 'Test USDC',
+        version: '1',
+        chainId: 7777,
+        verifyingContract: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+      },
+      message: {
+        owner: '0x0000000000000000000000000000000000000001',
+        spender: '0x000000000000000000000000000000000000dEaD',
+        value: '1000000000000000000000',
+        nonce: '0',
+        deadline: '99999999999',
+      },
+    };
+
+    document.getElementById('typed').value = JSON.stringify(permitJson, null, 2);
+
+    async function signTyped() {
+      try {
+        const p = ensureProvider();
+        const accounts = await p.request({ method: 'eth_accounts' });
+        if (!accounts || accounts.length === 0) { log('typed-out', '먼저 3번 박스에서 연결.', false); return; }
+        const data = document.getElementById('typed').value;
+        const res = await p.request({ method: 'eth_signTypedData_v4', params: [accounts[0], data] });
+        log('typed-out', { signer: accounts[0], signature: res });
+      } catch (e) { log('typed-out', { error: String(e), code: e.code }, false); }
+    }
+
+    async function signTypedSimple() {
+      const json = {
+        types: {
+          EIP712Domain: [
+            { name: 'name', type: 'string' },
+            { name: 'version', type: 'string' },
+            { name: 'chainId', type: 'uint256' },
+          ],
+          Mail: [
+            { name: 'from', type: 'string' },
+            { name: 'to', type: 'string' },
+            { name: 'content', type: 'string' },
+          ],
+        },
+        primaryType: 'Mail',
+        domain: { name: '노동자의 지갑 테스트', version: '1', chainId: 7777 },
+        message: { from: 'alice', to: 'bob', content: '안녕하세요' },
+      };
+      document.getElementById('typed').value = JSON.stringify(json, null, 2);
+      await signTyped();
+    }
+
+    async function sendTx() {
+      try {
+        const p = ensureProvider();
+        const accounts = await p.request({ method: 'eth_accounts' });
+        if (!accounts || accounts.length === 0) { log('send-out', '먼저 3번 박스에서 연결.', false); return; }
+        const tx = {
+          from: accounts[0],
+          to: document.getElementById('to').value,
+          value: '0x' + BigInt(document.getElementById('value').value).toString(16),
+        };
+        const res = await p.request({ method: 'eth_sendTransaction', params: [tx] });
+        log('send-out', { txHash: res });
+      } catch (e) { log('send-out', { error: String(e), code: e.code }, false); }
+    }
+
+    async function sendErc20() {
+      try {
+        const p = ensureProvider();
+        const accounts = await p.request({ method: 'eth_accounts' });
+        if (!accounts || accounts.length === 0) { log('erc20-out', '먼저 3번 박스에서 연결.', false); return; }
+        const to = document.getElementById('erc20-to').value.replace(/^0x/, '').padStart(64, '0');
+        const amt = BigInt(document.getElementById('erc20-amount').value).toString(16).padStart(64, '0');
+        const data = '0xa9059cbb' + to + amt;
+        const tx = {
+          from: accounts[0],
+          to: document.getElementById('contract').value,
+          value: '0x0',
+          data,
+        };
+        const res = await p.request({ method: 'eth_sendTransaction', params: [tx] });
+        log('erc20-out', { txHash: res });
+      } catch (e) { log('erc20-out', { error: String(e), code: e.code }, false); }
+    }
+
+    function setupListeners() {
+      try {
+        const p = ensureProvider();
+        const events = [];
+        const out = () => log('event-out', events.slice(-10).reverse());
+        p.on('accountsChanged', (a) => { events.push({ event: 'accountsChanged', data: a, time: new Date().toISOString() }); out(); });
+        p.on('chainChanged', (c) => { events.push({ event: 'chainChanged', data: c, time: new Date().toISOString() }); out(); });
+        p.on('connect', (c) => { events.push({ event: 'connect', data: c, time: new Date().toISOString() }); out(); });
+        p.on('disconnect', (c) => { events.push({ event: 'disconnect', data: c, time: new Date().toISOString() }); out(); });
+        log('event-out', 'listener 설정 완료. 팝업에서 잠금/해제/체인 전환 등을 시도하세요.');
+      } catch (e) { log('event-out', String(e), false); }
+    }
+
+    // Auto-discover on load
+    window.addEventListener('load', () => setTimeout(discover, 100));
+  </script>
+</body>
+</html>

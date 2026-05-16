@@ -360,9 +360,7 @@ function PersonalSignView({
         <p className="warn small">{t('confirm.warn.personal_sign_proof')}</p>
 
         {/* 1시간 자동 승인 — personal_sign 의 grant 는 임의 메시지를 자동 서명하게 된다. */}
-        <p className="warn small" style={{ background: '#fff7d6', padding: '6px', borderRadius: 4 }}>
-          {t('confirm.warn.grant_personal_sign')}
-        </p>
+        <p className="warn-banner">{t('confirm.warn.grant_personal_sign')}</p>
         <RememberToggle method={ctx.method} checked={remember} onChange={setRemember} />
 
         <div className="actions">
@@ -540,21 +538,15 @@ function SendTxView({
         ) : null}
 
         {unlimitedApprove ? (
-          <p className="warn small" style={{ background: '#fff7d6', padding: '8px', borderRadius: 4 }}>
-            {t('confirm.warn.unlimited_approve')}
-          </p>
+          <p className="warn-banner">{t('confirm.warn.unlimited_approve')}</p>
         ) : null}
 
         {transferToZero ? (
-          <p className="warn small" style={{ background: '#ffe0e0', padding: '8px', borderRadius: 4 }}>
-            {t('confirm.warn.transfer_to_zero')}
-          </p>
+          <p className="warn-banner danger">{t('confirm.warn.transfer_to_zero')}</p>
         ) : null}
 
         {transferToSelf ? (
-          <p className="warn small" style={{ background: '#fff7d6', padding: '8px', borderRadius: 4 }}>
-            {t('confirm.warn.transfer_to_self')}
-          </p>
+          <p className="warn-banner">{t('confirm.warn.transfer_to_self')}</p>
         ) : null}
 
         {dataNonEmpty ? (
@@ -578,9 +570,7 @@ function SendTxView({
         {/* 1시간 자동 승인 토글 — eth_sendTransaction 의 grant 는 method 레벨이므로
             이 사이트가 보낼 모든 트랜잭션(다른 to/value/data 포함) 이 자동 승인된다.
             사용자가 이 점을 정확히 알 수 있도록 별도 경고를 토글 바로 위에 표시. */}
-        <p className="warn small" style={{ background: '#fff7d6', padding: '6px', borderRadius: 4 }}>
-          {t('confirm.warn.grant_send_tx')}
-        </p>
+        <p className="warn-banner">{t('confirm.warn.grant_send_tx')}</p>
         <RememberToggle method={ctx.method} checked={remember} onChange={setRemember} />
 
         <div className="actions">
@@ -705,30 +695,21 @@ function SignTypedDataView({
         </div>
 
         {risks.includes('permit') ? (
-          <p className="warn small" style={{ background: '#ffe0e0', padding: '8px', borderRadius: 4 }}>
-            {t('confirm.warn.permit_risk')}
-          </p>
+          <p className="warn-banner danger">{t('confirm.warn.permit_risk')}</p>
         ) : null}
 
         {risks.includes('seaport') ? (
-          <p className="warn small" style={{ background: '#ffe0e0', padding: '8px', borderRadius: 4 }}>
-            {t('confirm.warn.seaport_risk')}
-          </p>
+          <p className="warn-banner danger">{t('confirm.warn.seaport_risk')}</p>
         ) : null}
 
         {risks.includes('unicode') ? (
-          <p className="warn small" style={{ background: '#fff7d6', padding: '8px', borderRadius: 4 }}>
-            {t('confirm.warn.unicode_risk')}
-          </p>
+          <p className="warn-banner">{t('confirm.warn.unicode_risk')}</p>
         ) : null}
 
         <p className="warn small">{t('confirm.warn.typed_data')}</p>
 
-        {/* 1시간 자동 승인 — typed-data 자체는 자유 형식이므로 매우 위험하다. 반드시
-            "이 사이트가 다음 한 시간 동안 임의의 메시지를 자동 서명받게 된다" 임을 명시. */}
-        <p className="warn small" style={{ background: '#fff7d6', padding: '6px', borderRadius: 4 }}>
-          {t('confirm.warn.grant_typed_data')}
-        </p>
+        {/* 1시간 자동 승인 — typed-data 자체는 자유 형식이므로 매우 위험하다. */}
+        <p className="warn-banner">{t('confirm.warn.grant_typed_data')}</p>
         <RememberToggle method={ctx.method} checked={remember} onChange={setRemember} />
 
         <div className="actions">

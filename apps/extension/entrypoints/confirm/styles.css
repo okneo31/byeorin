@@ -132,6 +132,29 @@ body {
   color: #ff6b6b;
 }
 
+/* 경고 배너 — 다크 테마에서 충분한 대비. inline style 대신 이 클래스 사용. */
+.warn-banner {
+  display: block;
+  background: #3a2a00;          /* 진한 황갈 — 다크 배경 위에서 또렷함 */
+  border-left: 3px solid var(--yellow);
+  color: #ffe082;               /* 부드러운 황색, 본문 대비 4.5+ */
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.warn-banner.danger {
+  background: #4a1414;          /* 진한 적갈 */
+  border-left-color: #ff6b6b;
+  color: #ffbcbc;               /* 부드러운 적색, 본문 대비 5+ */
+}
+
+.warn-banner strong {
+  color: #fff;
+}
+
 .msg-block {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 12px;
