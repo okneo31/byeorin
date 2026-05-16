@@ -125,10 +125,41 @@ export type SignTypedDataConfirmContext = {
   digest: string;
 };
 
+/**
+ * wallet_watchAsset 확인 popup 컨텍스트.
+ *
+ * EIP-747: dApp 이 ERC-20/721/1155 토큰을 본 지갑의 watch-list 에 등록 요청.
+ * 본 컨텍스트는 popup 이 "어느 사이트가 어느 토큰을 어떤 심볼/소수자리로 추가하려는지"
+ * 사용자에게 보여주기 위한 최소 정보만 담는다.
+ *
+ * 보안 메모:
+ *  - `address` 필드는 ConfirmContext 공통 필드이지만 watch-asset 은 활성 계정에
+ *    묶이지 않는 동작이므로 빈 문자열로 보낸다 — popup 은 이 메서드에서 address
+ *    행을 그리지 않는다.
+ *  - `tokenAddress` 는 메타데이터 검증 결과(EIP-55 체크섬 케이스) 와 무관하게
+ *    dApp 이 보낸 raw 값을 그대로 사용자에게 노출한다 (스푸핑 인지 보조).
+ *  - decimals 는 0..36 범위에서 자유. dApp 이 무리한 값을 보내면 background 가
+ *    먼저 거절한다.
+ */
+export type WatchAssetConfirmContext = {
+  requestId: string;
+  method: 'wallet_watchAsset';
+  origin: string;
+  /** 공통 ConfirmContext shape 호환용 placeholder — 본 메서드에서는 사용되지 않는다. */
+  address: string;
+  /** 토큰 표준 (ERC20 / ERC721 / ERC1155). v0.3 는 ERC20 만 실질적으로 표시. */
+  type: string;
+  tokenAddress: string;
+  symbol: string;
+  decimals: number;
+  image: string | null;
+};
+
 export type ConfirmContext =
   | PersonalSignConfirmContext
   | SendTxConfirmContext
-  | SignTypedDataConfirmContext;
+  | SignTypedDataConfirmContext
+  | WatchAssetConfirmContext;
 
 export const RPC_ERRORS = {
   USER_REJECTED: { code: 4001, message: '사용자가 요청을 거부했습니다' },

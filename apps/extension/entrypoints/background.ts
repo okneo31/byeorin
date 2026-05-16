@@ -18,6 +18,7 @@ import {
   type PersonalSignConfirmContext,
   type SendTxConfirmContext,
   type SignTypedDataConfirmContext,
+  type WatchAssetConfirmContext,
   type EIP712Domain,
 } from '../src/lib/rpc.js';
 import {
@@ -203,12 +204,197 @@ async function handleRpc(
       return ok([acc.address]);
     }
 
-    case 'eth_blockNumber': {
-      const adapter = getTtlAdapter();
-      // EvmAdapter 내부 client 는 private — 스켈레톤 단계에서는 SDK 외부에 노출되지 않아 미구현.
-      // TODO(v0.2): SDK 에 readonly RPC passthrough (eth_call/eth_blockNumber 등) 헬퍼 추가.
-      void adapter;
-      return fail(RPC_ERRORS.UNSUPPORTED.code, RPC_ERRORS.UNSUPPORTED.message);
+    // --- 읽기 전용 RPC passthrough -----------------------------------
+    // EvmAdapter 의 private `client` (viem PublicClient) 로 직접 위임. 잔액/블록/
+    // 호출/가스 추정 등은 사용자 동의가 필요 없으므로 popup 없이 즉시 처리.
+    // dApp 이 connected 상태(=origin approved)일 때만 응답한다 — 미연결 dApp 에
+    // 게는 EIP-1193 보안 원칙대로 식별 가능한 정보를 노출하지 않는다.
+    case 'eth_blockNumber':
+    case 'eth_getBalance':
+    case 'eth_call':
+    case 'eth_estimateGas':
+    case 'eth_getTransactionByHash':
+    case 'eth_getTransactionReceipt': {
+      const origin = senderOrigin(sender);
+      if (!origin || !(await isOriginApproved(origin))) {
+        return fail(RPC_ERRORS.UNAUTHORIZED.code, '연결되지 않은 dApp');
+      }
+      // EvmAdapter.client 는 private — TS 가 인터섹션을 never 로 좁히므로 unknown
+      // 경유로 캐스팅한다. v0.3 readonly passthrough 가 사용 가능해질 때까지의
+      // 임시 접근. (SDK 측 read-only 헬퍼가 노출되면 본 우회는 제거 가능.)
+      const adapter = getTtlAdapter() as unknown as { client?: unknown };
+      // viem PublicClient 의 메서드를 동적으로 부른다. 직접 import 하지 않고
+      // adapter 의 private client 를 그대로 노출한다 — viem 클라이언트는 RPC 결과를
+      // 표준 JSON-RPC hex 형식으로 반환하므로 EIP-1193 호환.
+      type PC = {
+        getBlockNumber(): Promise<bigint>;
+        getBalance(args: { address: `0x${string}` }): Promise<bigint>;
+        call(args: {
+          to: `0x${string}`;
+          data?: `0x${string}`;
+          account?: `0x${string}`;
+        }): Promise<{ data?: `0x${string}` }>;
+        estimateGas(args: {
+          to: `0x${string}`;
+          data?: `0x${string}`;
+          value?: bigint;
+          account?: `0x${string}`;
+        }): Promise<bigint>;
+        getTransaction(args: { hash: `0x${string}` }): Promise<unknown>;
+        getTransactionReceipt(args: { hash: `0x${string}` }): Promise<unknown>;
+      };
+      const client = adapter.client as PC | undefined;
+      if (!client) {
+        return fail(RPC_ERRORS.INTERNAL.code, 'public client 미초기화');
+      }
+      const params = Array.isArray(req.params) ? req.params : [];
+      try {
+        switch (req.method) {
+          case 'eth_blockNumber': {
+            const n = await client.getBlockNumber();
+            return ok('0x' + n.toString(16));
+          }
+          case 'eth_getBalance': {
+            const addr = String(params[0] ?? '');
+            if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+              return fail(RPC_ERRORS.INVALID_PARAMS.code, '주소 형식 오류');
+            }
+            const v = await client.getBalance({ address: addr as `0x${string}` });
+            return ok('0x' + v.toString(16));
+          }
+          case 'eth_call': {
+            const call = params[0] as
+              | { to?: string; data?: string; from?: string }
+              | undefined;
+            if (!call?.to) {
+              return fail(RPC_ERRORS.INVALID_PARAMS.code, 'to 누락');
+            }
+            const out = await client.call({
+              to: call.to as `0x${string}`,
+              data: (call.data ?? '0x') as `0x${string}`,
+              ...(call.from ? { account: call.from as `0x${string}` } : {}),
+            });
+            return ok(out.data ?? '0x');
+          }
+          case 'eth_estimateGas': {
+            const call = params[0] as
+              | {
+                  to?: string;
+                  data?: string;
+                  value?: string;
+                  from?: string;
+                }
+              | undefined;
+            if (!call?.to) {
+              return fail(RPC_ERRORS.INVALID_PARAMS.code, 'to 누락');
+            }
+            const gas = await client.estimateGas({
+              to: call.to as `0x${string}`,
+              ...(call.data ? { data: call.data as `0x${string}` } : {}),
+              ...(call.value ? { value: BigInt(call.value) } : {}),
+              ...(call.from ? { account: call.from as `0x${string}` } : {}),
+            });
+            return ok('0x' + gas.toString(16));
+          }
+          case 'eth_getTransactionByHash': {
+            const h = String(params[0] ?? '');
+            if (!/^0x[0-9a-fA-F]{64}$/.test(h)) {
+              return fail(RPC_ERRORS.INVALID_PARAMS.code, 'txHash 형식 오류');
+            }
+            return ok(await client.getTransaction({ hash: h as `0x${string}` }));
+          }
+          case 'eth_getTransactionReceipt': {
+            const h = String(params[0] ?? '');
+            if (!/^0x[0-9a-fA-F]{64}$/.test(h)) {
+              return fail(RPC_ERRORS.INVALID_PARAMS.code, 'txHash 형식 오류');
+            }
+            try {
+              return ok(await client.getTransactionReceipt({ hash: h as `0x${string}` }));
+            } catch {
+              // viem throws if not yet mined; JSON-RPC convention returns null.
+              return ok(null);
+            }
+          }
+        }
+      } catch (err) {
+        return fail(RPC_ERRORS.INTERNAL.code, `RPC 호출 실패: ${(err as Error)?.message ?? err}`);
+      }
+      return fail(RPC_ERRORS.INTERNAL.code, '도달 불가');
+    }
+
+    // wallet_watchAsset: dApp 이 ERC-20/721/1155 토큰을 본 지갑에 등록 요청.
+    // EIP-747 형식: { type, options: { address, symbol, decimals, image? } }
+    // v0.3 정책:
+    //  - origin 이 미승인이면 거부 (서명·송금과 동일 게이트).
+    //  - confirm popup 으로 사용자 동의 — 메서드별 grant 발급 가능.
+    //  - 승인 시 chrome.storage.session 의 'nd:watched-assets' 에 origin 단위
+    //    allowlist 로 적재. 본 데이터는 비-수탁 정보(주소·심볼) 라 손실되어도
+    //    잔액·서명에는 영향이 없다.
+    case 'wallet_watchAsset': {
+      const origin = senderOrigin(sender);
+      if (!origin || !(await isOriginApproved(origin))) {
+        return fail(RPC_ERRORS.UNAUTHORIZED.code, '연결되지 않은 dApp');
+      }
+      // EIP-747 은 params 가 객체일 수 있으며(`{ type, options }`) 배열 [obj] 형태도
+      // 일부 dApp 이 사용한다. 둘 다 받아들인다.
+      const raw = Array.isArray(req.params) ? req.params[0] : req.params;
+      const p = raw as
+        | {
+            type?: string;
+            options?: {
+              address?: string;
+              symbol?: string;
+              decimals?: number;
+              image?: string;
+            };
+          }
+        | undefined;
+      const type = p?.type ?? 'ERC20';
+      const addr = p?.options?.address ?? '';
+      const symbol = p?.options?.symbol ?? '';
+      const decimals = p?.options?.decimals ?? 18;
+      if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, '토큰 주소 형식 오류');
+      }
+      if (!symbol || symbol.length > 11) {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, '심볼 누락 또는 11자 초과');
+      }
+      if (!Number.isInteger(decimals) || decimals < 0 || decimals > 36) {
+        return fail(RPC_ERRORS.INVALID_PARAMS.code, 'decimals 범위 오류');
+      }
+
+      const context: WatchAssetConfirmContext = {
+        requestId: '',
+        method: 'wallet_watchAsset',
+        origin,
+        address: '',
+        type,
+        tokenAddress: addr,
+        symbol,
+        decimals,
+        image: p?.options?.image ?? null,
+      };
+      const decision = await openConfirm(context);
+      if (decision !== 'approve') {
+        return fail(RPC_ERRORS.USER_REJECTED.code, RPC_ERRORS.USER_REJECTED.message);
+      }
+      // session storage 에 origin → token 목록으로 누적 저장. 실패해도 dApp 에는
+      // true 를 반환 — UX 상 "사용자가 승인했음" 의 의미가 더 중요하다.
+      try {
+        const KEY = 'nd:watched-assets';
+        const cur = ((await chrome.storage.session.get(KEY))[KEY] as
+          | Record<string, Array<{ address: string; symbol: string; decimals: number }>>
+          | undefined) ?? {};
+        const slot = cur[origin] ?? [];
+        if (!slot.some((t) => t.address.toLowerCase() === addr.toLowerCase())) {
+          slot.push({ address: addr, symbol, decimals });
+        }
+        cur[origin] = slot;
+        await chrome.storage.session.set({ [KEY]: cur });
+      } catch {
+        /* 저장 실패는 무시 — 사용자가 명시적으로 승인했으므로 */
+      }
+      return ok(true);
     }
 
     // --- 사용자 확인 필요: popup 띄우고 결과 받기 ----------------------
@@ -468,9 +654,24 @@ async function handleRpc(
       }
     }
 
+    case 'eth_signTypedData_v3':
     case 'eth_signTypedData_v4': {
       // EIP-712 typed-data 서명.
       // params 형식: [address, typedData] — typedData 는 JSON 문자열 또는 객체.
+      //
+      // v3 vs v4:
+      //   - v3 는 legacy MetaMask 변형으로, 중첩 struct 배열 (nested struct[])
+      //     을 지원하지 않는 점만 다르다. 다이제스트 산출 자체는 동일한
+      //     EIP-712 해시이므로 본 핸들러가 v4 와 동일 경로로 처리한다.
+      //   - viem.hashTypedData 는 v4 사양을 따른다. 사용자 입력이 v3 호환이면
+      //     동일 해시가 나오고, v4-전용 구조(중첩 struct[])이면 viem 이 거절한다.
+      //     이 시점에 잘못된 v3 요청은 INVALID_PARAMS 로 떨어진다.
+      //   - 일부 dApp 은 v3 만 호출하므로 method 별칭으로 받아들여 호환성을 확보한다.
+      if (req.method === 'eth_signTypedData_v3') {
+        console.warn(
+          '[nodong] eth_signTypedData_v3 is deprecated; routing through v4 path',
+        );
+      }
       const params = Array.isArray(req.params) ? req.params : [];
       const a = params[0];
       const b = params[1];

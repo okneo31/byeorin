@@ -1,5 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { parseUnits } from 'viem';
+import {
+  Erc20,
+  TokenRegistry,
+  discoverTokens,
+  type DiscoveredBalance,
+  type TransferIntent,
+} from '@nodong/wallet-sdk';
 import { Button, Card, Input } from '@nodong/design-system';
 import { walletStore } from '../wallet-store.js';
 
@@ -16,30 +23,50 @@ type Status =
 // TTL은 18자리 소수 (EVM 호환).
 const TTL_DECIMALS = 18;
 
-// 입력 검증 — 비어있지 않은 10진수, 소수점은 18자리 이하.
-// 끝/앞 공백은 trim 단계에서 제거되므로 정규식은 순수 숫자만 검사한다.
+// 입력 검증 — 비어있지 않은 10진수, 소수점은 18자리 이하 (토큰별 decimals 는
+// parseUnits 가 동적으로 처리). 끝/앞 공백은 trim 단계에서 제거되므로
+// 정규식은 순수 숫자만 검사한다.
 const AMOUNT_RE = /^\d+(\.\d{1,18})?$/;
 
 // 스모크 체크:
 //   parseUnits('0.7', 18) === 700000000000000000n  ✓ (정확)
 //   parseFloat('0.7') * 1e18 === 6.999999999999999e17 → Math.floor → 699999999999999900  ✗ (-100 wei)
 
+// "native" 는 TTL 송금. 그 외 값은 토큰 컨트랙트 주소(소문자 비교 X — UI 식별자).
+type AssetKey = 'native' | string;
+
+const sharedRegistry = new TokenRegistry();
+
 export function Send({ onBack }: Props) {
   const [to, setTo] = useState('');
   const [amount, setAmount] = useState('');
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [senderAddress, setSenderAddress] = useState<string | null>(null);
+  const [tokens, setTokens] = useState<DiscoveredBalance[]>([]);
+  const [asset, setAsset] = useState<AssetKey>('native');
 
   useEffect(() => {
     let cancelled = false;
     if (!walletStore.isUnlocked()) return;
     void walletStore.getAccount().then((acc) => {
-      if (!cancelled) setSenderAddress(acc.address);
+      if (cancelled) return;
+      setSenderAddress(acc.address);
+      const adapter = walletStore.getDefaultAdapter() as unknown as Parameters<
+        typeof discoverTokens
+      >[0];
+      void discoverTokens(adapter, sharedRegistry, acc.address).then((rows) => {
+        if (!cancelled) setTokens(rows);
+      });
     });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const selectedToken = useMemo(() => {
+    if (asset === 'native') return null;
+    return tokens.find((t) => t.token.address === asset) ?? null;
+  }, [asset, tokens]);
 
   if (!walletStore.isUnlocked()) {
     return (
@@ -55,11 +82,13 @@ export function Send({ onBack }: Props) {
     );
   }
 
+  const decimals = selectedToken?.token.decimals ?? TTL_DECIMALS;
+  const symbol = selectedToken?.token.symbol ?? 'TTL';
+
   const trimmedTo = to.trim();
   const trimmedAmount = amount.trim();
   const validAddress = /^0x[0-9a-fA-F]{40}$/.test(trimmedTo);
   const validAmountFormat = AMOUNT_RE.test(trimmedAmount);
-  // 0 / 0.0 / 0.00... 같이 모두 0인 값은 거부.
   const validAmount = validAmountFormat && Number(trimmedAmount) > 0;
   const showAmountError = trimmedAmount.length > 0 && !validAmount;
 
@@ -72,20 +101,28 @@ export function Send({ onBack }: Props) {
 
     let value: bigint;
     try {
-      // parseUnits는 문자열 기반이라 18자리 이내 어떤 입력이라도 정확하다.
-      // 예: parseUnits('0.7', 18) === 700000000000000000n
-      value = parseUnits(trimmedAmount, TTL_DECIMALS);
+      value = parseUnits(trimmedAmount, decimals);
     } catch {
       setStatus({ kind: 'error', message: '금액 형식이 올바르지 않습니다.' });
       return;
     }
 
+    let intent: TransferIntent;
+    if (selectedToken) {
+      // ERC-20 송금: calldata 를 채운 TransferIntent. wallet-sdk 의 EvmAdapter 가
+      // intent.data 를 감지해 컨트랙트 호출 트랜잭션을 빌드한다.
+      const adapter = walletStore.getDefaultAdapter() as unknown as ConstructorParameters<
+        typeof Erc20
+      >[0];
+      const erc20 = new Erc20(adapter);
+      intent = erc20.transfer(selectedToken.token.address, trimmedTo, value);
+    } else {
+      intent = { to: trimmedTo, amount: value };
+    }
+
     setStatus({ kind: 'pending' });
     try {
-      const hash = await walletStore.transfer({
-        to: trimmedTo,
-        amount: value,
-      });
+      const hash = await walletStore.transfer(intent);
       setStatus({ kind: 'sent', hash });
     } catch (err) {
       setStatus({
@@ -95,15 +132,38 @@ export function Send({ onBack }: Props) {
     }
   };
 
-  // senderAddress 는 송신자 표시용일 뿐 송금 실행에는 walletStore.transfer 가 자체 사용한다.
   void senderAddress;
 
   return (
     <div>
       <h1 className="nd-h1">송금</h1>
-      <p className="nd-lead">TTL을 다른 주소로 보냅니다. 수수료는 네트워크가 자동 산정합니다.</p>
+      <p className="nd-lead">
+        {selectedToken
+          ? `${selectedToken.token.symbol} 토큰을 다른 주소로 보냅니다.`
+          : 'TTL을 다른 주소로 보냅니다. 수수료는 네트워크가 자동 산정합니다.'}
+      </p>
 
       <form onSubmit={onSubmit}>
+        <Card>
+          <label className="nd-field__label" htmlFor="nd-asset-select">
+            어떤 토큰?
+          </label>
+          <select
+            id="nd-asset-select"
+            className="nd-input"
+            value={asset}
+            onChange={(e) => setAsset(e.target.value as AssetKey)}
+            disabled={locked}
+          >
+            <option value="native">TTL (네이티브)</option>
+            {tokens.map((t) => (
+              <option key={t.token.address} value={t.token.address}>
+                {t.token.symbol} · {t.token.name}
+              </option>
+            ))}
+          </select>
+        </Card>
+
         <Card>
           <Input
             label="받는 주소"
@@ -125,7 +185,7 @@ export function Send({ onBack }: Props) {
 
         <Card>
           <Input
-            label="금액 (TTL)"
+            label={`금액 (${symbol})`}
             type="text"
             inputMode="decimal"
             value={amount}

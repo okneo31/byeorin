@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createMnemonic, type WalletAccount } from '@nodong/wallet-sdk';
+import {
+  Erc20,
+  TokenRegistry,
+  createMnemonic,
+  discoverTokens,
+  getPrice,
+  type DiscoveredBalance,
+  type TokenInfo,
+  type WalletAccount,
+} from '@nodong/wallet-sdk';
 import {
   AddressDisplay,
   AmountDisplay,
@@ -7,6 +16,9 @@ import {
   Card,
 } from '@nodong/design-system';
 import { walletStore } from '../wallet-store.js';
+
+// chainId 별 TokenRegistry — 사용자 커스텀이 즉시 반영되도록 모듈 단위 공유.
+const sharedRegistry = new TokenRegistry();
 
 interface Props {
   unlocked: boolean;
@@ -29,6 +41,40 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
   const [balanceError, setBalanceError] = useState<string | null>(null);
   const [loadingBalance, setLoadingBalance] = useState<boolean>(false);
   const [reloadKey, setReloadKey] = useState<number>(0);
+
+  // 토큰 / 가격.
+  const [tokens, setTokens] = useState<DiscoveredBalance[] | null>(null);
+  const [tokensLoading, setTokensLoading] = useState(false);
+  const [tokensError, setTokensError] = useState<string | null>(null);
+  const [ttlPrice, setTtlPrice] = useState<number | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  const refreshTokens = useCallback(async (acc: WalletAccount) => {
+    setTokensLoading(true);
+    setTokensError(null);
+    try {
+      const adapter = walletStore.getDefaultAdapter() as unknown as Parameters<
+        typeof discoverTokens
+      >[0];
+      const found = await discoverTokens(adapter, sharedRegistry, acc.address);
+      setTokens(found);
+    } catch (e) {
+      setTokensError(e instanceof Error ? e.message : '토큰 조회 실패');
+      setTokens([]);
+    } finally {
+      setTokensLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getPrice('ttl').then((v) => {
+      if (!cancelled) setTtlPrice(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // unlocked 상태 변화에 따라 account 를 비동기로 동기화.
   useEffect(() => {
@@ -74,6 +120,10 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
       cancelled = true;
     };
   }, [account, reloadKey]);
+
+  useEffect(() => {
+    if (account) void refreshTokens(account);
+  }, [account, refreshTokens]);
 
   const retryBalance = useCallback(() => {
     setReloadKey((k) => k + 1);
@@ -152,11 +202,59 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
             </>
           )}
           {!loadingBalance && !balanceError && balance != null && (
-            <AmountDisplay value={balance} decimals={18} symbol="TTL" size="lg" />
+            <>
+              <AmountDisplay value={balance} decimals={18} symbol="TTL" size="lg" />
+              {ttlPrice != null && (
+                <div className="nd-muted" style={{ marginTop: 6 }}>
+                  ≈ ${usdValueOf(balance, 18, ttlPrice)} USD
+                </div>
+              )}
+            </>
           )}
           <div className="nd-muted" style={{ marginTop: 12 }}>
             네트워크: TTL · Chain ID 7777
           </div>
+        </Card>
+
+        <Card as="section" style={{ marginTop: 16 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <div className="nd-label" style={{ marginBottom: 0 }}>토큰</div>
+            <Button variant="ghost" size="sm" onClick={() => setShowAddModal(true)}>
+              토큰 추가
+            </Button>
+          </div>
+          {tokensLoading && (
+            <div className="nd-muted" style={{ marginTop: 8 }}>토큰 조회 중…</div>
+          )}
+          {tokensError && <div className="nd-error">{tokensError}</div>}
+          {!tokensLoading && tokens && tokens.length === 0 && !tokensError && (
+            <p className="nd-muted" style={{ marginTop: 8 }}>
+              보유 토큰이 없습니다. "토큰 추가" 로 컨트랙트를 등록해보세요.
+            </p>
+          )}
+          {tokens && tokens.length > 0 && (
+            <ul className="nd-tokens">
+              {tokens.map((t) => (
+                <li key={t.token.address} className="nd-tokens__row">
+                  <span className="nd-tokens__sym">{t.token.symbol}</span>
+                  <span className="nd-tokens__name">{t.token.name}</span>
+                  <AmountDisplay
+                    value={t.balance}
+                    decimals={t.token.decimals}
+                    symbol={t.token.symbol}
+                    maxDecimals={4}
+                    size="md"
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
 
         <Card as="section" style={{ marginTop: 16 }}>
@@ -168,6 +266,16 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
             </Button>
           </div>
         </Card>
+
+        {showAddModal && (
+          <AddTokenModal
+            onClose={() => setShowAddModal(false)}
+            onAdded={() => {
+              setShowAddModal(false);
+              if (account) void refreshTokens(account);
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -241,4 +349,119 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
       )}
     </div>
   );
+}
+
+/**
+ * "토큰 추가" 모달 — 데스크톱 버전.
+ * web 의 모달과 동일 흐름이지만 desktop 스타일에 맞게 폼만 약간 다르게.
+ */
+function AddTokenModal({
+  onClose,
+  onAdded,
+}: {
+  onClose: () => void;
+  onAdded: () => void;
+}) {
+  const [addr, setAddr] = useState('');
+  const [info, setInfo] = useState<TokenInfo | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const validAddr = /^0x[0-9a-fA-F]{40}$/.test(addr.trim());
+
+  const lookup = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    setInfo(null);
+    try {
+      const adapter = walletStore.getDefaultAdapter() as unknown as ConstructorParameters<
+        typeof Erc20
+      >[0];
+      const erc20 = new Erc20(adapter);
+      const target = addr.trim();
+      const [symbol, name, decimals] = await Promise.all([
+        erc20.symbol(target),
+        erc20.name(target),
+        erc20.decimals(target),
+      ]);
+      setInfo({ address: target, symbol, name, decimals, custom: true });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '토큰 정보 조회 실패');
+    } finally {
+      setLoading(false);
+    }
+  }, [addr]);
+
+  const add = () => {
+    if (!info) return;
+    const chainIdStr = walletStore.getDefaultAdapter().id.replace(/^evm:/, '');
+    sharedRegistry.addCustomToken(Number(chainIdStr), info);
+    onAdded();
+  };
+
+  return (
+    <div className="nd-modal" role="dialog" aria-modal="true" aria-label="토큰 추가">
+      <div className="nd-modal__sheet">
+        <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>토큰 추가</h2>
+        <p className="nd-muted" style={{ marginTop: 0 }}>
+          ERC-20 컨트랙트 주소를 입력하세요.
+        </p>
+        <input
+          className="nd-input"
+          value={addr}
+          onChange={(e) => setAddr(e.target.value)}
+          placeholder="0x..."
+          spellCheck={false}
+          autoCapitalize="none"
+          autoCorrect="off"
+        />
+        <div className="nd-row" style={{ marginTop: 12 }}>
+          <Button
+            variant="secondary"
+            onClick={lookup}
+            disabled={!validAddr || loading}
+            loading={loading}
+          >
+            정보 조회
+          </Button>
+          <Button variant="ghost" onClick={onClose}>
+            취소
+          </Button>
+        </div>
+        {err && <div className="nd-error">{err}</div>}
+        {info && (
+          <div style={{ marginTop: 12 }}>
+            <p className="nd-muted" style={{ marginBottom: 4 }}>
+              발견된 토큰
+            </p>
+            <p style={{ margin: 0, fontWeight: 700 }}>
+              {info.symbol} <span className="nd-muted">· {info.name}</span>
+            </p>
+            <p className="nd-muted" style={{ marginTop: 4 }}>
+              소수 자릿수: {info.decimals}
+            </p>
+            <Button variant="primary" className="nd-button--block" onClick={add}>
+              내 지갑에 추가
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * bigint base unit + decimals + USD price → 표시용 USD 문자열.
+ * Number 변환은 표시용에 한정 (잔액 자체는 항상 bigint 로 유지).
+ */
+function usdValueOf(base: bigint, decimals: number, priceUsd: number): string {
+  const factor = 10n ** BigInt(decimals);
+  const whole = base / factor;
+  const frac = base % factor;
+  const fracNum = Number(frac) / Number(factor);
+  const value = Number(whole) + fracNum;
+  return (value * priceUsd).toLocaleString('en-US', {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+  });
 }

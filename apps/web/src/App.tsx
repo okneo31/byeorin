@@ -3,9 +3,10 @@ import { Logo } from '@nodong/design-system';
 import { Home } from './screens/Home.js';
 import { Account } from './screens/Account.js';
 import { Send } from './screens/Send.js';
+import { Activity } from './screens/Activity.js';
 import { walletStore } from './wallet-store.js';
 
-export type Screen = 'home' | 'account' | 'send';
+export type Screen = 'home' | 'account' | 'send' | 'activity';
 
 export function App() {
   // H1: web 환경은 자동 복원을 허용하지 않는다(WebSessionStore.autoRestoreAllowed=false).
@@ -41,9 +42,14 @@ export function App() {
       <main className="nd-main">
         {screen === 'home' && <Home onReady={() => setScreen('account')} />}
         {screen === 'account' && (
-          <Account onSend={() => setScreen('send')} onLock={onLock} />
+          <Account
+            onSend={() => setScreen('send')}
+            onLock={onLock}
+            onActivity={() => setScreen('activity')}
+          />
         )}
         {screen === 'send' && <Send onBack={() => setScreen('account')} />}
+        {screen === 'activity' && <Activity onBack={() => setScreen('account')} />}
         <p className="nd-footer-note">
           비수탁(non-custodial) 지갑 · 복구 문구는 브라우저 세션에만 저장됩니다.
           <br />

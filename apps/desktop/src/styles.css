@@ -300,3 +300,139 @@ a {
   background: #f3f3f3;
   color: var(--nd-fg-muted);
 }
+
+/* ===== WalletConnect / DApp view ===== */
+
+.nd-wc-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nd-wc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--nd-paper);
+  border: 1px solid var(--nd-border);
+  border-radius: 10px;
+}
+
+.nd-wc-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.nd-wc-row__title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--nd-fg);
+}
+
+.nd-wc-row__sub {
+  font-size: 13px;
+  color: var(--nd-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 420px;
+}
+
+.nd-wc-row__topic {
+  font-family: var(--nd-font-mono);
+  font-size: 11px;
+  color: var(--nd-fg-muted);
+  margin-top: 2px;
+}
+
+/* ===== 토큰 목록 (Wallet 뷰) ===== */
+.nd-tokens {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nd-tokens__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--nd-border);
+}
+
+.nd-tokens__row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.nd-tokens__sym {
+  font-weight: 700;
+  color: var(--nd-fg);
+}
+
+.nd-tokens__name {
+  font-size: 12px;
+  color: var(--nd-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== 활동 테이블 ===== */
+.nd-activity-table {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.nd-activity-table th,
+.nd-activity-table td {
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--nd-border);
+}
+
+.nd-activity-table th {
+  font-weight: 700;
+  color: var(--nd-fg-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.nd-mono {
+  font-family: var(--nd-font-mono);
+}
+
+/* ===== 토큰 추가 모달 ===== */
+.nd-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.nd-modal__sheet {
+  background: var(--nd-paper);
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+}

@@ -42,6 +42,13 @@
     "viem": "^2.21.40",
     "xrpl": "^4.0.0"
   },
+  "optionalDependencies": {
+    "@reown/walletkit": "^1.5.5",
+    "@ledgerhq/hw-app-cosmos": "^6.30.0",
+    "@ledgerhq/hw-app-solana": "^7.2.0",
+    "@ledgerhq/hw-transport": "^6.31.0",
+    "@ledgerhq/hw-transport-webhid": "^6.30.0"
+  },
   "devDependencies": {
     "@types/node": "^22.9.0",
     "rimraf": "^6.0.1",

@@ -11,7 +11,8 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "clean": "pnpm -r clean"
+    "clean": "pnpm -r clean",
+    "setup-check": "node scripts/setup-check.mjs"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

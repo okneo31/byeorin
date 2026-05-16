@@ -30,6 +30,7 @@ const METHOD_LABEL: Record<ConfirmContext['method'], string> = {
   personal_sign: '메시지 서명',
   eth_sendTransaction: '트랜잭션 전송',
   eth_signTypedData_v4: 'EIP-712 서명',
+  wallet_watchAsset: '토큰 추가',
 };
 
 const TTL_EXPLORER = 'https://scan.ttl1.top';
@@ -208,7 +209,88 @@ export function App() {
   if (ctx.method === 'personal_sign') return <PersonalSignView ctx={ctx} onDecision={send} />;
   if (ctx.method === 'eth_signTypedData_v4')
     return <SignTypedDataView ctx={ctx} onDecision={send} />;
+  if (ctx.method === 'wallet_watchAsset')
+    return <WatchAssetView ctx={ctx} onDecision={send} />;
   return <SendTxView ctx={ctx} onDecision={send} />;
+}
+
+// ── wallet_watchAsset 프리뷰 ───────────────────────────────────────────
+// EIP-747: dApp 이 ERC-20 등 토큰을 본 지갑의 watch-list 에 등록 요청.
+// 본 화면은 토큰 주소·심볼·소수자리 만 표시한다 — 자산 이동/서명이 일어나지
+// 않으므로 위험도가 낮지만, 위조 토큰(예: 'USDC' 라는 심볼로 다른 컨트랙트)
+// 을 추가하면 잔액 표시가 거짓될 수 있어 명시적 동의를 받는다.
+function WatchAssetView({
+  ctx,
+  onDecision,
+}: {
+  ctx: Extract<ConfirmContext, { method: 'wallet_watchAsset' }>;
+  onDecision: (d: 'approve' | 'reject', rememberFor1h?: boolean) => void;
+}) {
+  return (
+    <main className="confirm">
+      <header className="brand">노동자의 지갑</header>
+      <section className="card">
+        <h2>
+          토큰 추가 요청
+          <span className="hex-tag">wallet_watchAsset</span>
+        </h2>
+        <p className="muted small">
+          아래 사이트가 본 지갑의 토큰 목록에 새 자산을 추가하려고 합니다.
+        </p>
+
+        <div className="row">
+          <span className="label">사이트</span>
+          <span className="origin" title={ctx.origin}>
+            {ctx.origin}
+          </span>
+        </div>
+
+        <div className="row">
+          <span className="label">토큰 표준</span>
+          <span className="origin">{ctx.type}</span>
+        </div>
+
+        <div className="row">
+          <span className="label">토큰 주소</span>
+          <a
+            className="addr-link"
+            href={`${TTL_EXPLORER}/address/${ctx.tokenAddress}`}
+            target="_blank"
+            rel="noreferrer noopener"
+            title={ctx.tokenAddress}
+          >
+            {ctx.tokenAddress}
+          </a>
+        </div>
+
+        <div className="row">
+          <span className="label">심볼</span>
+          <span className="origin">
+            <strong>{ctx.symbol}</strong>
+          </span>
+        </div>
+
+        <div className="row">
+          <span className="label">소수 자리(decimals)</span>
+          <span className="origin">{ctx.decimals}</span>
+        </div>
+
+        <p className="warn small">
+          ※ 토큰 추가는 자산 이동을 일으키지 않지만, 위조 토큰(예: 'USDC' 라는 심볼로
+          전혀 다른 컨트랙트) 일 수 있으니 토큰 주소를 한 번 더 확인하세요.
+        </p>
+
+        <div className="actions">
+          <button className="btn-ghost" onClick={() => onDecision('reject')}>
+            거부
+          </button>
+          <button className="btn-primary" onClick={() => onDecision('approve')}>
+            추가
+          </button>
+        </div>
+      </section>
+    </main>
+  );
 }
 
 // "이 사이트에서 1시간 동안 자동 승인" 체크박스 (공통 UI).

@@ -1,5 +1,12 @@
-import { useEffect, useState } from 'react';
-import type { WalletAccount } from '@nodong/wallet-sdk';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Erc20,
+  TokenRegistry,
+  discoverTokens,
+  type DiscoveredBalance,
+  type TransferIntent,
+  type WalletAccount,
+} from '@nodong/wallet-sdk';
 import { AddressDisplay, Button, Card, Input } from '@nodong/design-system';
 import { walletStore } from '../wallet-store.js';
 
@@ -7,6 +14,16 @@ interface Props {
   unlocked: boolean;
   onGoWallet: () => void;
 }
+
+// chainId 별 TokenRegistry — Wallet 뷰와 별도 인스턴스. 사용자 커스텀은
+// 양 뷰가 공유되지 않지만, 송금에서 표시되는 토큰은 어차피 잔액 > 0 인 것만
+// discoverTokens 로 가져오므로 빌트인이면 양쪽 다 보인다.
+const sharedRegistry = new TokenRegistry();
+
+// "native" 는 TTL 송금. 그 외 값은 토큰 컨트랙트 주소.
+type AssetKey = 'native' | string;
+
+const TTL_DECIMALS = 18;
 
 export function Send({ unlocked, onGoWallet }: Props) {
   const [account, setAccount] = useState<WalletAccount | null>(null);
@@ -17,6 +34,8 @@ export function Send({ unlocked, onGoWallet }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [tokens, setTokens] = useState<DiscoveredBalance[]>([]);
+  const [asset, setAsset] = useState<AssetKey>('native');
 
   useEffect(() => {
     let cancelled = false;
@@ -25,12 +44,24 @@ export function Send({ unlocked, onGoWallet }: Props) {
       return;
     }
     void walletStore.getAccount().then((a) => {
-      if (!cancelled) setAccount(a);
+      if (cancelled) return;
+      setAccount(a);
+      const adapter = walletStore.getDefaultAdapter() as unknown as Parameters<
+        typeof discoverTokens
+      >[0];
+      void discoverTokens(adapter, sharedRegistry, a.address).then((rows) => {
+        if (!cancelled) setTokens(rows);
+      });
     });
     return () => {
       cancelled = true;
     };
   }, [unlocked]);
+
+  const selectedToken = useMemo(() => {
+    if (asset === 'native') return null;
+    return tokens.find((t) => t.token.address === asset) ?? null;
+  }, [asset, tokens]);
 
   if (!unlocked || !account) {
     return (
@@ -48,6 +79,9 @@ export function Send({ unlocked, onGoWallet }: Props) {
     );
   }
 
+  const decimals = selectedToken?.token.decimals ?? TTL_DECIMALS;
+  const symbol = selectedToken?.token.symbol ?? 'TTL';
+
   const submit = async () => {
     setError(null);
     setTxHash(null);
@@ -60,7 +94,7 @@ export function Send({ unlocked, onGoWallet }: Props) {
     }
     let value: bigint;
     try {
-      value = parseTtlToWei(amount.trim());
+      value = parseAmountToBase(amount.trim(), decimals);
     } catch (e) {
       setAmountError(e instanceof Error ? e.message : String(e));
       return;
@@ -69,9 +103,21 @@ export function Send({ unlocked, onGoWallet }: Props) {
       setAmountError('금액은 0보다 커야 합니다.');
       return;
     }
+
+    let intent: TransferIntent;
+    if (selectedToken) {
+      const adapter = walletStore.getDefaultAdapter() as unknown as ConstructorParameters<
+        typeof Erc20
+      >[0];
+      const erc20 = new Erc20(adapter);
+      intent = erc20.transfer(selectedToken.token.address, to.trim(), value);
+    } else {
+      intent = { to: to.trim(), amount: value };
+    }
+
     setSending(true);
     try {
-      const finalHash = await walletStore.transfer({ to: to.trim(), amount: value });
+      const finalHash = await walletStore.transfer(intent);
       setTxHash(finalHash);
       setAmount('');
     } catch (e) {
@@ -85,7 +131,11 @@ export function Send({ unlocked, onGoWallet }: Props) {
     <div className="nd-view">
       <header className="nd-view__header">
         <h1 className="nd-h1">송수신</h1>
-        <p className="nd-lead">TTL을 송금합니다. 수수료는 자동 추정됩니다.</p>
+        <p className="nd-lead">
+          {selectedToken
+            ? `${selectedToken.token.symbol} 토큰을 송금합니다.`
+            : 'TTL을 송금합니다. 수수료는 자동 추정됩니다.'}
+        </p>
       </header>
 
       <Card as="section">
@@ -94,6 +144,26 @@ export function Send({ unlocked, onGoWallet }: Props) {
       </Card>
 
       <Card as="section" style={{ marginTop: 16 }}>
+        <label className="nd-label" htmlFor="nd-asset-select-d">
+          어떤 토큰?
+        </label>
+        <select
+          id="nd-asset-select-d"
+          className="nd-input"
+          value={asset}
+          onChange={(e) => setAsset(e.target.value as AssetKey)}
+          disabled={sending}
+        >
+          <option value="native">TTL (네이티브)</option>
+          {tokens.map((t) => (
+            <option key={t.token.address} value={t.token.address}>
+              {t.token.symbol} · {t.token.name}
+            </option>
+          ))}
+        </select>
+
+        <div style={{ height: 16 }} />
+
         <Input
           id="to"
           label="받는 주소"
@@ -110,7 +180,7 @@ export function Send({ unlocked, onGoWallet }: Props) {
 
         <Input
           id="amount"
-          label="금액 (TTL)"
+          label={`금액 (${symbol})`}
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           inputMode="decimal"
@@ -144,11 +214,15 @@ export function Send({ unlocked, onGoWallet }: Props) {
   );
 }
 
-function parseTtlToWei(s: string): bigint {
+/**
+ * 소수 문자열 → 토큰 base unit (bigint). decimals 가 동적이라 viem.parseUnits 대신
+ * 인라인 구현 — 이 파일이 viem 직접 의존을 갖지 않게 한다 (이미 SDK 가 통제).
+ */
+function parseAmountToBase(s: string, decimals: number): bigint {
   if (!/^\d+(\.\d+)?$/.test(s)) {
     throw new Error('금액 형식이 올바르지 않습니다.');
   }
   const [whole, frac = ''] = s.split('.');
-  const fracPadded = (frac + '0'.repeat(18)).slice(0, 18);
-  return BigInt(whole ?? '0') * 10n ** 18n + BigInt(fracPadded || '0');
+  const fracPadded = (frac + '0'.repeat(decimals)).slice(0, decimals);
+  return BigInt(whole ?? '0') * 10n ** BigInt(decimals) + BigInt(fracPadded || '0');
 }

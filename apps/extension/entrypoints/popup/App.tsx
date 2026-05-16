@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createMnemonic } from '@nodong/wallet-sdk';
-import { walletStore } from '../../src/lib/wallet-service.js';
+import { createMnemonic, type HwAppName } from '@nodong/wallet-sdk';
+import {
+  connectHardware,
+  disconnectHardware,
+  getHwAccount,
+  subscribeHwState,
+  walletStore,
+  type HwAccountState,
+} from '../../src/lib/wallet-service.js';
 import {
   listApprovedOrigins,
   revokeOrigin,
@@ -35,6 +42,12 @@ export function App() {
   const [mode, setMode] = useState<Mode>('home');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // HW(하드웨어) 월릿 상태 — 소프트 월릿과 독립적으로 존재할 수 있다.
+  const [hw, setHw] = useState<HwAccountState | null>(getHwAccount());
+  const [hwBusy, setHwBusy] = useState<boolean>(false);
+
+  // HW 상태 변경 구독 — connect/disconnect 시 자동 반영.
+  useEffect(() => subscribeHwState(setHw), []);
 
   // 부팅 시 chrome.storage.session 으로부터 자동 복원 시도(extension 은 허용).
   useEffect(() => {
@@ -83,6 +96,40 @@ export function App() {
     setMode('home');
   }
 
+  // 하드웨어 월릿 연결.
+  //
+  // v0.4 결정: 기본 앱은 Solana. Cosmos 도 같은 진입점에서 선택 가능하지만 UI 가
+  // 단출해야 하므로 일단 Solana 만 첫 클릭 흐름으로 둔다. (사용자가 향후 Cosmos 를
+  // 쓰려면 별도 토글이 필요 — TODO v0.5 chain-picker.)
+  //
+  // WebHID 사용자 흐름:
+  //   1) 본 버튼은 *user gesture* 안에서 호출돼야 한다 (브라우저 보안 정책).
+  //   2) navigator.hid.requestDevice({filters:[{vendorId: 0x2c97}]}) → Ledger
+  //      Nano X/S+ 디바이스 선택 다이얼로그.
+  //   3) 권한이 부여되면 같은 출처에서는 이후 자동 연결.
+  //   4) 디바이스에서 Solana(또는 Cosmos) 앱이 *열려 있어야* 함.
+  //   5) 디바이스 화면에 주소 확인 프롬프트 → 사용자가 양쪽 버튼으로 승인.
+  async function handleHwConnect(appName: HwAppName = 'solana'): Promise<void> {
+    setError(null);
+    setHwBusy(true);
+    try {
+      await connectHardware(appName);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setHwBusy(false);
+    }
+  }
+
+  async function handleHwDisconnect(): Promise<void> {
+    setHwBusy(true);
+    try {
+      await disconnectHardware();
+    } finally {
+      setHwBusy(false);
+    }
+  }
+
   if (loading) {
     return (
       <main className="popup">
@@ -107,19 +154,33 @@ export function App() {
             <p className="warn small">
               ※ 본 버전은 니모닉이 세션 메모리에만 저장됩니다. 브라우저 재시작 시 다시 복구가 필요합니다.
             </p>
+            <HwConnectPanel
+              hw={hw}
+              busy={hwBusy}
+              onConnect={handleHwConnect}
+              onDisconnect={handleHwDisconnect}
+            />
           </section>
           <ConnectedSites />
         </>
       ) : mode === 'home' ? (
-        <section className="card">
-          <p>지갑이 없습니다.</p>
-          <button className="btn-primary" onClick={handleCreate}>
-            새 지갑 만들기
-          </button>
-          <button className="btn-ghost" onClick={() => setMode('restore')}>
-            니모닉으로 복구
-          </button>
-        </section>
+        <>
+          <section className="card">
+            <p>지갑이 없습니다.</p>
+            <button className="btn-primary" onClick={handleCreate}>
+              새 지갑 만들기
+            </button>
+            <button className="btn-ghost" onClick={() => setMode('restore')}>
+              니모닉으로 복구
+            </button>
+            <HwConnectPanel
+              hw={hw}
+              busy={hwBusy}
+              onConnect={handleHwConnect}
+              onDisconnect={handleHwDisconnect}
+            />
+          </section>
+        </>
       ) : mode === 'create' ? (
         <CreatePane onConfirm={handleCreate} onCancel={() => setMode('home')} />
       ) : (
@@ -182,6 +243,63 @@ function RestorePane({
 function shortenAddress(a: string): string {
   if (a.length <= 12) return a;
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
+}
+
+// 하드웨어 월릿(Ledger) 연결 패널.
+//
+// v0.4 범위: Solana / Cosmos 만 지원. TTL(EVM) 은 Ledger Eth 앱이 digest 가 아닌
+// 전체 raw tx 를 요구하므로, 우리 Wallet 의 sign-digest 루프와 호환되지 않는다 —
+// v0.5 에서 Wallet 에 signTransaction 콜백을 추가한 뒤 활성화한다.
+function HwConnectPanel({
+  hw,
+  busy,
+  onConnect,
+  onDisconnect,
+}: {
+  hw: HwAccountState | null;
+  busy: boolean;
+  onConnect: (appName: HwAppName) => void;
+  onDisconnect: () => void;
+}) {
+  if (hw) {
+    return (
+      <div className="hw-panel" style={{ marginTop: 12 }}>
+        <p className="muted small">하드웨어 월릿 · {hw.appName.toUpperCase()}</p>
+        <p className="addr" title={hw.address}>{shortenAddress(hw.address)}</p>
+        <p className="muted small">경로: {hw.derivationPath}</p>
+        <button
+          className="btn-ghost btn-sm"
+          onClick={onDisconnect}
+          disabled={busy}
+        >
+          하드웨어 분리
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="hw-panel" style={{ marginTop: 12 }}>
+      <button
+        className="btn-ghost"
+        onClick={() => onConnect('solana')}
+        disabled={busy}
+        title="Ledger Nano 를 USB 로 연결한 후 클릭"
+      >
+        {busy ? '연결 중…' : '하드웨어 월릿 연결 (Solana)'}
+      </button>
+      <button
+        className="btn-ghost btn-sm"
+        onClick={() => onConnect('cosmos')}
+        disabled={busy}
+        style={{ marginTop: 4 }}
+      >
+        {busy ? '연결 중…' : 'Cosmos 로 연결'}
+      </button>
+      <p className="muted small" style={{ marginTop: 4 }}>
+        ※ TTL(EVM) 하드웨어 서명은 v0.5 예정입니다.
+      </p>
+    </div>
+  );
 }
 
 // 연결된 사이트(승인된 origin) 목록 + 연결 해제 UI.

@@ -10,10 +10,11 @@ import {
 import { Home } from './src/screens/Home';
 import { Account } from './src/screens/Account';
 import { Send } from './src/screens/Send';
+import { DApp } from './src/screens/DApp';
 import { walletStore } from './src/store';
 import { colors, spacing, theme } from './src/theme';
 
-export type Screen = 'home' | 'account' | 'send';
+export type Screen = 'home' | 'account' | 'send' | 'dapp';
 
 function App(): React.JSX.Element {
   // H1: mobile(MemorySessionStore) 은 자동 복원이 허용되지 않는다.
@@ -38,13 +39,27 @@ function App(): React.JSX.Element {
       <View style={styles.header}>
         <Text style={styles.brand}>노동자의 지갑</Text>
         {screen !== 'home' && (
-          <Pressable
-            accessibilityRole="button"
-            onPress={onLock}
-            style={({ pressed }) => [styles.headerBtn, pressed && styles.headerBtnPressed]}
-          >
-            <Text style={styles.headerBtnText}>잠금</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            {screen === 'account' && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setScreen('dapp')}
+                style={({ pressed }) => [
+                  styles.headerBtn,
+                  pressed && styles.headerBtnPressed,
+                ]}
+              >
+                <Text style={styles.headerBtnText}>dApp</Text>
+              </Pressable>
+            )}
+            <Pressable
+              accessibilityRole="button"
+              onPress={onLock}
+              style={({ pressed }) => [styles.headerBtn, pressed && styles.headerBtnPressed]}
+            >
+              <Text style={styles.headerBtnText}>잠금</Text>
+            </Pressable>
+          </View>
         )}
       </View>
 
@@ -54,6 +69,7 @@ function App(): React.JSX.Element {
           <Account onSend={() => setScreen('send')} onLock={onLock} />
         )}
         {screen === 'send' && <Send onBack={() => setScreen('account')} />}
+        {screen === 'dapp' && <DApp onBack={() => setScreen('account')} />}
       </View>
 
       <Text style={styles.footer}>
@@ -84,6 +100,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.2,
     fontFamily: theme.font.korean,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   headerBtn: {
     paddingHorizontal: spacing.md,
