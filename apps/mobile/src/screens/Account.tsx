@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import type { WalletAccount } from '@nodong/wallet-sdk';
+import { useT } from '@nodong/i18n/react';
 import { walletStore } from '../store';
 import { colors, radius, spacing, theme } from '../theme';
 import { AddressDisplay, AmountDisplay, Button, Card } from '../ui';
@@ -20,6 +21,7 @@ interface Props {
 const TTL_DECIMALS = 18;
 
 export function Account({ onSend, onLock }: Props) {
+  const t = useT();
   const [account, setAccount] = useState<WalletAccount | null>(null);
   const [balance, setBalance] = useState<bigint | null>(null);
   const [loading, setLoading] = useState(false);
@@ -47,11 +49,11 @@ export function Account({ onSend, onLock }: Props) {
       const bal = await walletStore.getDefaultAdapter().getBalance(account.address);
       setBalance(bal);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '잔액 조회 실패');
+      setError(e instanceof Error ? e.message : t('account.balance_failed'));
     } finally {
       setLoading(false);
     }
-  }, [account]);
+  }, [account, t]);
 
   useEffect(() => {
     refresh();
@@ -60,9 +62,9 @@ export function Account({ onSend, onLock }: Props) {
   if (!account) {
     return (
       <View style={styles.empty}>
-        <Text style={styles.lead}>지갑이 잠겨 있습니다.</Text>
+        <Text style={styles.lead}>{t('account.locked_msg')}</Text>
         <Button variant="primary" onPress={onLock}>
-          처음으로
+          {t('account.to_home')}
         </Button>
       </View>
     );
@@ -70,11 +72,11 @@ export function Account({ onSend, onLock }: Props) {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.h1}>내 계정</Text>
-      <Text style={styles.lead}>TTL 메인넷 · ChainId 7777</Text>
+      <Text style={styles.h1}>{t('account.title_mobile')}</Text>
+      <Text style={styles.lead}>{t('account.subtitle_ttl')}</Text>
 
       <Card style={styles.section}>
-        <Text style={styles.label}>주소</Text>
+        <Text style={styles.label}>{t('account.address_label')}</Text>
         <AddressDisplay address={account.address} head={6} tail={4} />
         <View style={styles.qrWrap}>
           <View style={styles.qrBg}>
@@ -86,7 +88,7 @@ export function Account({ onSend, onLock }: Props) {
       </Card>
 
       <Card style={styles.section}>
-        <Text style={styles.label}>잔액</Text>
+        <Text style={styles.label}>{t('account.balance_label')}</Text>
         {loading ? (
           <ActivityIndicator color={colors.primary} />
         ) : balance != null ? (
@@ -97,16 +99,16 @@ export function Account({ onSend, onLock }: Props) {
         {error && <Text style={styles.error}>{error}</Text>}
         <View style={{ height: spacing.sm }} />
         <Button variant="ghost" fullWidth onPress={refresh} disabled={loading}>
-          새로고침
+          {t('common.refresh')}
         </Button>
       </Card>
 
       <Button variant="primary" fullWidth onPress={onSend}>
-        송금
+        {t('account.send')}
       </Button>
       <View style={styles.btnSpacer} />
       <Button variant="ghost" fullWidth onPress={onLock}>
-        잠금
+        {t('common.lock')}
       </Button>
     </ScrollView>
   );

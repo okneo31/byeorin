@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@nodong/design-system": "workspace:*",
+    "@nodong/i18n": "workspace:*",
     "@nodong/shell-core": "workspace:*",
     "@nodong/wallet-sdk": "workspace:*",
     "@tauri-apps/api": "^2.1.1",

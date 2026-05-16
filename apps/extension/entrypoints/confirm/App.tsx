@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatUnits, hexToString, hexToBytes, hexToNumber, isHex, type Hex } from 'viem';
+import { useT } from '@nodong/i18n/react';
 import type { BackgroundMessage, ConfirmContext } from '../../src/lib/rpc.js';
 import {
   decode4Byte,
@@ -22,16 +23,8 @@ import {
 type State =
   | { kind: 'loading' }
   | { kind: 'ready'; ctx: ConfirmContext }
-  | { kind: 'error'; message: string }
+  | { kind: 'error'; messageKey: string }
   | { kind: 'submitted'; decision: 'approve' | 'reject' };
-
-// 메서드 라벨 — "1시간 기억" 체크박스 문구에 사용.
-const METHOD_LABEL: Record<ConfirmContext['method'], string> = {
-  personal_sign: '메시지 서명',
-  eth_sendTransaction: '트랜잭션 전송',
-  eth_signTypedData_v4: 'EIP-712 서명',
-  wallet_watchAsset: '토큰 추가',
-};
 
 const TTL_EXPLORER = 'https://scan.ttl1.top';
 
@@ -82,7 +75,7 @@ function tryHexToReadable(messageHex: string): string | null {
 }
 
 /** wei(BigInt) → "1.234560 TTL" 같은 표현. 소수점 이하 6자리로 trim. */
-function formatTtl(weiHex: string): string {
+function formatTtl(weiHex: string, parseFailedLabel: string): string {
   try {
     const v = BigInt(weiHex);
     const full = formatUnits(v, 18);
@@ -92,14 +85,14 @@ function formatTtl(weiHex: string): string {
     const trimmed = full.slice(0, dot + 7).replace(/0+$/, '').replace(/\.$/, '');
     return trimmed.length === 0 ? '0' : trimmed;
   } catch {
-    return '(파싱 실패)';
+    return parseFailedLabel;
   }
 }
 
 function formatGasUnits(gasHex: string | null): string | null {
   if (!gasHex) return null;
   try {
-    return hexToNumber(gasHex as Hex).toLocaleString('ko-KR');
+    return hexToNumber(gasHex as Hex).toLocaleString('en-US');
   } catch {
     return gasHex;
   }
@@ -114,6 +107,7 @@ function messageBytesLen(messageHex: string): number {
 }
 
 export function App() {
+  const t = useT();
   const [state, setState] = useState<State>({ kind: 'loading' });
 
   useEffect(() => {
@@ -121,27 +115,18 @@ export function App() {
     const nonce = getNonceFromUrl();
     // 보안: nonce 가 없으면 dApp 이 직접 popup URL 을 연 시나리오 — 친절한 안내.
     if (!requestId || !nonce) {
-      setState({
-        kind: 'error',
-        message: '이 페이지는 지갑이 직접 열어야 합니다. 사이트에서 서명 요청을 다시 시도해 주세요.',
-      });
+      setState({ kind: 'error', messageKey: 'confirm.error.no_context' });
       return;
     }
     const msg: BackgroundMessage = { type: 'confirm-context-get', requestId, nonce };
     chrome.runtime.sendMessage(msg, (ctx: ConfirmContext | null) => {
       if (chrome.runtime.lastError) {
-        setState({
-          kind: 'error',
-          message: chrome.runtime.lastError.message ?? '컨텍스트 조회 실패',
-        });
+        setState({ kind: 'error', messageKey: 'confirm.error.context_lookup_failed' });
         return;
       }
       if (!ctx) {
         // nonce 불일치 또는 만료 — dApp 이 fake requestId 로 직접 connect 한 경우 포함.
-        setState({
-          kind: 'error',
-          message: '서명 요청이 만료되었거나 존재하지 않습니다. 사이트에서 다시 요청해 주세요.',
-        });
+        setState({ kind: 'error', messageKey: 'confirm.error.expired' });
         return;
       }
       setState({ kind: 'ready', ctx });
@@ -170,8 +155,8 @@ export function App() {
   if (state.kind === 'loading') {
     return (
       <main className="confirm">
-        <header className="brand">노동자의 지갑</header>
-        <p className="muted">불러오는 중…</p>
+        <header className="brand">{t('brand.name')}</header>
+        <p className="muted">{t('common.loading_ellipsis')}</p>
       </main>
     );
   }
@@ -179,13 +164,13 @@ export function App() {
   if (state.kind === 'error') {
     return (
       <main className="confirm">
-        <header className="brand">노동자의 지갑</header>
+        <header className="brand">{t('brand.name')}</header>
         <section className="card">
-          <h2>요청 오류</h2>
-          <p className="error small">{state.message}</p>
+          <h2>{t('confirm.error_title')}</h2>
+          <p className="error small">{t(state.messageKey)}</p>
           <div className="actions">
             <button className="btn-ghost" onClick={() => window.close()}>
-              창 닫기
+              {t('connect.close_window')}
             </button>
           </div>
         </section>
@@ -196,10 +181,10 @@ export function App() {
   if (state.kind === 'submitted') {
     return (
       <main className="confirm">
-        <header className="brand">노동자의 지갑</header>
+        <header className="brand">{t('brand.name')}</header>
         <section className="card">
-          <p>{state.decision === 'approve' ? '승인했습니다.' : '거부했습니다.'}</p>
-          <p className="muted small">잠시 후 창이 닫힙니다.</p>
+          <p>{state.decision === 'approve' ? t('confirm.approved') : t('confirm.rejected')}</p>
+          <p className="muted small">{t('confirm.closing_soon')}</p>
         </section>
       </main>
     );
@@ -226,32 +211,31 @@ function WatchAssetView({
   ctx: Extract<ConfirmContext, { method: 'wallet_watchAsset' }>;
   onDecision: (d: 'approve' | 'reject', rememberFor1h?: boolean) => void;
 }) {
+  const t = useT();
   return (
     <main className="confirm">
-      <header className="brand">노동자의 지갑</header>
+      <header className="brand">{t('brand.name')}</header>
       <section className="card">
         <h2>
-          토큰 추가 요청
+          {t('confirm.title.watch_asset')}
           <span className="hex-tag">wallet_watchAsset</span>
         </h2>
-        <p className="muted small">
-          아래 사이트가 본 지갑의 토큰 목록에 새 자산을 추가하려고 합니다.
-        </p>
+        <p className="muted small">{t('confirm.lead.watch_asset')}</p>
 
         <div className="row">
-          <span className="label">사이트</span>
+          <span className="label">{t('confirm.label.site')}</span>
           <span className="origin" title={ctx.origin}>
             {ctx.origin}
           </span>
         </div>
 
         <div className="row">
-          <span className="label">토큰 표준</span>
+          <span className="label">{t('confirm.label.token_standard')}</span>
           <span className="origin">{ctx.type}</span>
         </div>
 
         <div className="row">
-          <span className="label">토큰 주소</span>
+          <span className="label">{t('confirm.label.token_address')}</span>
           <a
             className="addr-link"
             href={`${TTL_EXPLORER}/address/${ctx.tokenAddress}`}
@@ -264,28 +248,25 @@ function WatchAssetView({
         </div>
 
         <div className="row">
-          <span className="label">심볼</span>
+          <span className="label">{t('confirm.label.symbol')}</span>
           <span className="origin">
             <strong>{ctx.symbol}</strong>
           </span>
         </div>
 
         <div className="row">
-          <span className="label">소수 자리(decimals)</span>
+          <span className="label">{t('confirm.label.decimals')}</span>
           <span className="origin">{ctx.decimals}</span>
         </div>
 
-        <p className="warn small">
-          ※ 토큰 추가는 자산 이동을 일으키지 않지만, 위조 토큰(예: 'USDC' 라는 심볼로
-          전혀 다른 컨트랙트) 일 수 있으니 토큰 주소를 한 번 더 확인하세요.
-        </p>
+        <p className="warn small">{t('confirm.warn.watch_asset')}</p>
 
         <div className="actions">
           <button className="btn-ghost" onClick={() => onDecision('reject')}>
-            거부
+            {t('confirm.btn.reject')}
           </button>
           <button className="btn-primary" onClick={() => onDecision('approve')}>
-            추가
+            {t('confirm.btn.add_token')}
           </button>
         </div>
       </section>
@@ -309,7 +290,11 @@ function RememberToggle({
   checked: boolean;
   onChange: (v: boolean) => void;
 }) {
-  const label = METHOD_LABEL[method];
+  const t = useT();
+  // wallet_watchAsset 은 popup.method 카탈로그에 없으므로 confirm 전용 라벨로 합친다.
+  // 다른 method 들은 popup.method.{name} 으로 매핑된다 (팝업/confirm 양쪽이 같은 키 사용).
+  const label =
+    method === 'wallet_watchAsset' ? 'wallet_watchAsset' : t(`popup.method.${method}`);
   return (
     <label className="remember-row">
       <input
@@ -318,7 +303,7 @@ function RememberToggle({
         onChange={(e) => onChange(e.target.checked)}
       />
       <span className="remember-text">
-        이 사이트({label})에서 1시간 동안 자동 승인
+        {t('confirm.remember.template', { method: label })}
       </span>
     </label>
   );
@@ -332,31 +317,30 @@ function PersonalSignView({
   ctx: Extract<ConfirmContext, { method: 'personal_sign' }>;
   onDecision: (d: 'approve' | 'reject', rememberFor1h?: boolean) => void;
 }) {
+  const t = useT();
   const readable = useMemo(() => tryHexToReadable(ctx.message), [ctx.message]);
   const byteLen = useMemo(() => messageBytesLen(ctx.message), [ctx.message]);
   const [remember, setRemember] = useState(false);
 
   return (
     <main className="confirm">
-      <header className="brand">노동자의 지갑</header>
+      <header className="brand">{t('brand.name')}</header>
       <section className="card">
         <h2>
-          메시지 서명 요청
+          {t('confirm.title.personal_sign')}
           <span className="hex-tag">personal_sign</span>
         </h2>
-        <p className="muted small">
-          아래 사이트가 다음 메시지를 본 지갑으로 서명해 달라고 요청합니다.
-        </p>
+        <p className="muted small">{t('confirm.lead.personal_sign')}</p>
 
         <div className="row">
-          <span className="label">사이트</span>
+          <span className="label">{t('confirm.label.site')}</span>
           <span className="origin" title={ctx.origin}>
             {ctx.origin}
           </span>
         </div>
 
         <div className="row">
-          <span className="label">서명자</span>
+          <span className="label">{t('confirm.label.signer')}</span>
           <span className="addr" title={ctx.address}>
             {shorten(ctx.address)}
           </span>
@@ -364,32 +348,29 @@ function PersonalSignView({
 
         <div className="row">
           <span className="label">
-            서명할 메시지 {readable ? `(${byteLen} 바이트)` : '(원시 hex)'}
+            {readable
+              ? t('confirm.label.message_to_sign', { byteLen })
+              : t('confirm.label.message_to_sign_raw')}
           </span>
           <div className={readable ? 'msg-block' : 'msg-block hex'}>
             {readable ?? ctx.message}
           </div>
         </div>
 
-        <p className="warn small">
-          ※ 서명은 본 사이트가 본 주소의 소유를 증명하는 데 사용됩니다. 메시지 내용을 반드시
-          확인하세요. 자산 이전이 일어나지는 않지만, 일부 dApp 은 서명을 권한 부여 수단으로
-          사용합니다.
-        </p>
+        <p className="warn small">{t('confirm.warn.personal_sign_proof')}</p>
 
         {/* 1시간 자동 승인 — personal_sign 의 grant 는 임의 메시지를 자동 서명하게 된다. */}
         <p className="warn small" style={{ background: '#fff7d6', padding: '6px', borderRadius: 4 }}>
-          ※ "1시간 자동 승인" 을 켜면 이 사이트가 요청하는 <strong>모든 메시지</strong> 가
-          자동으로 서명됩니다. 신뢰할 수 있는 사이트에서만 켜세요.
+          {t('confirm.warn.grant_personal_sign')}
         </p>
         <RememberToggle method={ctx.method} checked={remember} onChange={setRemember} />
 
         <div className="actions">
           <button className="btn-ghost" onClick={() => onDecision('reject')}>
-            거부
+            {t('confirm.btn.reject')}
           </button>
           <button className="btn-primary" onClick={() => onDecision('approve', remember)}>
-            승인
+            {t('confirm.btn.approve')}
           </button>
         </div>
       </section>
@@ -407,7 +388,9 @@ function SendTxView({
   ctx: Extract<ConfirmContext, { method: 'eth_sendTransaction' }>;
   onDecision: (d: 'approve' | 'reject', rememberFor1h?: boolean) => void;
 }) {
-  const valueFormatted = useMemo(() => formatTtl(ctx.value), [ctx.value]);
+  const t = useT();
+  const parseFailed = t('confirm.parse_failed');
+  const valueFormatted = useMemo(() => formatTtl(ctx.value, parseFailed), [ctx.value, parseFailed]);
   const gasFormatted = useMemo(() => formatGasUnits(ctx.gas), [ctx.gas]);
   const dataNonEmpty = !!(ctx.data && ctx.data !== '0x' && ctx.data !== '');
   const decoded = useMemo(() => (dataNonEmpty ? decode4Byte(ctx.data) : null), [
@@ -442,30 +425,32 @@ function SendTxView({
 
   return (
     <main className="confirm">
-      <header className="brand">노동자의 지갑</header>
+      <header className="brand">{t('brand.name')}</header>
       <section className="card">
         <h2>
-          전송 승인 요청
+          {t('confirm.title.send_tx')}
           <span className="hex-tag">eth_sendTransaction</span>
         </h2>
-        <p className="muted small">아래 내용으로 트랜잭션을 전송합니다.</p>
+        <p className="muted small">{t('confirm.lead.send_tx')}</p>
 
         <div className="row">
-          <span className="label">사이트</span>
+          <span className="label">{t('confirm.label.site')}</span>
           <span className="origin" title={ctx.origin}>
             {ctx.origin}
           </span>
         </div>
 
         <div className="row">
-          <span className="label">보내는 주소</span>
+          <span className="label">{t('confirm.label.from')}</span>
           <span className="addr" title={ctx.from}>
             {shorten(ctx.from)}
           </span>
         </div>
 
         <div className="row">
-          <span className="label">{dataNonEmpty ? '대상 계약' : '받는 주소'}</span>
+          <span className="label">
+            {dataNonEmpty ? t('confirm.label.target_contract') : t('confirm.label.to_address')}
+          </span>
           <a
             className="addr-link"
             href={`${TTL_EXPLORER}/address/${ctx.to}`}
@@ -478,27 +463,29 @@ function SendTxView({
         </div>
 
         <div className="row">
-          <span className="label">{dataNonEmpty ? '함께 전송할 native 값' : '금액'}</span>
+          <span className="label">
+            {dataNonEmpty ? t('confirm.label.native_with_call') : t('confirm.label.amount')}
+          </span>
           <span className="value">{valueFormatted} TTL</span>
           <span className="value-sub">{ctx.value} wei</span>
         </div>
 
         {gasFormatted ? (
           <div className="row">
-            <span className="label">가스 한도(예상)</span>
+            <span className="label">{t('confirm.label.gas_estimate')}</span>
             <span className="origin">{gasFormatted}</span>
           </div>
         ) : null}
 
         {dataNonEmpty && decoded ? (
           <div className="row">
-            <span className="label">함수 호출 (4-byte 셀렉터)</span>
+            <span className="label">{t('confirm.label.fn_call_4byte')}</span>
             <span className="origin">
               <strong>{decoded.selector}</strong>
               {decoded.signature ? (
                 <> — {decoded.signature}</>
               ) : (
-                <> — <em>(알 수 없는 함수 호출)</em></>
+                <> — <em>{t('confirm.label.fn_unknown')}</em></>
               )}
             </span>
           </div>
@@ -512,11 +499,11 @@ function SendTxView({
             {erc20.kind === 'transfer' ? (
               <>
                 <div className="row">
-                  <span className="label">토큰 받는 주소</span>
+                  <span className="label">{t('confirm.label.token_to')}</span>
                   <span className="addr" title={erc20.to}>{erc20.to}</span>
                 </div>
                 <div className="row">
-                  <span className="label">토큰 수량 (raw)</span>
+                  <span className="label">{t('confirm.label.token_amount_raw')}</span>
                   <span className="value-sub">{erc20.amount.toString()}</span>
                 </div>
               </>
@@ -524,11 +511,11 @@ function SendTxView({
             {erc20.kind === 'approve' ? (
               <>
                 <div className="row">
-                  <span className="label">권한 부여 대상(spender)</span>
+                  <span className="label">{t('confirm.label.spender')}</span>
                   <span className="addr" title={erc20.spender}>{erc20.spender}</span>
                 </div>
                 <div className="row">
-                  <span className="label">권한 금액 (raw)</span>
+                  <span className="label">{t('confirm.label.allowance_raw')}</span>
                   <span className="value-sub">{erc20.amount.toString()}</span>
                 </div>
               </>
@@ -536,15 +523,15 @@ function SendTxView({
             {erc20.kind === 'transferFrom' ? (
               <>
                 <div className="row">
-                  <span className="label">토큰 보내는 주소(from)</span>
+                  <span className="label">{t('confirm.label.token_from')}</span>
                   <span className="addr" title={erc20.from}>{erc20.from}</span>
                 </div>
                 <div className="row">
-                  <span className="label">토큰 받는 주소(to)</span>
+                  <span className="label">{t('confirm.label.token_to_arrow')}</span>
                   <span className="addr" title={erc20.to}>{erc20.to}</span>
                 </div>
                 <div className="row">
-                  <span className="label">토큰 수량 (raw)</span>
+                  <span className="label">{t('confirm.label.token_amount_raw')}</span>
                   <span className="value-sub">{erc20.amount.toString()}</span>
                 </div>
               </>
@@ -554,65 +541,54 @@ function SendTxView({
 
         {unlimitedApprove ? (
           <p className="warn small" style={{ background: '#fff7d6', padding: '8px', borderRadius: 4 }}>
-            ⚠ 무제한 권한 위임(approve) 이 감지되었습니다. 본 사이트(spender) 가 해당 토큰의
-            잔고 전체를 언제든 인출할 수 있게 됩니다. 의도한 바가 아니라면 거부하세요.
+            {t('confirm.warn.unlimited_approve')}
           </p>
         ) : null}
 
         {transferToZero ? (
           <p className="warn small" style={{ background: '#ffe0e0', padding: '8px', borderRadius: 4 }}>
-            ⚠ 받는 주소가 0x000…000(영주소) 입니다. 토큰을 영구적으로 소각하는 호출일 수
-            있습니다. 정말 보낼 의도라면 다시 한 번 확인하세요.
+            {t('confirm.warn.transfer_to_zero')}
           </p>
         ) : null}
 
         {transferToSelf ? (
           <p className="warn small" style={{ background: '#fff7d6', padding: '8px', borderRadius: 4 }}>
-            ⚠ 받는 주소가 보내는 주소와 동일합니다. 일부 dApp 이 이런 패턴을 미끼로 사용하는
-            경우가 있으니 의도를 다시 확인하세요.
+            {t('confirm.warn.transfer_to_self')}
           </p>
         ) : null}
 
         {dataNonEmpty ? (
           <div className="row">
-            <span className="label">Raw calldata</span>
+            <span className="label">{t('confirm.label.raw_calldata')}</span>
             <div className="msg-block hex">{dataDisplay}</div>
             {ctx.data.length > CALLDATA_TRUNC_AT ? (
               <button
                 className="btn-ghost btn-sm"
                 onClick={() => setShowFullData((v) => !v)}
               >
-                {showFullData ? '접기' : '더 보기'}
+                {showFullData ? t('confirm.label.collapse') : t('confirm.label.show_more')}
               </button>
             ) : null}
-            <span className="warn small">
-              ※ 계약 호출은 자산 이동/권한 부여(approve) 등 부수효과가 있을 수 있습니다.
-              함수 시그니처와 대상 계약을 반드시 확인하세요.
-            </span>
+            <span className="warn small">{t('confirm.warn.contract_call_side_effects')}</span>
           </div>
         ) : null}
 
-        <p className="warn small">
-          ※ 승인 시 본 트랜잭션이 즉시 TTL 네트워크에 브로드캐스트됩니다. 이 결정은 되돌릴 수
-          없습니다.
-        </p>
+        <p className="warn small">{t('confirm.warn.broadcast_irreversible')}</p>
 
         {/* 1시간 자동 승인 토글 — eth_sendTransaction 의 grant 는 method 레벨이므로
             이 사이트가 보낼 모든 트랜잭션(다른 to/value/data 포함) 이 자동 승인된다.
             사용자가 이 점을 정확히 알 수 있도록 별도 경고를 토글 바로 위에 표시. */}
         <p className="warn small" style={{ background: '#fff7d6', padding: '6px', borderRadius: 4 }}>
-          ※ "1시간 자동 승인" 을 켜면 이 사이트가 보내는 <strong>모든 트랜잭션</strong> 이
-          (받는 주소·금액·calldata 와 관계없이) 자동 승인됩니다. 신뢰할 수 있는 사이트에서만
-          켜세요.
+          {t('confirm.warn.grant_send_tx')}
         </p>
         <RememberToggle method={ctx.method} checked={remember} onChange={setRemember} />
 
         <div className="actions">
           <button className="btn-ghost" onClick={() => onDecision('reject')}>
-            거부
+            {t('confirm.btn.reject')}
           </button>
           <button className="btn-primary" onClick={() => onDecision('approve', remember)}>
-            승인
+            {t('confirm.btn.approve')}
           </button>
         </div>
       </section>
@@ -628,6 +604,7 @@ function SignTypedDataView({
   ctx: Extract<ConfirmContext, { method: 'eth_signTypedData_v4' }>;
   onDecision: (d: 'approve' | 'reject', rememberFor1h?: boolean) => void;
 }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   const [remember, setRemember] = useState(false);
 
@@ -649,38 +626,36 @@ function SignTypedDataView({
 
   return (
     <main className="confirm">
-      <header className="brand">노동자의 지갑</header>
+      <header className="brand">{t('brand.name')}</header>
       <section className="card">
         <h2>
-          EIP-712 서명 요청
+          {t('confirm.title.typed_data')}
           <span className="hex-tag">eth_signTypedData_v4</span>
         </h2>
-        <p className="muted small">
-          아래 사이트가 구조화된(typed) 데이터를 서명해 달라고 요청합니다.
-        </p>
+        <p className="muted small">{t('confirm.lead.typed_data')}</p>
 
         <div className="row">
-          <span className="label">사이트</span>
+          <span className="label">{t('confirm.label.site')}</span>
           <span className="origin" title={ctx.origin}>
             {ctx.origin}
           </span>
         </div>
 
         <div className="row">
-          <span className="label">서명자</span>
+          <span className="label">{t('confirm.label.signer')}</span>
           <span className="addr" title={ctx.address}>
             {shorten(ctx.address)}
           </span>
         </div>
 
         <div className="row">
-          <span className="label">서명 대상 타입(primaryType)</span>
+          <span className="label">{t('confirm.label.primary_type')}</span>
           <span className="origin">{ctx.primaryType}</span>
         </div>
 
         {ctx.domain.name ? (
           <div className="row">
-            <span className="label">도메인 이름</span>
+            <span className="label">{t('confirm.label.domain_name')}</span>
             <span className="origin">{ctx.domain.name}</span>
           </div>
         ) : null}
@@ -708,71 +683,60 @@ function SignTypedDataView({
         ) : null}
 
         <div className="row">
-          <span className="label">서명 다이제스트 (EIP-712 hash)</span>
+          <span className="label">{t('confirm.label.eip712_digest')}</span>
           <div className="msg-block hex">{ctx.digest}</div>
         </div>
 
         <div className="row">
           <div className="label-row">
-            <span className="label">메시지 내용</span>
+            <span className="label">{t('confirm.label.message_content')}</span>
             <button
               className="btn-ghost btn-sm"
               onClick={() => setExpanded((v) => !v)}
             >
-              {expanded ? '접기' : '펼치기'}
+              {expanded ? t('confirm.label.collapse') : t('confirm.label.expand')}
             </button>
           </div>
           {expanded ? (
             <div className="msg-block">{ctx.messageJson}</div>
           ) : (
-            <span className="muted small">
-              펼쳐서 dApp 이 서명을 요청한 데이터 전체를 확인하세요.
-            </span>
+            <span className="muted small">{t('confirm.label.expand_to_see')}</span>
           )}
         </div>
 
         {risks.includes('permit') ? (
           <p className="warn small" style={{ background: '#ffe0e0', padding: '8px', borderRadius: 4 }}>
-            ⚠ 토큰 사용 권한 위임(Permit) 서명입니다. 본 서명을 제출하면 spender 가
-            해당 토큰을 본 지갑에서 인출할 수 있게 됩니다. <strong>위조 사이트 주의</strong> —
-            도메인과 spender 주소를 반드시 확인하세요.
+            {t('confirm.warn.permit_risk')}
           </p>
         ) : null}
 
         {risks.includes('seaport') ? (
           <p className="warn small" style={{ background: '#ffe0e0', padding: '8px', borderRadius: 4 }}>
-            ⚠ Seaport(OpenSea) 주문 서명입니다. 본 서명은 NFT/토큰 양도 권한을 위임합니다.
-            제출하면 되돌릴 수 없습니다. 메시지의 항목(offer/consideration) 을 반드시 확인하세요.
+            {t('confirm.warn.seaport_risk')}
           </p>
         ) : null}
 
         {risks.includes('unicode') ? (
           <p className="warn small" style={{ background: '#fff7d6', padding: '8px', borderRadius: 4 }}>
-            ⚠ 도메인 이름 또는 primaryType 에 ASCII 가 아닌 문자가 포함되어 있습니다. 익숙한
-            서비스(예: "Permit") 와 비슷한 동형이의어(예: "Permіt", Cyrillic "і") 일 수 있으니
-            서비스 이름의 철자를 다시 확인하세요.
+            {t('confirm.warn.unicode_risk')}
           </p>
         ) : null}
 
-        <p className="warn small">
-          ※ EIP-712 서명은 자산 이동/권한 부여(예: Permit, Seaport 주문) 의 인증 수단으로
-          쓰일 수 있습니다. 도메인과 메시지 내용을 반드시 확인하세요.
-        </p>
+        <p className="warn small">{t('confirm.warn.typed_data')}</p>
 
         {/* 1시간 자동 승인 — typed-data 자체는 자유 형식이므로 매우 위험하다. 반드시
             "이 사이트가 다음 한 시간 동안 임의의 메시지를 자동 서명받게 된다" 임을 명시. */}
         <p className="warn small" style={{ background: '#fff7d6', padding: '6px', borderRadius: 4 }}>
-          ※ "1시간 자동 승인" 을 켜면 이 사이트가 요청하는 <strong>모든 EIP-712 메시지</strong>
-          (Permit 등 권한 위임 포함) 가 자동 서명됩니다. 신뢰할 수 있는 사이트에서만 켜세요.
+          {t('confirm.warn.grant_typed_data')}
         </p>
         <RememberToggle method={ctx.method} checked={remember} onChange={setRemember} />
 
         <div className="actions">
           <button className="btn-ghost" onClick={() => onDecision('reject')}>
-            거부
+            {t('confirm.btn.reject')}
           </button>
           <button className="btn-primary" onClick={() => onDecision('approve', remember)}>
-            승인
+            {t('confirm.btn.approve')}
           </button>
         </div>
       </section>

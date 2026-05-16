@@ -10,6 +10,7 @@ import {
   type WalletAccount,
 } from '@nodong/wallet-sdk';
 import { AddressDisplay, AmountDisplay, Button, Card } from '@nodong/design-system';
+import { useT } from '@nodong/i18n/react';
 import { walletStore } from '../wallet-store.js';
 
 interface Props {
@@ -23,6 +24,7 @@ interface Props {
 const sharedRegistry = new TokenRegistry();
 
 export function Account({ onSend, onLock, onActivity }: Props) {
+  const t = useT();
   const [account, setAccount] = useState<WalletAccount | null>(null);
   const [balance, setBalance] = useState<bigint | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
@@ -62,7 +64,9 @@ export function Account({ onSend, onLock, onActivity }: Props) {
       } catch (e) {
         if (!cancelled) {
           setError(
-            e instanceof Error ? `잔액을 불러오지 못했습니다: ${e.message}` : '잔액 조회 실패',
+            e instanceof Error
+              ? t('account.balance_failed_with_reason', { reason: e.message })
+              : t('account.balance_failed'),
           );
         }
       } finally {
@@ -73,7 +77,7 @@ export function Account({ onSend, onLock, onActivity }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [onLock]);
+  }, [onLock, t]);
 
   const refreshTokens = useCallback(async (acc: WalletAccount) => {
     setTokensLoading(true);
@@ -87,12 +91,12 @@ export function Account({ onSend, onLock, onActivity }: Props) {
       const found = await discoverTokens(adapter, sharedRegistry, acc.address);
       setTokens(found);
     } catch (e) {
-      setTokensError(e instanceof Error ? e.message : '토큰 조회 실패');
+      setTokensError(e instanceof Error ? e.message : t('tokens.lookup_failed'));
       setTokens([]);
     } finally {
       setTokensLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (account) void refreshTokens(account);
@@ -113,13 +117,15 @@ export function Account({ onSend, onLock, onActivity }: Props) {
 
   return (
     <div>
-      <h1 className="nd-h1">내 지갑</h1>
-      <p className="nd-lead">TTL 메인넷 · 체인 ID 7777</p>
+      <h1 className="nd-h1">{t('account.title')}</h1>
+      <p className="nd-lead">{t('account.subtitle_ttl')}</p>
 
       <Card>
-        <p className="nd-muted" style={{ marginTop: 0, marginBottom: 8 }}>잔액</p>
+        <p className="nd-muted" style={{ marginTop: 0, marginBottom: 8 }}>
+          {t('account.balance_label')}
+        </p>
         {loading ? (
-          <span className="nd-muted">불러오는 중...</span>
+          <span className="nd-muted">{t('common.loading')}</span>
         ) : (
           <>
             <AmountDisplay
@@ -148,28 +154,28 @@ export function Account({ onSend, onLock, onActivity }: Props) {
             marginBottom: 8,
           }}
         >
-          <p className="nd-muted" style={{ margin: 0 }}>토큰</p>
+          <p className="nd-muted" style={{ margin: 0 }}>{t('tokens.title')}</p>
           <Button variant="ghost" onClick={() => setShowAddModal(true)}>
-            토큰 추가
+            {t('tokens.add')}
           </Button>
         </div>
-        {tokensLoading && <span className="nd-muted">토큰 조회 중…</span>}
+        {tokensLoading && <span className="nd-muted">{t('tokens.loading')}</span>}
         {tokensError && <div className="nd-error">{tokensError}</div>}
         {!tokensLoading && tokens && tokens.length === 0 && !tokensError && (
           <p className="nd-muted" style={{ marginTop: 8 }}>
-            보유 토큰이 없습니다. "토큰 추가" 로 컨트랙트를 등록해보세요.
+            {t('tokens.empty')}
           </p>
         )}
         {tokens && tokens.length > 0 && (
           <ul className="nd-tokens">
-            {tokens.map((t) => (
-              <li key={t.token.address} className="nd-tokens__row">
-                <span className="nd-tokens__sym">{t.token.symbol}</span>
-                <span className="nd-tokens__name">{t.token.name}</span>
+            {tokens.map((row) => (
+              <li key={row.token.address} className="nd-tokens__row">
+                <span className="nd-tokens__sym">{row.token.symbol}</span>
+                <span className="nd-tokens__name">{row.token.name}</span>
                 <AmountDisplay
-                  value={t.balance}
-                  decimals={t.token.decimals}
-                  symbol={t.token.symbol}
+                  value={row.balance}
+                  decimals={row.token.decimals}
+                  symbol={row.token.symbol}
                   maxDecimals={4}
                   size="md"
                 />
@@ -180,13 +186,15 @@ export function Account({ onSend, onLock, onActivity }: Props) {
       </Card>
 
       <Card>
-        <p className="nd-muted" style={{ marginTop: 0, marginBottom: 8 }}>받는 주소</p>
+        <p className="nd-muted" style={{ marginTop: 0, marginBottom: 8 }}>
+          {t('account.receive_address')}
+        </p>
         <AddressDisplay
           address={account.address}
           head={10}
           tail={8}
-          copyLabel="주소 복사"
-          copiedLabel="복사됨"
+          copyLabel={t('account.copy_address')}
+          copiedLabel={t('common.copied')}
         />
         {qrDataUrl && (
           <>
@@ -195,20 +203,20 @@ export function Account({ onSend, onLock, onActivity }: Props) {
               <img src={qrDataUrl} alt="receiving address QR" />
             </div>
             <p className="nd-muted" style={{ textAlign: 'center', marginTop: 10 }}>
-              QR을 스캔해 이 주소로 받을 수 있습니다.
+              {t('account.qr_help')}
             </p>
           </>
         )}
       </Card>
 
       <Button variant="primary" className="nd-button--block" onClick={onSend}>
-        송금
+        {t('account.send')}
       </Button>
       <Button variant="secondary" className="nd-button--block" onClick={onActivity}>
-        활동 보기
+        {t('account.activity')}
       </Button>
       <Button variant="ghost" className="nd-button--block" onClick={onLock}>
-        잠금
+        {t('common.lock')}
       </Button>
 
       {showAddModal && (
@@ -239,6 +247,7 @@ function AddTokenModal({
   onClose: () => void;
   onAdded: () => void;
 }) {
+  const t = useT();
   const [addr, setAddr] = useState('');
   const [info, setInfo] = useState<TokenInfo | null>(null);
   const [loading, setLoading] = useState(false);
@@ -263,11 +272,11 @@ function AddTokenModal({
       ]);
       setInfo({ address: target, symbol, name, decimals, custom: true });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '토큰 정보 조회 실패');
+      setErr(e instanceof Error ? e.message : t('tokens.info_lookup_failed'));
     } finally {
       setLoading(false);
     }
-  }, [addr]);
+  }, [addr, t]);
 
   const add = () => {
     if (!info) return;
@@ -277,11 +286,11 @@ function AddTokenModal({
   };
 
   return (
-    <div className="nd-modal" role="dialog" aria-modal="true" aria-label="토큰 추가">
+    <div className="nd-modal" role="dialog" aria-modal="true" aria-label={t('tokens.modal.title')}>
       <div className="nd-modal__sheet">
-        <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>토큰 추가</h2>
+        <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>{t('tokens.modal.title')}</h2>
         <p className="nd-muted" style={{ marginTop: 0 }}>
-          ERC-20 컨트랙트 주소를 입력하세요.
+          {t('tokens.modal.lead')}
         </p>
         <input
           className="nd-input"
@@ -299,26 +308,26 @@ function AddTokenModal({
             disabled={!validAddr || loading}
             loading={loading}
           >
-            정보 조회
+            {t('tokens.modal.lookup')}
           </Button>
           <Button variant="ghost" onClick={onClose}>
-            취소
+            {t('common.cancel')}
           </Button>
         </div>
         {err && <div className="nd-error">{err}</div>}
         {info && (
           <div style={{ marginTop: 12 }}>
             <p className="nd-muted" style={{ marginBottom: 4 }}>
-              발견된 토큰
+              {t('tokens.modal.found')}
             </p>
             <p style={{ margin: 0, fontWeight: 700 }}>
               {info.symbol} <span className="nd-muted">· {info.name}</span>
             </p>
             <p className="nd-muted" style={{ marginTop: 4 }}>
-              소수 자릿수: {info.decimals}
+              {t('tokens.modal.decimals_label', { n: info.decimals })}
             </p>
             <Button variant="primary" className="nd-button--block" onClick={add}>
-              내 지갑에 추가
+              {t('tokens.modal.add_to_wallet')}
             </Button>
           </div>
         )}

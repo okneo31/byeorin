@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button, Logo } from '@nodong/design-system';
+import { LocaleSwitch, useT } from '@nodong/i18n/react';
 import { Wallet } from './views/Wallet.js';
 import { Send } from './views/Send.js';
 import { Portfolio } from './views/Portfolio.js';
@@ -20,31 +21,32 @@ export type View =
 
 interface NavItem {
   key: View;
-  label: string;
+  labelKey: string;
   icon: string;
 }
 
 const NAV: readonly NavItem[] = [
-  { key: 'wallet', label: '지갑', icon: '●' },
-  { key: 'send', label: '송수신', icon: '↗' },
-  { key: 'activity', label: '활동', icon: '≡' },
-  { key: 'portfolio', label: '포트폴리오', icon: '◆' },
-  { key: 'hardware', label: '하드웨어 월릿', icon: '◈' },
-  { key: 'dapp', label: 'dApp 연결', icon: '⇄' },
-  { key: 'settings', label: '설정', icon: '⚙' },
+  { key: 'wallet', labelKey: 'nav.wallet', icon: '●' },
+  { key: 'send', labelKey: 'nav.send', icon: '↗' },
+  { key: 'activity', labelKey: 'nav.activity', icon: '≡' },
+  { key: 'portfolio', labelKey: 'nav.portfolio', icon: '◆' },
+  { key: 'hardware', labelKey: 'nav.hardware', icon: '◈' },
+  { key: 'dapp', labelKey: 'nav.dapp', icon: '⇄' },
+  { key: 'settings', labelKey: 'nav.settings', icon: '⚙' },
 ];
 
 export function App() {
+  const t = useT();
   const [view, setView] = useState<View>('wallet');
   // H1: desktop(Tauri webview) 환경은 자동 복원을 허용하지 않는다.
   const [unlocked, setUnlocked] = useState<boolean>(false);
 
   useEffect(() => {
-    document.title = '노동자의 지갑';
+    document.title = t('app.title');
     void walletStore.tryAutoRestore().then((restored) => {
       if (restored) setUnlocked(true);
     });
-  }, []);
+  }, [t]);
 
   const onLock = () => {
     void walletStore.lock();
@@ -56,14 +58,17 @@ export function App() {
     setUnlocked(true);
   };
 
+  // 사이드바 비수탁 안내는 줄바꿈을 포함한다 — 카탈로그 값을 줄별로 렌더.
+  const sidebarLines = useMemo(() => t('sidebar.non_custodial').split('\n'), [t]);
+
   return (
     <div className="nd-shell">
       <aside className="nd-sidebar">
         <div className="nd-sidebar__brand">
           <Logo size={36} variant="mark" />
           <div>
-            <div className="nd-sidebar__title">노동자의 지갑</div>
-            <div className="nd-sidebar__subtitle">TTL Ecosystem · v0.1</div>
+            <div className="nd-sidebar__title">{t('brand.name')}</div>
+            <div className="nd-sidebar__subtitle">{t('sidebar.subtitle')}</div>
           </div>
         </div>
         <nav className="nd-nav">
@@ -84,26 +89,32 @@ export function App() {
                 }
                 onClick={() => setView(item.key)}
                 disabled={disabled}
-                title={disabled ? '먼저 지갑을 열어주세요' : undefined}
+                title={disabled ? t('nav.unlock_first') : undefined}
               >
                 <span className="nd-nav__icon" aria-hidden>
                   {item.icon}
                 </span>
-                <span>{item.label}</span>
+                <span>{t(item.labelKey)}</span>
               </button>
             );
           })}
         </nav>
         <div className="nd-sidebar__footer">
+          <div style={{ marginBottom: 10 }}>
+            <LocaleSwitch />
+          </div>
           {unlocked ? (
             <Button variant="secondary" className="nd-button--block" onClick={onLock}>
-              잠금
+              {t('common.lock')}
             </Button>
           ) : (
             <p className="nd-muted nd-sidebar__note">
-              비수탁(non-custodial)
-              <br />
-              복구 문구는 세션에만 저장됩니다.
+              {sidebarLines.map((line, i) => (
+                <span key={i}>
+                  {line}
+                  {i < sidebarLines.length - 1 ? <br /> : null}
+                </span>
+              ))}
             </p>
           )}
         </div>

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { createMnemonic } from '@nodong/wallet-sdk';
+import { ShellError } from '@nodong/shell-core';
+import { useT } from '@nodong/i18n/react';
 import { walletStore } from '../store';
 import { colors, radius, spacing, theme } from '../theme';
 import { Button, Card, Input } from '../ui';
@@ -11,7 +13,15 @@ interface Props {
   onReady: () => void;
 }
 
+/** shell-core 도메인 에러를 사용자 언어로 매핑한다. */
+function localizeError(t: (k: string) => string, e: unknown, fallback: string): string {
+  if (e instanceof ShellError) return t(`errors.${e.code}`);
+  if (e instanceof Error) return e.message || fallback;
+  return fallback;
+}
+
 export function Home({ onReady }: Props) {
+  const t = useT();
   const [mode, setMode] = useState<Mode>('choose');
 
   if (mode === 'create') {
@@ -23,23 +33,20 @@ export function Home({ onReady }: Props) {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.h1}>노동자에게 자기 결정권을.</Text>
-      <Text style={styles.lead}>
-        수수료 투명, 다크 패턴 없음, 데이터는 당신의 기기에. TTL 체인을 포함한 EVM 호환 자산을
-        쉽고 안전하게.
-      </Text>
+      <Text style={styles.h1}>{t('brand.tagline')}</Text>
+      <Text style={styles.lead}>{t('home.lead')}</Text>
 
       <Card style={styles.section}>
-        <Text style={styles.label}>처음 사용하세요?</Text>
+        <Text style={styles.label}>{t('home.new_user_question')}</Text>
         <Button variant="primary" fullWidth onPress={() => setMode('create')}>
-          지갑 생성
+          {t('home.create_button')}
         </Button>
       </Card>
 
       <Card style={styles.section}>
-        <Text style={styles.label}>이미 복구 문구가 있나요?</Text>
+        <Text style={styles.label}>{t('home.recover_question')}</Text>
         <Button variant="secondary" fullWidth onPress={() => setMode('recover')}>
-          복구하기
+          {t('recover.submit')}
         </Button>
       </Card>
     </ScrollView>
@@ -47,6 +54,7 @@ export function Home({ onReady }: Props) {
 }
 
 function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
+  const t = useT();
   const [mnemonic] = useState(() => createMnemonic(128, 'korean'));
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +67,7 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
         await walletStore.unlock(mnemonic);
         onDone();
       } catch (e) {
-        setError(e instanceof Error ? e.message : '지갑 생성에 실패했습니다.');
+        setError(localizeError(t, e, t('create.failed')));
       } finally {
         setBusy(false);
       }
@@ -68,16 +76,11 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.h1}>복구 문구를 기억하세요</Text>
-      <Text style={styles.lead}>
-        아래 12개 단어는 당신의 지갑 그 자체입니다. 종이에 적거나 안전한 곳에 보관하세요.
-        절대 다른 사람과 공유하지 마세요.
-      </Text>
+      <Text style={styles.h1}>{t('create.title')}</Text>
+      <Text style={styles.lead}>{t('create.lead')}</Text>
 
       <View style={styles.warn}>
-        <Text style={styles.warnText}>
-          이 문구를 잃어버리면 지갑을 복구할 수 없습니다. 화면 캡처는 권하지 않습니다.
-        </Text>
+        <Text style={styles.warnText}>{t('create.warn')}</Text>
       </View>
 
       <Card style={styles.section}>
@@ -95,7 +98,7 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
         <View style={[styles.checkbox, confirmed && styles.checkboxOn]}>
           {confirmed && <Text style={styles.checkboxMark}>✓</Text>}
         </View>
-        <Text style={styles.checkText}>위 12개 단어를 안전하게 보관했습니다.</Text>
+        <Text style={styles.checkText}>{t('create.checkbox_safe')}</Text>
       </Pressable>
 
       {error && <Text style={styles.error}>{error}</Text>}
@@ -107,17 +110,18 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
         loading={busy}
         onPress={onConfirm}
       >
-        외웠습니다, 다음
+        {t('create.confirm_done')}
       </Button>
       <View style={styles.btnSpacer} />
       <Button variant="ghost" fullWidth onPress={onBack}>
-        뒤로
+        {t('common.back')}
       </Button>
     </ScrollView>
   );
 }
 
 function RecoverFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
+  const t = useT();
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -130,7 +134,7 @@ function RecoverFlow({ onDone, onBack }: { onDone: () => void; onBack: () => voi
         await walletStore.unlock(input);
         onDone();
       } catch (e) {
-        setError(e instanceof Error ? e.message : '복구에 실패했습니다.');
+        setError(localizeError(t, e, t('recover.failed')));
       } finally {
         setBusy(false);
       }
@@ -141,17 +145,15 @@ function RecoverFlow({ onDone, onBack }: { onDone: () => void; onBack: () => voi
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.h1}>지갑 복구</Text>
-      <Text style={styles.lead}>
-        12개 또는 24개의 복구 단어를 띄어쓰기로 입력하세요. 영어 또는 한국어 단어 모두 지원합니다.
-      </Text>
+      <Text style={styles.h1}>{t('recover.title')}</Text>
+      <Text style={styles.lead}>{t('recover.lead')}</Text>
 
       <Card style={styles.section}>
         <Input
-          label="복구 문구"
+          label={t('recover.label')}
           value={input}
           onChangeText={setInput}
-          placeholder="예) word1 word2 word3 ..."
+          placeholder={t('recover.placeholder')}
           multiline
           numberOfLines={4}
           autoCapitalize="none"
@@ -167,11 +169,11 @@ function RecoverFlow({ onDone, onBack }: { onDone: () => void; onBack: () => voi
         loading={busy}
         onPress={onSubmit}
       >
-        복구하기
+        {t('recover.submit')}
       </Button>
       <View style={styles.btnSpacer} />
       <Button variant="ghost" fullWidth onPress={onBack}>
-        뒤로
+        {t('common.back')}
       </Button>
     </ScrollView>
   );

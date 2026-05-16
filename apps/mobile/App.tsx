@@ -7,6 +7,12 @@ import {
   Text,
   View,
 } from 'react-native';
+import {
+  I18nProvider,
+  createMemoryLocaleStorage,
+  useLocale,
+  useT,
+} from '@nodong/i18n/react';
 import { Home } from './src/screens/Home';
 import { Account } from './src/screens/Account';
 import { Send } from './src/screens/Send';
@@ -14,9 +20,23 @@ import { DApp } from './src/screens/DApp';
 import { walletStore } from './src/store';
 import { colors, spacing, theme } from './src/theme';
 
-export type Screen = 'home' | 'account' | 'send' | 'dapp';
+export type Screen = 'home' | 'account' | 'send' | 'dapp' | 'settings';
+
+/**
+ * 모바일 셸. v0.4 에서는 영속 로케일 저장소를 메모리로만 둔다 — AsyncStorage
+ * 도입 시 createMemoryLocaleStorage 를 createAsyncStorageLocaleStorage 로 바꿀
+ * 예정 (TODO).
+ */
+function AppRoot(): React.JSX.Element {
+  return (
+    <I18nProvider persistence={createMemoryLocaleStorage()}>
+      <App />
+    </I18nProvider>
+  );
+}
 
 function App(): React.JSX.Element {
+  const t = useT();
   // H1: mobile(MemorySessionStore) 은 자동 복원이 허용되지 않는다.
   // 부팅 시점에는 항상 home 으로 시작한다.
   const [screen, setScreen] = useState<Screen>('home');
@@ -33,34 +53,40 @@ function App(): React.JSX.Element {
     setScreen('home');
   };
 
+  // 비수탁 안내 — 카탈로그 값에 개행이 들어 있어 join 으로 합친다 (React Native Text 내부는 \n 으로 OK).
+  const footer = t('footer.non_custodial.mobile');
+
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       <View style={styles.header}>
-        <Text style={styles.brand}>노동자의 지갑</Text>
-        {screen !== 'home' && (
-          <View style={styles.headerActions}>
-            {screen === 'account' && (
+        <Text style={styles.brand}>{t('brand.name')}</Text>
+        <View style={styles.headerActions}>
+          <LocaleToggle />
+          {screen !== 'home' && (
+            <>
+              {screen === 'account' && (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setScreen('dapp')}
+                  style={({ pressed }) => [
+                    styles.headerBtn,
+                    pressed && styles.headerBtnPressed,
+                  ]}
+                >
+                  <Text style={styles.headerBtnText}>{t('common.dApp')}</Text>
+                </Pressable>
+              )}
               <Pressable
                 accessibilityRole="button"
-                onPress={() => setScreen('dapp')}
-                style={({ pressed }) => [
-                  styles.headerBtn,
-                  pressed && styles.headerBtnPressed,
-                ]}
+                onPress={onLock}
+                style={({ pressed }) => [styles.headerBtn, pressed && styles.headerBtnPressed]}
               >
-                <Text style={styles.headerBtnText}>dApp</Text>
+                <Text style={styles.headerBtnText}>{t('common.lock')}</Text>
               </Pressable>
-            )}
-            <Pressable
-              accessibilityRole="button"
-              onPress={onLock}
-              style={({ pressed }) => [styles.headerBtn, pressed && styles.headerBtnPressed]}
-            >
-              <Text style={styles.headerBtnText}>잠금</Text>
-            </Pressable>
-          </View>
-        )}
+            </>
+          )}
+        </View>
       </View>
 
       <View style={styles.main}>
@@ -72,11 +98,28 @@ function App(): React.JSX.Element {
         {screen === 'dapp' && <DApp onBack={() => setScreen('account')} />}
       </View>
 
-      <Text style={styles.footer}>
-        비수탁(non-custodial) 지갑 · 복구 문구는 앱 메모리에만 보관됩니다.{'\n'}
-        앱을 종료하면 다시 잠금 상태로 돌아갑니다.
-      </Text>
+      <Text style={styles.footer}>{footer}</Text>
     </SafeAreaView>
+  );
+}
+
+/**
+ * 헤더의 ko/en 토글 — react-native 에는 <select> 가 없어 단순 Pressable 두 개로 구현.
+ *
+ * 향후 Settings 화면이 추가되면 그쪽으로 옮길 후보. 지금은 헤더에 두어 항상 접근 가능.
+ */
+function LocaleToggle(): React.JSX.Element {
+  const { locale, setLocale } = useLocale();
+  const next = locale === 'ko' ? 'en' : 'ko';
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={locale === 'ko' ? 'English' : '한국어'}
+      onPress={() => setLocale(next)}
+      style={({ pressed }) => [styles.headerBtn, pressed && styles.headerBtnPressed]}
+    >
+      <Text style={styles.headerBtnText}>{locale === 'ko' ? 'EN' : 'KO'}</Text>
+    </Pressable>
   );
 }
 
@@ -137,4 +180,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default App;
+export default AppRoot;

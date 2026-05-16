@@ -16,6 +16,7 @@ import {
   type WalletAccount,
 } from '@nodong/wallet-sdk';
 import { AmountDisplay, Button, Card } from '@nodong/design-system';
+import { useT } from '@nodong/i18n/react';
 import { walletStore } from '../wallet-store.js';
 
 interface Props {
@@ -41,6 +42,7 @@ function shortAddr(a: string): string {
 }
 
 export function Activity({ onBack }: Props) {
+  const t = useT();
   const [account, setAccount] = useState<WalletAccount | null>(null);
   const [items, setItems] = useState<ActivityT[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -73,7 +75,7 @@ export function Activity({ onBack }: Props) {
       .catch((err: unknown) => {
         if (!cancelled) {
           setItems([]);
-          setError(err instanceof Error ? err.message : '활동을 불러오지 못했습니다.');
+          setError(err instanceof Error ? err.message : t('activity.failed'));
         }
       })
       .finally(() => {
@@ -82,26 +84,30 @@ export function Activity({ onBack }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [account, reloadKey]);
+  }, [account, reloadKey, t]);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
   return (
     <div>
-      <h1 className="nd-h1">활동</h1>
-      <p className="nd-lead">최근 송금 및 토큰 전송 기록입니다.</p>
+      <h1 className="nd-h1">{t('activity.title')}</h1>
+      <p className="nd-lead">{t('activity.lead')}</p>
 
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span className="nd-muted">{loading ? '불러오는 중…' : `${items?.length ?? 0}건`}</span>
+          <span className="nd-muted">
+            {loading
+              ? t('common.loading_ellipsis')
+              : t('activity.count', { n: items?.length ?? 0 })}
+          </span>
           <Button variant="ghost" onClick={reload} disabled={loading}>
-            새로고침
+            {t('common.refresh')}
           </Button>
         </div>
         {error && <div className="nd-error">{error}</div>}
         {!loading && items && items.length === 0 && !error && (
           <p className="nd-muted" style={{ marginTop: 12 }}>
-            아직 기록이 없습니다.
+            {t('activity.empty')}
           </p>
         )}
         {items && items.length > 0 && (
@@ -111,7 +117,7 @@ export function Activity({ onBack }: Props) {
                 account?.address?.toLowerCase() === it.from.toLowerCase();
               const counterparty = isOutgoing ? it.to : it.from;
               const sign = isOutgoing ? '-' : '+';
-              const tokenLabel = it.token ? '토큰' : 'TTL';
+              const tokenLabel = it.token ? t('activity.label.token') : t('activity.label.native');
               return (
                 <li key={`${it.hash}-${it.blockNumber}`} className="nd-activity__row">
                   <a
@@ -122,7 +128,7 @@ export function Activity({ onBack }: Props) {
                   >
                     <div className="nd-activity__meta">
                       <span className="nd-activity__type">
-                        {isOutgoing ? '보냄' : '받음'} · {tokenLabel}
+                        {isOutgoing ? t('activity.outgoing') : t('activity.incoming')} · {tokenLabel}
                       </span>
                       <span className="nd-muted">{fmtTime(it.timestamp)}</span>
                     </div>
@@ -139,7 +145,7 @@ export function Activity({ onBack }: Props) {
                         />
                       </span>
                     </div>
-                    {it.status === 'failed' && <div className="nd-error">실패</div>}
+                    {it.status === 'failed' && <div className="nd-error">{t('activity.status_failed')}</div>}
                   </a>
                 </li>
               );
@@ -149,7 +155,7 @@ export function Activity({ onBack }: Props) {
       </Card>
 
       <Button variant="ghost" className="nd-button--block" onClick={onBack}>
-        뒤로
+        {t('common.back')}
       </Button>
     </div>
   );

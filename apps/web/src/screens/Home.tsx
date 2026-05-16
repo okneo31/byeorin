@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { createMnemonic } from '@nodong/wallet-sdk';
+import { ShellError } from '@nodong/shell-core';
 import { Button, Card } from '@nodong/design-system';
+import { useT } from '@nodong/i18n/react';
 import { walletStore } from '../wallet-store.js';
 
 type Mode = 'choose' | 'create' | 'recover';
@@ -11,6 +13,7 @@ interface Props {
 
 export function Home({ onReady }: Props) {
   const [mode, setMode] = useState<Mode>('choose');
+  const t = useT();
 
   if (mode === 'create') return <CreateFlow onDone={onReady} onBack={() => setMode('choose')} />;
   if (mode === 'recover')
@@ -18,38 +21,50 @@ export function Home({ onReady }: Props) {
 
   return (
     <div>
-      <h1 className="nd-h1">노동자에게 자기 결정권을.</h1>
-      <p className="nd-lead">
-        수수료 투명, 다크 패턴 없음, 데이터는 당신의 기기에. TTL 체인을 포함한 EVM 호환 자산을
-        쉽고 안전하게.
-      </p>
+      <h1 className="nd-h1">{t('brand.tagline')}</h1>
+      <p className="nd-lead">{t('home.lead')}</p>
 
       <Card>
-        <p className="nd-muted" style={{ marginTop: 0 }}>처음 사용하세요?</p>
+        <p className="nd-muted" style={{ marginTop: 0 }}>{t('home.new_user_question')}</p>
         <Button
           variant="primary"
           className="nd-button--block"
           onClick={() => setMode('create')}
         >
-          지갑 생성
+          {t('home.create_button')}
         </Button>
       </Card>
 
       <Card>
-        <p className="nd-muted" style={{ marginTop: 0 }}>이미 복구 문구가 있나요?</p>
+        <p className="nd-muted" style={{ marginTop: 0 }}>{t('home.recover_question')}</p>
         <Button
           variant="secondary"
           className="nd-button--block"
           onClick={() => setMode('recover')}
         >
-          복구
+          {t('home.recover_button')}
         </Button>
       </Card>
     </div>
   );
 }
 
+/**
+ * shell-core 에서 throw 된 에러를 사용자 언어로 매핑한다.
+ *
+ * - ShellError(code) → `errors.<code>` 카탈로그 키.
+ * - 그 외 일반 Error → fallback 메시지(`fallback` 인자).
+ */
+function localizeError(t: (k: string) => string, e: unknown, fallback: string): string {
+  if (e instanceof ShellError) return t(`errors.${e.code}`);
+  if (e instanceof Error) return e.message || fallback;
+  return fallback;
+}
+
 function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
+  const t = useT();
+  // i18n: 한국어 wordlist 로 새 니모닉 생성 — 사용자가 선택한 언어와 무관.
+  // 니모닉 자체는 BIP39 표준이므로 ko/en 어느 wordlist 로 만들든 안전.
   const [mnemonic] = useState(() => createMnemonic(128, 'korean'));
   const [copied, setCopied] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -61,7 +76,7 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
-      setError('클립보드 접근에 실패했습니다. 직접 적어주세요.');
+      setError(t('create.copy_failed'));
     }
   };
 
@@ -71,28 +86,23 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
         await walletStore.unlock(mnemonic);
         onDone();
       } catch (e) {
-        setError(e instanceof Error ? e.message : '지갑 생성에 실패했습니다.');
+        setError(localizeError(t, e, t('create.failed')));
       }
     })();
   };
 
   return (
     <div>
-      <h1 className="nd-h1">복구 문구를 기억하세요</h1>
-      <p className="nd-lead">
-        아래 12개 단어는 당신의 지갑 그 자체입니다. 종이에 적거나 안전한 곳에 보관하세요.
-        절대 다른 사람과 공유하지 마세요.
-      </p>
+      <h1 className="nd-h1">{t('create.title')}</h1>
+      <p className="nd-lead">{t('create.lead')}</p>
 
-      <div className="nd-warn">
-        이 문구를 잃어버리면 지갑을 복구할 수 없습니다. 화면 캡처는 권하지 않습니다.
-      </div>
+      <div className="nd-warn">{t('create.warn')}</div>
 
       <Card>
         <div className="nd-mnemonic">{mnemonic}</div>
         <div style={{ height: 12 }} />
         <Button variant="ghost" className="nd-button--block" onClick={onCopy}>
-          {copied ? '복사됨' : '복사하기'}
+          {copied ? t('common.copied') : t('common.copy')}
         </Button>
       </Card>
 
@@ -111,7 +121,7 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
           onChange={(e) => setConfirmed(e.target.checked)}
           style={{ width: 18, height: 18 }}
         />
-        <span>위 12개 단어를 안전하게 보관했습니다.</span>
+        <span>{t('create.checkbox_safe')}</span>
       </label>
 
       {error && <div className="nd-error">{error}</div>}
@@ -122,16 +132,17 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
         disabled={!confirmed}
         onClick={onConfirm}
       >
-        외웠습니다, 다음
+        {t('create.confirm_done')}
       </Button>
       <Button variant="ghost" className="nd-button--block" onClick={onBack}>
-        뒤로
+        {t('common.back')}
       </Button>
     </div>
   );
 }
 
 function RecoverFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
+  const t = useT();
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -142,24 +153,22 @@ function RecoverFlow({ onDone, onBack }: { onDone: () => void; onBack: () => voi
         await walletStore.unlock(input);
         onDone();
       } catch (e) {
-        setError(e instanceof Error ? e.message : '복구에 실패했습니다.');
+        setError(localizeError(t, e, t('recover.failed')));
       }
     })();
   };
 
   return (
     <div>
-      <h1 className="nd-h1">지갑 복구</h1>
-      <p className="nd-lead">
-        12개 또는 24개의 복구 단어를 띄어쓰기로 입력하세요. 영어 또는 한국어 단어 모두 지원합니다.
-      </p>
+      <h1 className="nd-h1">{t('recover.title')}</h1>
+      <p className="nd-lead">{t('recover.lead')}</p>
 
       <Card>
         {/* TODO(design-system): Input 컴포넌트가 textarea 모드를 아직 지원하지
             않는다. 일단 native <textarea>로 두고, 디자인 시스템 확장 여부는
             별도 결정한다. */}
         <label className="nd-field__label" htmlFor="nd-mnemonic-input">
-          복구 문구
+          {t('recover.label')}
         </label>
         <div style={{ height: 8 }} />
         <textarea
@@ -167,7 +176,7 @@ function RecoverFlow({ onDone, onBack }: { onDone: () => void; onBack: () => voi
           className="nd-textarea"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="예) word1 word2 word3 ..."
+          placeholder={t('recover.placeholder')}
           spellCheck={false}
           autoCapitalize="none"
           autoCorrect="off"
@@ -182,10 +191,10 @@ function RecoverFlow({ onDone, onBack }: { onDone: () => void; onBack: () => voi
         disabled={input.trim().split(/\s+/).filter(Boolean).length < 12}
         onClick={onSubmit}
       >
-        복구하기
+        {t('recover.submit')}
       </Button>
       <Button variant="ghost" className="nd-button--block" onClick={onBack}>
-        뒤로
+        {t('common.back')}
       </Button>
     </div>
   );

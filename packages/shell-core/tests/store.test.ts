@@ -13,6 +13,7 @@ import {
 } from '@nodong/wallet-sdk';
 import { WalletStore } from '../src/store.js';
 import { MemorySessionStore, ExtensionSessionStore, type SessionStore } from '../src/session.js';
+import { ShellError } from '../src/errors.js';
 
 // "test test test ... junk" 는 BIP39 표준 테스트 벡터. 12 words, secp256k1 도출
 // 시 잘 알려진 주소 (0xf39F...92266) 가 나온다 — 본 테스트에서는 그 정확값을
@@ -279,20 +280,26 @@ describe('WalletStore — wordlist auto-detect integration', () => {
     const { store } = makeStore();
     // 위 KOREAN_MNEMONIC 이 진짜 valid BIP39 인지에 따라 검증이 갈리는데,
     // 본 테스트는 "detection 자체는 일어난다" 만 본다 — 무효라면 우리가
-    // 정의한 한국어 메시지로 떨어져야 한다.
+    // 정의한 에러 코드 (mnemonic.invalid) 로 떨어져야 한다.
     try {
       await store.unlock(KOREAN_MNEMONIC);
       expect(store.isUnlocked()).toBe(true);
     } catch (e) {
-      expect((e as Error).message).toMatch(/유효하지 않은 복구 문구/);
+      expect(e).toBeInstanceOf(ShellError);
+      expect((e as ShellError).code).toBe('mnemonic.invalid');
     }
   });
 
-  it('rejects mixed Korean+English mnemonic with a clear message', async () => {
+  it('rejects mixed Korean+English mnemonic with a stable error code', async () => {
     const { store } = makeStore();
-    await expect(store.unlock('test test 가격 가격')).rejects.toThrow(
-      /단어가 한국어\/영어 워드리스트와 일치하지 않습니다/,
-    );
+    // i18n 분리 이후: 메시지가 아닌 안정적인 코드(wordlist.mixed_characters) 로
+    // 검증한다. UI 레이어가 코드 → 사용자 언어로 매핑한다.
+    await expect(store.unlock('test test 가격 가격')).rejects.toThrow(ShellError);
+    try {
+      await store.unlock('test test 가격 가격');
+    } catch (e) {
+      expect((e as ShellError).code).toBe('wordlist.mixed_characters');
+    }
   });
 });
 

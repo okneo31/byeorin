@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useT } from '@nodong/i18n/react';
 import type { BackgroundMessage, ConnectContext } from '../../src/lib/rpc.js';
 
 // 노동자의 지갑 — 사이트 연결 동의 popup.
@@ -12,7 +13,7 @@ import type { BackgroundMessage, ConnectContext } from '../../src/lib/rpc.js';
 type State =
   | { kind: 'loading' }
   | { kind: 'ready'; ctx: ConnectContext }
-  | { kind: 'error'; message: string }
+  | { kind: 'error'; messageKey: string }
   | { kind: 'submitted'; decision: 'approve' | 'reject' };
 
 function getRequestIdFromUrl(): string | null {
@@ -34,6 +35,7 @@ function getNonceFromUrl(): string | null {
 }
 
 export function App() {
+  const t = useT();
   const [state, setState] = useState<State>({ kind: 'loading' });
 
   useEffect(() => {
@@ -41,25 +43,19 @@ export function App() {
     const nonce = getNonceFromUrl();
     // 보안: nonce 가 없으면 dApp 이 직접 popup URL 을 연 시나리오. 친절한 안내 메시지.
     if (!requestId || !nonce) {
-      setState({
-        kind: 'error',
-        message: '이 페이지는 지갑이 직접 열어야 합니다. 사이트에서 연결 요청을 다시 시도해 주세요.',
-      });
+      setState({ kind: 'error', messageKey: 'connect.error.no_context' });
       return;
     }
     const msg: BackgroundMessage = { type: 'connect-context-get', requestId, nonce };
     chrome.runtime.sendMessage(msg, (ctx: ConnectContext | null) => {
       if (chrome.runtime.lastError) {
-        setState({ kind: 'error', message: chrome.runtime.lastError.message ?? '컨텍스트 조회 실패' });
+        setState({ kind: 'error', messageKey: 'connect.error.context_lookup_failed' });
         return;
       }
       if (!ctx) {
         // background 슬롯이 없거나 만료된 상태 — 또는 nonce 불일치(우회 시도).
         // 보안상 폴백으로 URL 의 origin 만 신뢰해 표시하지 않는다(스푸핑 방지).
-        setState({
-          kind: 'error',
-          message: '연결 요청이 만료되었거나 존재하지 않습니다. 사이트에서 다시 요청해 주세요.',
-        });
+        setState({ kind: 'error', messageKey: 'connect.error.expired' });
         return;
       }
       setState({ kind: 'ready', ctx });
@@ -81,8 +77,8 @@ export function App() {
   if (state.kind === 'loading') {
     return (
       <main className="connect">
-        <header className="brand">노동자의 지갑</header>
-        <p className="muted">불러오는 중…</p>
+        <header className="brand">{t('brand.name')}</header>
+        <p className="muted">{t('common.loading_ellipsis')}</p>
       </main>
     );
   }
@@ -90,12 +86,12 @@ export function App() {
   if (state.kind === 'error') {
     return (
       <main className="connect">
-        <header className="brand">노동자의 지갑</header>
+        <header className="brand">{t('brand.name')}</header>
         <section className="card">
-          <h2>연결 요청 오류</h2>
-          <p className="error small">{state.message}</p>
+          <h2>{t('connect.error_title')}</h2>
+          <p className="error small">{t(state.messageKey)}</p>
           <button className="btn-ghost" onClick={() => window.close()}>
-            창 닫기
+            {t('connect.close_window')}
           </button>
         </section>
       </main>
@@ -105,10 +101,10 @@ export function App() {
   if (state.kind === 'submitted') {
     return (
       <main className="connect">
-        <header className="brand">노동자의 지갑</header>
+        <header className="brand">{t('brand.name')}</header>
         <section className="card">
-          <p>{state.decision === 'approve' ? '연결을 승인했습니다.' : '연결을 거부했습니다.'}</p>
-          <p className="muted small">잠시 후 창이 닫힙니다.</p>
+          <p>{state.decision === 'approve' ? t('connect.approved') : t('connect.rejected')}</p>
+          <p className="muted small">{t('connect.closing_soon')}</p>
         </section>
       </main>
     );
@@ -117,32 +113,29 @@ export function App() {
   const { ctx } = state;
   return (
     <main className="connect">
-      <header className="brand">노동자의 지갑</header>
+      <header className="brand">{t('brand.name')}</header>
       <section className="card">
-        <h2>사이트 연결 요청</h2>
-        <p className="muted small">아래 사이트가 지갑 주소를 보려고 합니다.</p>
+        <h2>{t('connect.request_title')}</h2>
+        <p className="muted small">{t('connect.request_lead')}</p>
 
         <div className="row">
-          <span className="label">사이트</span>
+          <span className="label">{t('connect.label.site')}</span>
           <span className="origin" title={ctx.origin}>{ctx.origin}</span>
         </div>
 
         <div className="row">
-          <span className="label">공유 주소</span>
+          <span className="label">{t('connect.label.shared_address')}</span>
           <span className="addr" title={ctx.address}>{shorten(ctx.address)}</span>
         </div>
 
-        <p className="warn small">
-          ※ 승인 시 이 사이트가 본 주소를 조회할 수 있으며, 거래/서명은 매번 별도 동의가 필요합니다.
-          연결은 언제든 팝업에서 해제할 수 있습니다.
-        </p>
+        <p className="warn small">{t('connect.warn_post_approve')}</p>
 
         <div className="actions">
           <button className="btn-ghost" onClick={() => send('reject')}>
-            거부
+            {t('connect.reject')}
           </button>
           <button className="btn-primary" onClick={() => send('approve')}>
-            연결 승인
+            {t('connect.approve')}
           </button>
         </div>
       </section>

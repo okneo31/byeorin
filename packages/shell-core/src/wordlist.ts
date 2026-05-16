@@ -12,7 +12,14 @@
  *  - 한 단어 내부에서 한/영이 섞이거나, 단어 단위로 한/영이 혼재하면 throw.
  *    isValidMnemonic 이 한참 뒤에 막연한 "invalid mnemonic" 으로 실패하는 것보다
  *    사용자에게 더 친절한 에러를 즉시 던지는 편이 낫다.
+ *
+ * 에러:
+ *  - 한/영 혼재 입력은 `ShellError({ code: 'wordlist.mixed_characters' })` 로 throw.
+ *    영어 baseline message 를 들고 있으며, 호출자는 `error.code` 로 사용자 언어
+ *    메시지를 매핑한다 (apps + @nodong/i18n).
  */
+
+import { shellError } from './errors.js';
 
 const HANGUL_SYLLABLE = /^[가-힣]+$/u;
 const ASCII_LOWER = /^[a-z]+$/u;
@@ -33,12 +40,18 @@ export function detectWordlist(input: string): 'english' | 'korean' {
       english++;
     } else {
       // 한 단어 안에 섞여있거나 다른 스크립트가 들어가 있음.
-      throw new Error('단어가 한국어/영어 워드리스트와 일치하지 않습니다');
+      throw shellError(
+        'wordlist.mixed_characters',
+        'The words do not match either the Korean or English wordlist',
+      );
     }
   }
 
   if (korean > 0 && english > 0) {
-    throw new Error('단어가 한국어/영어 워드리스트와 일치하지 않습니다');
+    throw shellError(
+      'wordlist.mixed_characters',
+      'The words do not match either the Korean or English wordlist',
+    );
   }
   return korean > 0 ? 'korean' : 'english';
 }

@@ -6,6 +6,7 @@ import {
   type TxHash,
   type WalletAccount,
 } from '@nodong/wallet-sdk';
+import { shellError } from './errors.js';
 import type { SessionStore } from './session.js';
 import { detectWordlist } from './wordlist.js';
 
@@ -98,13 +99,16 @@ export class WalletStore {
         await this.session.write(trimmed);
         return;
       }
-      throw new Error('already unlocked; call lock() first');
+      throw shellError(
+        'wallet.already_unlocked',
+        'already unlocked; call lock() first',
+      );
     }
 
     // detectWordlist 가 한/영 혼재 입력은 명확한 메시지로 throw 한다.
     const wordlist = detectWordlist(trimmed);
     if (!isValidMnemonic(trimmed, wordlist)) {
-      throw new Error('유효하지 않은 복구 문구입니다.');
+      throw shellError('mnemonic.invalid', 'Invalid recovery phrase.');
     }
     this.wallet = Wallet.fromMnemonic({ mnemonic: trimmed, wordlist });
     this.currentMnemonic = trimmed;
@@ -138,7 +142,7 @@ export class WalletStore {
    * (concern #3: 동일 id 의 어댑터가 서로 다른 RPC 로 만들어졌을 수 있으므로).
    */
   async getAccount(adapter?: ChainAdapter): Promise<WalletAccount> {
-    if (!this.wallet) throw new Error('wallet locked');
+    if (!this.wallet) throw shellError('wallet.locked', 'wallet locked');
     if (adapter !== undefined) {
       // 캐시 우회 — caller 가 의도한 정확한 어댑터 인스턴스로 빌드.
       return this.wallet.account(adapter);
@@ -166,7 +170,7 @@ export class WalletStore {
    *   tx 는 committed work). lock 이후의 후속 호출은 즉시 "wallet locked".
    */
   async transfer(intent: TransferIntent, adapter?: ChainAdapter): Promise<TxHash> {
-    if (!this.wallet) throw new Error('wallet locked');
+    if (!this.wallet) throw shellError('wallet.locked', 'wallet locked');
     // wallet 참조를 지역으로 들고 가서, lock() 으로 this.wallet 이 null 이 되어도
     // 진행 중인 송금은 마무리되도록 한다 (committed work).
     const w = this.wallet;

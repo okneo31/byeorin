@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@nodong/i18n": "workspace:*",
     "@nodong/shell-core": "workspace:*",
     "@nodong/wallet-sdk": "workspace:*",
     "react": "^18.3.1",

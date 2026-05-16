@@ -23,3 +23,9 @@ export {
   type EncryptedKeystoreStoreOptions,
 } from './keystore.js';
 export { detectWordlist } from './wordlist.js';
+export {
+  ShellError,
+  shellError,
+  shellErrorCode,
+  type ShellErrorCode,
+} from './errors.js';

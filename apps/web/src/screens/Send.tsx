@@ -7,7 +7,9 @@ import {
   type DiscoveredBalance,
   type TransferIntent,
 } from '@nodong/wallet-sdk';
+import { ShellError } from '@nodong/shell-core';
 import { Button, Card, Input } from '@nodong/design-system';
+import { useT } from '@nodong/i18n/react';
 import { walletStore } from '../wallet-store.js';
 
 interface Props {
@@ -38,6 +40,7 @@ type AssetKey = 'native' | string;
 const sharedRegistry = new TokenRegistry();
 
 export function Send({ onBack }: Props) {
+  const t = useT();
   const [to, setTo] = useState('');
   const [amount, setAmount] = useState('');
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
@@ -65,18 +68,18 @@ export function Send({ onBack }: Props) {
 
   const selectedToken = useMemo(() => {
     if (asset === 'native') return null;
-    return tokens.find((t) => t.token.address === asset) ?? null;
+    return tokens.find((tk) => tk.token.address === asset) ?? null;
   }, [asset, tokens]);
 
   if (!walletStore.isUnlocked()) {
     return (
       <div>
-        <h1 className="nd-h1">송금</h1>
+        <h1 className="nd-h1">{t('send.title')}</h1>
         <Card>
-          <div className="nd-error">지갑이 잠겨있습니다. 다시 시작해주세요.</div>
+          <div className="nd-error">{t('send.locked_warn')}</div>
         </Card>
         <Button variant="ghost" className="nd-button--block" onClick={onBack}>
-          뒤로
+          {t('common.back')}
         </Button>
       </div>
     );
@@ -103,7 +106,7 @@ export function Send({ onBack }: Props) {
     try {
       value = parseUnits(trimmedAmount, decimals);
     } catch {
-      setStatus({ kind: 'error', message: '금액 형식이 올바르지 않습니다.' });
+      setStatus({ kind: 'error', message: t('send.amount_invalid') });
       return;
     }
 
@@ -125,10 +128,11 @@ export function Send({ onBack }: Props) {
       const hash = await walletStore.transfer(intent);
       setStatus({ kind: 'sent', hash });
     } catch (err) {
-      setStatus({
-        kind: 'error',
-        message: err instanceof Error ? err.message : '송금에 실패했습니다.',
-      });
+      let msg: string;
+      if (err instanceof ShellError) msg = t(`errors.${err.code}`);
+      else if (err instanceof Error) msg = err.message || t('send.failed');
+      else msg = t('send.failed');
+      setStatus({ kind: 'error', message: msg });
     }
   };
 
@@ -136,17 +140,17 @@ export function Send({ onBack }: Props) {
 
   return (
     <div>
-      <h1 className="nd-h1">송금</h1>
+      <h1 className="nd-h1">{t('send.title')}</h1>
       <p className="nd-lead">
         {selectedToken
-          ? `${selectedToken.token.symbol} 토큰을 다른 주소로 보냅니다.`
-          : 'TTL을 다른 주소로 보냅니다. 수수료는 네트워크가 자동 산정합니다.'}
+          ? t('send.lead_token', { symbol: selectedToken.token.symbol })
+          : t('send.lead_native')}
       </p>
 
       <form onSubmit={onSubmit}>
         <Card>
           <label className="nd-field__label" htmlFor="nd-asset-select">
-            어떤 토큰?
+            {t('send.asset_label')}
           </label>
           <select
             id="nd-asset-select"
@@ -155,10 +159,10 @@ export function Send({ onBack }: Props) {
             onChange={(e) => setAsset(e.target.value as AssetKey)}
             disabled={locked}
           >
-            <option value="native">TTL (네이티브)</option>
-            {tokens.map((t) => (
-              <option key={t.token.address} value={t.token.address}>
-                {t.token.symbol} · {t.token.name}
+            <option value="native">{t('send.asset_native_option')}</option>
+            {tokens.map((tk) => (
+              <option key={tk.token.address} value={tk.token.address}>
+                {tk.token.symbol} · {tk.token.name}
               </option>
             ))}
           </select>
@@ -166,7 +170,7 @@ export function Send({ onBack }: Props) {
 
         <Card>
           <Input
-            label="받는 주소"
+            label={t('send.to_label')}
             value={to}
             onChange={(e) => setTo(e.target.value)}
             placeholder="0x..."
@@ -177,7 +181,7 @@ export function Send({ onBack }: Props) {
             disabled={locked}
             error={
               trimmedTo.length > 0 && !validAddress
-                ? '주소 형식이 올바르지 않습니다 (0x + 40자리 16진수).'
+                ? t('send.to_invalid')
                 : undefined
             }
           />
@@ -185,7 +189,7 @@ export function Send({ onBack }: Props) {
 
         <Card>
           <Input
-            label={`금액 (${symbol})`}
+            label={t('send.amount_label', { symbol })}
             type="text"
             inputMode="decimal"
             value={amount}
@@ -193,25 +197,25 @@ export function Send({ onBack }: Props) {
             placeholder="0.0"
             disabled={locked}
             error={
-              showAmountError ? '금액 형식이 올바르지 않습니다.' : undefined
+              showAmountError ? t('send.amount_invalid') : undefined
             }
           />
         </Card>
 
         {status.kind === 'pending' && (
-          <div className="nd-warn">송금을 처리하고 있습니다. 잠시만 기다려주세요...</div>
+          <div className="nd-warn">{t('send.pending')}</div>
         )}
 
         {status.kind === 'sent' && (
           <Card>
-            <div className="nd-success">송금 요청 완료</div>
+            <div className="nd-success">{t('send.sent_title')}</div>
             <div style={{ marginTop: 6 }}>
               <a
                 href={`https://scan.ttl1.top/tx/${status.hash}`}
                 target="_blank"
                 rel="noreferrer"
               >
-                탐색기에서 보기 ↗
+                {t('send.view_in_explorer')}
               </a>
             </div>
             <div className="nd-hash" style={{ marginTop: 6 }}>
@@ -229,7 +233,7 @@ export function Send({ onBack }: Props) {
             className="nd-button--block"
             onClick={onBack}
           >
-            지갑으로
+            {t('send.back_to_wallet')}
           </Button>
         ) : (
           <Button
@@ -239,7 +243,7 @@ export function Send({ onBack }: Props) {
             disabled={disabled}
             loading={status.kind === 'pending'}
           >
-            {status.kind === 'pending' ? '전송 중...' : '보내기'}
+            {status.kind === 'pending' ? t('send.sending') : t('send.submit')}
           </Button>
         )}
 
@@ -250,7 +254,7 @@ export function Send({ onBack }: Props) {
           onClick={onBack}
           disabled={status.kind === 'pending'}
         >
-          뒤로
+          {t('common.back')}
         </Button>
       </form>
     </div>

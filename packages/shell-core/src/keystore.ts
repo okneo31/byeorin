@@ -33,6 +33,7 @@
 //    단일 scrypt 출력 32바이트를 AES-GCM 키로 직접 사용.
 
 import { scryptAsync } from '@noble/hashes/scrypt';
+import { shellError } from './errors.js';
 // `@noble/hashes/utils` 의 `randomBytes` 는 내부적으로 WebCrypto 의
 // `crypto.getRandomValues` (없으면 Node `crypto.randomBytes`) 를 호출하는
 // CSPRNG 래퍼다. 16-byte salt 와 12-byte GCM nonce 양쪽에 충분한 엔트로피를
@@ -151,7 +152,8 @@ async function derive(
 function getSubtle(): SubtleCrypto {
   const c = (globalThis as { crypto?: Crypto }).crypto;
   if (!c || !c.subtle) {
-    throw new Error(
+    throw shellError(
+      'keystore.webcrypto_unavailable',
       'keystore: WebCrypto subtle is unavailable. Requires Node 20+ or a modern browser.',
     );
   }
@@ -237,10 +239,16 @@ export async function decryptKeystore(
   passphrase: string,
 ): Promise<string> {
   if (blob.v !== 1) {
-    throw new Error(`keystore: unknown version ${String(blob.v)}`);
+    throw shellError(
+      'keystore.unsupported_version',
+      `keystore: unknown version ${String(blob.v)}`,
+    );
   }
   if (blob.kdf !== 'scrypt') {
-    throw new Error(`keystore: unknown kdf ${String(blob.kdf)}`);
+    throw shellError(
+      'keystore.unsupported_kdf',
+      `keystore: unknown kdf ${String(blob.kdf)}`,
+    );
   }
   const salt = fromBase64(blob.salt);
   const nonce = fromBase64(blob.nonce);
@@ -255,7 +263,10 @@ export async function decryptKeystore(
     plain = await webcryptoDecrypt(key, nonce, cipher);
   } catch {
     key.fill(0);
-    throw new Error('keystore: invalid passphrase or corrupt blob');
+    throw shellError(
+      'keystore.invalid_passphrase',
+      'keystore: invalid passphrase or corrupt blob',
+    );
   }
   key.fill(0);
   return new TextDecoder().decode(plain);
@@ -411,7 +422,10 @@ export class EncryptedKeystoreStore implements SessionStore {
     try {
       blob = JSON.parse(raw) as EncryptedBlob;
     } catch {
-      throw new Error('keystore: corrupt blob (invalid JSON)');
+      throw shellError(
+        'keystore.corrupt_blob',
+        'keystore: corrupt blob (invalid JSON)',
+      );
     }
     // decryptKeystore 가 잘못된 passphrase 와 무결성 위반을 함께 던진다.
     return decryptKeystore(blob, this.passphrase);
@@ -419,7 +433,10 @@ export class EncryptedKeystoreStore implements SessionStore {
 
   async write(mnemonic: string): Promise<void> {
     if (this.passphrase === null) {
-      throw new Error('keystore: passphrase not set; call setPassphrase first');
+      throw shellError(
+        'keystore.passphrase_required',
+        'keystore: passphrase not set; call setPassphrase first',
+      );
     }
     const blob = await encryptKeystore(mnemonic, this.passphrase, this.params);
     await this.backend.write(this.storageKey, JSON.stringify(blob));

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createMnemonic, type HwAppName } from '@nodong/wallet-sdk';
+import { ShellError } from '@nodong/shell-core';
+import { LocaleSwitch, useT } from '@nodong/i18n/react';
 import {
   connectHardware,
   disconnectHardware,
@@ -21,14 +23,6 @@ import {
   type GrantRecord,
 } from '../../src/lib/grants.js';
 
-// 메서드별 사람이 읽는 라벨 — grants UI 용. confirm/App 의 METHOD_LABEL 과 의도적으로
-// 별도(서로 다른 entrypoint 간 import 비용을 회피).
-const METHOD_LABEL: Record<GrantMethod, string> = {
-  personal_sign: '메시지 서명',
-  eth_sendTransaction: '트랜잭션 전송',
-  eth_signTypedData_v4: 'EIP-712 서명',
-};
-
 // 노동자의 지갑 — 확장 팝업.
 // 셸 수준: 없음 → 생성/복구 → 상태표시 → 로그아웃.
 // v0.1: 평문 니모닉을 chrome.storage.session(휘발) 에만 저장 — 모든 라이프사이클은
@@ -37,7 +31,15 @@ const METHOD_LABEL: Record<GrantMethod, string> = {
 
 type Mode = 'home' | 'create' | 'restore';
 
+/** shell-core 도메인 에러를 i18n 키로 변환. 그 외 Error 는 메시지 그대로. */
+function localizeShellError(t: (k: string) => string, e: unknown, fallback: string): string {
+  if (e instanceof ShellError) return t(`errors.${e.code}`);
+  if (e instanceof Error) return e.message || fallback;
+  return fallback;
+}
+
 export function App() {
+  const t = useT();
   const [address, setAddress] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>('home');
   const [loading, setLoading] = useState(true);
@@ -45,6 +47,9 @@ export function App() {
   // HW(하드웨어) 월릿 상태 — 소프트 월릿과 독립적으로 존재할 수 있다.
   const [hw, setHw] = useState<HwAccountState | null>(getHwAccount());
   const [hwBusy, setHwBusy] = useState<boolean>(false);
+
+  // 메서드별 사람이 읽는 라벨 — grants UI 용. 카탈로그 키로 매핑.
+  const methodLabel = (m: GrantMethod): string => t(`popup.method.${m}`);
 
   // HW 상태 변경 구독 — connect/disconnect 시 자동 반영.
   useEffect(() => subscribeHwState(setHw), []);
@@ -74,7 +79,7 @@ export function App() {
       setAddress(acc.address);
       setMode('home');
     } catch (e) {
-      setError((e as Error).message);
+      setError(localizeShellError(t, e, t('create.failed')));
     }
   }
 
@@ -86,7 +91,7 @@ export function App() {
       setAddress(acc.address);
       setMode('home');
     } catch (e) {
-      setError((e as Error).message);
+      setError(localizeShellError(t, e, t('recover.failed')));
     }
   }
 
@@ -115,7 +120,7 @@ export function App() {
     try {
       await connectHardware(appName);
     } catch (e) {
-      setError((e as Error).message);
+      setError(localizeShellError(t, e, t('errors.unknown')));
     } finally {
       setHwBusy(false);
     }
@@ -133,26 +138,29 @@ export function App() {
   if (loading) {
     return (
       <main className="popup">
-        <header className="brand">노동자의 지갑</header>
-        <p className="muted">불러오는 중…</p>
+        <header className="brand">{t('brand.name')}</header>
+        <p className="muted">{t('common.loading_ellipsis')}</p>
       </main>
     );
   }
 
   return (
     <main className="popup">
-      <header className="brand">노동자의 지갑</header>
+      <header className="brand" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>{t('brand.name')}</span>
+        <LocaleSwitch showLabel={false} />
+      </header>
 
       {address ? (
         <>
           <section className="card">
-            <p className="muted small">TTL · chainId 7777</p>
+            <p className="muted small">{t('popup.chain_label')}</p>
             <p className="addr" title={address}>{shortenAddress(address)}</p>
             <button className="btn-ghost" onClick={handleLogout}>
-              로그아웃
+              {t('common.logout')}
             </button>
             <p className="warn small">
-              ※ 본 버전은 니모닉이 세션 메모리에만 저장됩니다. 브라우저 재시작 시 다시 복구가 필요합니다.
+              {t('popup.session_only_warn')}
             </p>
             <HwConnectPanel
               hw={hw}
@@ -161,17 +169,17 @@ export function App() {
               onDisconnect={handleHwDisconnect}
             />
           </section>
-          <ConnectedSites />
+          <ConnectedSites methodLabel={methodLabel} />
         </>
       ) : mode === 'home' ? (
         <>
           <section className="card">
-            <p>지갑이 없습니다.</p>
+            <p>{t('popup.has_no_wallet')}</p>
             <button className="btn-primary" onClick={handleCreate}>
-              새 지갑 만들기
+              {t('popup.create_new')}
             </button>
             <button className="btn-ghost" onClick={() => setMode('restore')}>
-              니모닉으로 복구
+              {t('popup.recover_by_mnemonic')}
             </button>
             <HwConnectPanel
               hw={hw}
@@ -188,23 +196,22 @@ export function App() {
       )}
 
       {error ? <p className="error small">{error}</p> : null}
-      <footer className="muted small">v0.1 skeleton · 비수탁</footer>
+      <footer className="muted small">{t('footer.skeleton')}</footer>
     </main>
   );
 }
 
 function CreatePane({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  const t = useT();
   return (
     <section className="card">
-      <p>새 12단어 니모닉이 생성됩니다.</p>
-      <p className="warn small">
-        니모닉을 노출하는 별도 화면은 v0.2 에서 제공됩니다. 지금은 셸 수준 검증만 수행합니다.
-      </p>
+      <p>{t('popup.create_explain')}</p>
+      <p className="warn small">{t('popup.create_v02_note')}</p>
       <button className="btn-primary" onClick={onConfirm}>
-        생성
+        {t('popup.create_action')}
       </button>
       <button className="btn-ghost" onClick={onCancel}>
-        취소
+        {t('common.cancel')}
       </button>
     </section>
   );
@@ -217,24 +224,25 @@ function RestorePane({
   onSubmit: (mnemonic: string) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const [text, setText] = useState('');
   return (
     <section className="card">
       <label className="muted small" htmlFor="m">
-        니모닉 (12 또는 24 단어)
+        {t('popup.mnemonic_label')}
       </label>
       <textarea
         id="m"
         rows={4}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="단어를 공백으로 구분하여 입력"
+        placeholder={t('popup.mnemonic_placeholder')}
       />
       <button className="btn-primary" onClick={() => onSubmit(text)}>
-        복구
+        {t('home.recover_button')}
       </button>
       <button className="btn-ghost" onClick={onCancel}>
-        취소
+        {t('common.cancel')}
       </button>
     </section>
   );
@@ -261,18 +269,19 @@ function HwConnectPanel({
   onConnect: (appName: HwAppName) => void;
   onDisconnect: () => void;
 }) {
+  const t = useT();
   if (hw) {
     return (
       <div className="hw-panel" style={{ marginTop: 12 }}>
-        <p className="muted small">하드웨어 월릿 · {hw.appName.toUpperCase()}</p>
+        <p className="muted small">{t('hw.label.title')} · {hw.appName.toUpperCase()}</p>
         <p className="addr" title={hw.address}>{shortenAddress(hw.address)}</p>
-        <p className="muted small">경로: {hw.derivationPath}</p>
+        <p className="muted small">{t('hw.label.derivation_path', { path: hw.derivationPath })}</p>
         <button
           className="btn-ghost btn-sm"
           onClick={onDisconnect}
           disabled={busy}
         >
-          하드웨어 분리
+          {t('hw.disconnect')}
         </button>
       </div>
     );
@@ -283,9 +292,9 @@ function HwConnectPanel({
         className="btn-ghost"
         onClick={() => onConnect('solana')}
         disabled={busy}
-        title="Ledger Nano 를 USB 로 연결한 후 클릭"
+        title={t('hw.connect.title_hint')}
       >
-        {busy ? '연결 중…' : '하드웨어 월릿 연결 (Solana)'}
+        {busy ? t('hw.connecting') : t('hw.connect.solana')}
       </button>
       <button
         className="btn-ghost btn-sm"
@@ -293,10 +302,10 @@ function HwConnectPanel({
         disabled={busy}
         style={{ marginTop: 4 }}
       >
-        {busy ? '연결 중…' : 'Cosmos 로 연결'}
+        {busy ? t('hw.connecting') : t('hw.connect.cosmos')}
       </button>
       <p className="muted small" style={{ marginTop: 4 }}>
-        ※ TTL(EVM) 하드웨어 서명은 v0.5 예정입니다.
+        {t('hw.evm_v05_note')}
       </p>
     </div>
   );
@@ -304,7 +313,8 @@ function HwConnectPanel({
 
 // 연결된 사이트(승인된 origin) 목록 + 연결 해제 UI.
 // chrome.storage.local('nd:approved-origins') 에서만 origin 문자열을 다룬다.
-function ConnectedSites() {
+function ConnectedSites({ methodLabel }: { methodLabel: (m: GrantMethod) => string }) {
+  const t = useT();
   const [origins, setOrigins] = useState<Origin[] | null>(null);
 
   const refresh = useCallback(() => {
@@ -336,11 +346,11 @@ function ConnectedSites() {
   return (
     <>
       <section className="card">
-        <h3 className="section-title">연결된 사이트 관리</h3>
+        <h3 className="section-title">{t('popup.connected_sites.title')}</h3>
         {origins === null ? (
-          <p className="muted small">불러오는 중…</p>
+          <p className="muted small">{t('common.loading_ellipsis')}</p>
         ) : origins.length === 0 ? (
-          <p className="muted small">연결된 사이트가 없습니다.</p>
+          <p className="muted small">{t('popup.connected_sites.empty')}</p>
         ) : (
           <ul className="origin-list">
             {origins.map((o) => (
@@ -352,14 +362,14 @@ function ConnectedSites() {
                     void handleRevoke(o);
                   }}
                 >
-                  연결 해제
+                  {t('popup.connected_sites.revoke')}
                 </button>
               </li>
             ))}
           </ul>
         )}
       </section>
-      <ActiveGrants />
+      <ActiveGrants methodLabel={methodLabel} />
     </>
   );
 }
@@ -367,7 +377,8 @@ function ConnectedSites() {
 // 활성(만료되지 않은) 자동 승인 grant 목록 + 개별 취소 버튼.
 // grants 는 chrome.storage.session 에 들어 있으므로 잠금/재시작 시 자동 정리되지만,
 // 사용자가 명시적으로 즉시 끊고 싶을 수 있다.
-function ActiveGrants() {
+function ActiveGrants({ methodLabel }: { methodLabel: (m: GrantMethod) => string }) {
+  const t = useT();
   const [grants, setGrants] = useState<GrantRecord[] | null>(null);
 
   const refresh = useCallback(() => {
@@ -399,11 +410,11 @@ function ActiveGrants() {
 
   return (
     <section className="card">
-      <h3 className="section-title">자동 승인 (1시간)</h3>
+      <h3 className="section-title">{t('popup.grants.title')}</h3>
       {grants === null ? (
-        <p className="muted small">불러오는 중…</p>
+        <p className="muted small">{t('common.loading_ellipsis')}</p>
       ) : grants.length === 0 ? (
-        <p className="muted small">활성화된 자동 승인이 없습니다.</p>
+        <p className="muted small">{t('popup.grants.empty')}</p>
       ) : (
         <ul className="origin-list">
           {grants.map((g) => {
@@ -419,7 +430,7 @@ function ActiveGrants() {
                 <div className="grant-info">
                   <span className="origin-text" title={g.origin}>{g.origin}</span>
                   <span className="muted small">
-                    {METHOD_LABEL[g.method]} · {remainMin}분 남음
+                    {methodLabel(g.method)} · {t('common.minutes_left', { n: remainMin })}
                   </span>
                 </div>
                 <button
@@ -428,7 +439,7 @@ function ActiveGrants() {
                     void handleRevoke(g.origin, g.method, g.address);
                   }}
                 >
-                  취소
+                  {t('popup.grants.revoke')}
                 </button>
               </li>
             );

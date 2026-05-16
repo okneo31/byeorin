@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ShellError } from '@nodong/shell-core';
+import { useT } from '@nodong/i18n/react';
 import { walletStore } from '../store';
 import { colors, radius, spacing, theme } from '../theme';
 import { parseTtl } from '../units';
@@ -10,6 +12,7 @@ interface Props {
 }
 
 export function Send({ onBack }: Props) {
+  const t = useT();
   const [to, setTo] = useState('');
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
@@ -24,22 +27,22 @@ export function Send({ onBack }: Props) {
     setAmountError(null);
     setTxHash(null);
     if (!walletStore.isUnlocked()) {
-      setError('지갑이 잠겨 있습니다.');
+      setError(t('send.locked_warn'));
       return;
     }
     if (!/^0x[0-9a-fA-F]{40}$/.test(to.trim())) {
-      setToError('받는 주소 형식이 올바르지 않습니다.');
+      setToError(t('send.to_invalid_mobile'));
       return;
     }
     let value: bigint;
     try {
       value = parseTtl(amount);
     } catch {
-      setAmountError('금액 형식이 올바르지 않습니다.');
+      setAmountError(t('send.amount_invalid'));
       return;
     }
     if (value <= 0n) {
-      setAmountError('0보다 큰 금액을 입력하세요.');
+      setAmountError(t('send.amount_must_be_positive'));
       return;
     }
 
@@ -48,7 +51,13 @@ export function Send({ onBack }: Props) {
       const hash = await walletStore.transfer({ to: to.trim(), amount: value });
       setTxHash(hash);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '전송 실패');
+      if (e instanceof ShellError) {
+        setError(t(`errors.${e.code}`));
+      } else if (e instanceof Error) {
+        setError(e.message || t('send.failed_short'));
+      } else {
+        setError(t('send.failed_short'));
+      }
     } finally {
       setBusy(false);
     }
@@ -56,12 +65,12 @@ export function Send({ onBack }: Props) {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.h1}>보내기</Text>
-      <Text style={styles.lead}>TTL 메인넷에서 네이티브 자산을 전송합니다.</Text>
+      <Text style={styles.h1}>{t('send.title_mobile')}</Text>
+      <Text style={styles.lead}>{t('send.lead_native_mobile')}</Text>
 
       <Card style={styles.section}>
         <Input
-          label="받는 주소"
+          label={t('send.to_label')}
           value={to}
           onChangeText={setTo}
           placeholder="0x..."
@@ -74,7 +83,7 @@ export function Send({ onBack }: Props) {
 
       <Card style={styles.section}>
         <Input
-          label="금액 (TTL)"
+          label={t('send.amount_label', { symbol: 'TTL' })}
           value={amount}
           onChangeText={setAmount}
           placeholder="0.0"
@@ -89,7 +98,7 @@ export function Send({ onBack }: Props) {
       {error && <Text style={styles.error}>{error}</Text>}
       {txHash && (
         <View style={styles.successCard}>
-          <Text style={styles.successLabel}>전송 완료</Text>
+          <Text style={styles.successLabel}>{t('send.completed')}</Text>
           <Text style={styles.txHash} selectable>
             {txHash}
           </Text>
@@ -97,11 +106,11 @@ export function Send({ onBack }: Props) {
       )}
 
       <Button variant="primary" fullWidth loading={busy} onPress={onSubmit}>
-        전송
+        {t('send.submit_mobile')}
       </Button>
       <View style={styles.btnSpacer} />
       <Button variant="ghost" fullWidth onPress={onBack}>
-        뒤로
+        {t('common.back')}
       </Button>
     </ScrollView>
   );
