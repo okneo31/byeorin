@@ -9,7 +9,8 @@
     "build": "wxt build",
     "zip": "wxt zip",
     "typecheck": "wxt prepare && tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test --config=e2e/playwright.config.ts"
   },
   "dependencies": {
     "@nodong/i18n": "workspace:*",
@@ -20,6 +21,7 @@
     "viem": "^2.21.40"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/chrome": "^0.0.279",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

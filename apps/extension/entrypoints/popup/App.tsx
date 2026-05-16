@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createMnemonic, type HwAppName } from '@nodong/wallet-sdk';
+import { createMnemonic, type HwAppName } from '@nodong/wallet-sdk/core';
 import { ShellError } from '@nodong/shell-core';
 import { LocaleSwitch, useT } from '@nodong/i18n/react';
 import {

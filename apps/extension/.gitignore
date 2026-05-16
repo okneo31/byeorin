@@ -2,3 +2,9 @@
 .output/
 node_modules/
 web-ext-artifacts/
+# Playwright e2e
+e2e/.tmp-user-data-*
+e2e/test-results/
+e2e/playwright-report/
+playwright-report/
+test-results/

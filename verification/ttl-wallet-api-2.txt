@@ -1,0 +1,48 @@
+GET /api/v1 -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1</pre></body></html>
+GET /api/v1/version -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/version</pre></body></html>
+GET /api/v1/info -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/info</pre></body></html>
+GET /api/v1/status -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/status</pre></body></html>
+GET /api/v1/wallets -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/wallets</pre></body></html>
+GET /api/v1/balance -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/balance</pre></body></html>
+GET /api/v1/balance/0x0b551d8b57b8a7b7072eb40d1d6defb148e60434 -> 200 | {"address":"0x0b551d8b57b8a7b7072eb40d1d6defb148e60434","balance":"1013842901866687666666666666"}
+GET /api/v1/tx -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/tx</pre></body></html>
+GET /api/v1/transactions -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/transactions</pre></body></html>
+GET /api/v1/transaction -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/transaction</pre></body></html>
+GET /api/v1/block -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/block</pre></body></html>
+GET /api/v1/blocks -> 200 | {"blocks":[{"number":520178,"hash":"0x38b4df44577f445bda835e4c44f981d601ec30b9c194d145d3d0df8fd04eeae7","timestamp":1778945998,"miner":"0x0b551d8b57b8a7b7072eb40d1d6defb148e60434","gas_used":"0","gas_
+GET /api/v1/blocks/latest -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/blocks/latest</pre></body></html>
+GET /api/v1/chain -> 200 | {"chainId":7777,"blockNumber":520179,"gasPrice":"1000000007","totalIndexedBlocks":520178,"totalTransactions":18}
+GET /api/v1/signers -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/signers</pre></body></html>
+GET /api/v1/account -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/account</pre></body></html>
+GET /api/v1/account/0x0b551d8b57b8a7b7072eb40d1d6defb148e60434 -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/account/0x0b551d8b57b8a7b7072eb40d1d6defb148e60434</pre></body></html>
+GET /api/v1/price -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/price</pre></body></html>
+GET /api/v1/prices -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/prices</pre></body></html>
+GET /api/v1/coingecko -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/coingecko</pre></body></html>
+GET /api/v1/explorer -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/explorer</pre></body></html>
+GET /api/v1/stats -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/stats</pre></body></html>
+GET /api/v1/supply -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/supply</pre></body></html>
+GET /api/v1/peers -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/peers</pre></body></html>
+GET /api/v1/network -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/network</pre></body></html>
+GET /api/v1/docs -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/docs</pre></body></html>
+GET /api/v1/swagger -> 404 | <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Error</title></head><body><pre>Cannot GET /api/v1/swagger</pre></body></html>
+--- explore base ---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/</pre>
+</body>
+</html>
+
+--- options preflight ---
+HTTP/1.1 204 No Content
+Server: nginx/1.18.0 (Ubuntu)
+Date: Sat, 16 May 2026 15:40:14 GMT
+Connection: keep-alive
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET, POST, OPTIONS
+Access-Control-Allow-Headers: Content-Type
+

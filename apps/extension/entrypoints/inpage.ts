@@ -25,13 +25,39 @@ const EIP6963_UUID = '6e6f646f-6e67-4e4f-444f-4e472d574c54'; // "nodong-NODONG-W
 const EIP6963_RDNS = 'top.ttl1.nodong';
 
 // 작은 SVG 아이콘 — 적색 사각형 + 흰색 '노' 글자.
-// base64 인라인으로 data URL 화(외부 fetch 없음, < 1KB).
+// data URL 화(외부 fetch 없음, < 1KB).
+//
+// NOTE 1: 한글 "노" (U+B178) 는 Latin1 범위를 벗어나므로 btoa() 가 InvalidCharacterError 를
+//   던진다. inpage.ts 는 모듈 평가 시점에 실행되므로 그 예외가 발생하면 window.ethereum /
+//   window.nodong / EIP-6963 announce 가 *모두* 동작하지 않아 dApp 에서 지갑이 보이지 않는다.
+//   따라서 base64 가 아닌 URI 인코딩 형태(`data:image/svg+xml,<encoded>`)를 사용한다.
+//   EIP-6963 사양은 두 형태를 모두 허용하며 dApp 의 <img src=...> 에도 그대로 들어간다.
+// NOTE 2: 한글 글자(노/노동자의 지갑)는 String.fromCharCode 로 *런타임* 에 만든다.
+//   vite/esbuild 는 소스의 raw 한글과 \uXXXX 이스케이프를 모두 UTF-8 바이트로 동일하게
+//   출력한다. inpage.js 가 chrome-extension:// 에서 charset header 없이 페이지로 로드되면
+//   그 UTF-8 이 ISO-8859-1 로 해석돼 mojibake (예: e85b8 → 'ë…¸') 가 된다.
+//   정수 코드포인트를 String.fromCharCode 로 합치는 형태는 minifier 가 손대지 않으므로
+//   어떤 페이지 인코딩에서도 정확히 같은 UTF-16 코드 유닛이 만들어진다.
+// 비-ASCII 문자를 코드포인트 정수 배열에서 *런타임* 에 합친다.
+// 단순 String.fromCharCode(0xB178) 는 vite/esbuild minifier 가 컴파일 타임에 평가해 raw
+// 한글로 바꿔버리므로(=원래 문제로 회귀), 길이를 알 수 없는 입력으로 만들어 folding 을
+// 피한다. .apply 경유 + 배열 우회는 vite 의 evaluate 패스가 보존한다.
+function codesToString(codes: number[]): string {
+  // .apply 사용은 의도적임 — fromCharCode(...codes) 도 fold 될 수 있다.
+  // eslint-disable-next-line prefer-spread
+  return String.fromCharCode.apply(null, codes);
+}
+
 const ICON_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
   '<rect width="64" height="64" rx="12" fill="#c41e1e"/>' +
   '<text x="32" y="44" font-size="36" font-family="sans-serif" font-weight="800" ' +
-  'text-anchor="middle" fill="#fff">노</text></svg>';
-const ICON_DATA_URL = 'data:image/svg+xml;base64,' + btoa(ICON_SVG);
+  'text-anchor="middle" fill="#fff">' + codesToString([0xB178]) + '</text></svg>';
+const ICON_DATA_URL = 'data:image/svg+xml,' + encodeURIComponent(ICON_SVG);
+
+// EIP-6963 표기명 — '노동자의 지갑'.
+//   노 U+B178 · 동 U+B3D9 · 자 U+C790 · 의 U+C758 · (공백) · 지 U+C9C0 · 갑 U+AC11
+const BRAND_NAME = codesToString([0xB178, 0xB3D9, 0xC790, 0xC758, 0x20, 0xC9C0, 0xAC11]);
 
 class NodongInpageProvider {
   readonly isMetaMask = false;
@@ -72,7 +98,12 @@ class NodongInpageProvider {
 
   async request(args: { method: string; params?: unknown[] | Record<string, unknown> }): Promise<unknown> {
     if (!args || typeof args.method !== 'string') {
-      throw Object.assign(new Error('잘못된 요청'), { code: -32602 });
+      // '잘못된 요청' — codesToString 로 런타임 합성 (mojibake 방지).
+      //   잘 U+C798 · 못 U+BABB · 된 U+B41C · (공백) · 요 U+C694 · 청 U+CCAD
+      throw Object.assign(
+        new Error(codesToString([0xC798, 0xBABB, 0xB41C, 0x20, 0xC694, 0xCCAD])),
+        { code: -32602 },
+      );
     }
     const id = this.nextId++;
     const req: JsonRpcRequest = { id, method: args.method, params: args.params };
@@ -117,7 +148,7 @@ class NodongInpageProvider {
 function announceEip6963(provider: NodongInpageProvider): void {
   const info = Object.freeze({
     uuid: EIP6963_UUID,
-    name: '노동자의 지갑',
+    name: BRAND_NAME,
     icon: ICON_DATA_URL,
     rdns: EIP6963_RDNS,
   });

@@ -17,4 +17,5 @@ export {
   type WcMetadata,
   type WcDelegate,
   type WalletConnectSignerOptions,
+  type WalletKitLike,
 } from './walletconnect.js';

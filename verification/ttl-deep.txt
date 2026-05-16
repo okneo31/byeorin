@@ -1,0 +1,21 @@
+=== block 2 timestamp ===
+"timestamp":"0x69decbcf"
+=== block 100 timestamp ===
+"timestamp":"0x69ded21e"
+=== signer balances ===
+0x0b551d8b57b8a7b7072eb40d1d6defb148e60434 -> {"jsonrpc":"2.0","id":1,"result":"0x346b1a45c3bce3520c3faaa"}
+0x49b60177cc7dcd4ec4477a7f9fc42f18fe40cec4 -> {"jsonrpc":"2.0","id":1,"result":"0x33431060a1d82c306b9761b"}
+0x9f38dbc8749fb820d5956f0e42c66c60d145aeea -> {"jsonrpc":"2.0","id":1,"result":"0x352b93d6d8b2a7cd40c0003"}
+0xbf073bfbeba9a5de28475c532d8174850edd6a68 -> {"jsonrpc":"2.0","id":1,"result":"0x3403181a11e2c633e1c9b55"}
+=== fork detection: London/Shanghai? withdrawalsRoot ===
+keys: ['baseFeePerGas', 'difficulty', 'extraData', 'gasLimit', 'gasUsed', 'hash', 'logsBloom', 'miner', 'mixHash', 'nonce', 'number', 'parentHash', 'receiptsRoot', 'sha3Uncles', 'size', 'stateRoot', 'timestamp', 'totalDifficulty', 'transactions', 'transactionsRoot', 'uncles']
+=== eth_getProof support ===
+{"jsonrpc":"2.0","id":1,"result":{"address":"0x0b551d8b57b8a7b7072eb40d1d6defb148e60434","accountProof":["0xf9011180a0229086bf0630a21059b9d4b2d5b32ab238589ffa316e6f39d2c60e8930a9511aa0f532e507bc7f09c1
+=== debug_traceTransaction availability (expect err if disabled) ===
+{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"the method debug_traceBlockByNumber does not exist/is not available"}}
+
+=== admin_nodeInfo (expect blocked) ===
+{"jsonrpc":"2.0","id":1,"result":{"id":"74fae07ff1a967120a523b1c3719724af192c79d0a2e27977b0f2b5bcf7b038e","name":"ttlcoin/v1.13.15-stable-c5ba367e/linux-amd64/go1.22.12","enode":"enode://12807a21de787
+=== rpc_modules ===
+{"jsonrpc":"2.0","id":1,"result":{"admin":"1.0","clique":"1.0","eth":"1.0","net":"1.0","rpc":"1.0","txpool":"1.0","web3":"1.0"}}
+

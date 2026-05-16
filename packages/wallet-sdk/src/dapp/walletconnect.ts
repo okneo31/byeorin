@@ -217,8 +217,14 @@ async function loadWalletKit(): Promise<{
 // ── Adapter ───────────────────────────────────────────────────────────────
 
 /** WalletKit's runtime instance shape we depend on. Kept narrow on purpose
- *  so the adapter does not over-couple to library internals. */
-interface KitRuntime {
+ *  so the adapter does not over-couple to library internals.
+ *
+ *  Exposed (re-exported as `WalletKitLike`) as a public injection seam: tests
+ *  and alternative transports can inject any object matching this contract
+ *  via `WalletConnectSigner.create({ walletKit })`, bypassing the dynamic
+ *  `@reown/walletkit` import. This keeps the production code path unchanged
+ *  while enabling deterministic e2e tests that never touch the relay. */
+export interface KitRuntime {
   pair(opts: { uri: string }): Promise<unknown>;
   approveSession(opts: unknown): Promise<unknown>;
   rejectSession(opts: unknown): Promise<unknown>;
@@ -228,6 +234,10 @@ interface KitRuntime {
   on(event: string, listener: (...args: unknown[]) => void): void;
   off?(event: string, listener: (...args: unknown[]) => void): void;
 }
+
+/** Public alias for the WalletKit-shape we depend on. Use to type a mock or
+ *  alternative client when calling `WalletConnectSigner.create({ walletKit })`. */
+export type WalletKitLike = KitRuntime;
 
 export class WalletConnectSigner {
   private readonly kit: KitRuntime;
@@ -252,19 +262,29 @@ export class WalletConnectSigner {
   }
 
   /**
-   * Create a configured WalletConnectSigner. Dynamically loads
+   * Create a configured WalletConnectSigner. By default dynamically loads
    * `@reown/walletkit` — throws a helpful error if the package isn't
    * installed.
    *
    * `chainId` here is the wallet's active EVM chain (e.g. 7777 for TTL).
    * It is used to default the `eip155:<id>` namespace on approve.
+   *
+   * **Injection seam** (`walletKit`): if provided, the dynamic import is
+   * skipped entirely and `projectId` is not required. The injected object
+   * must satisfy {@link WalletKitLike}. Designed for tests and any future
+   * non-Reown transport (e.g. a self-hosted relay client).
    */
   static async create(opts: {
-    projectId: string;
+    projectId?: string;
     relayUrl?: string;
     metadata: WcMetadata;
     chainId?: number;
+    walletKit?: WalletKitLike;
   }): Promise<WalletConnectSigner> {
+    if (opts.walletKit) {
+      // Injected client path — bypass dynamic import + relay init entirely.
+      return new WalletConnectSigner(opts.walletKit, opts.metadata, opts.chainId ?? 7777);
+    }
     if (!opts.projectId || typeof opts.projectId !== 'string') {
       throw new Error('walletconnect: projectId is required');
     }

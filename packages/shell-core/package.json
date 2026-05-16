@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "description": "노동자의 지갑 — 앱 셸 공용 코어 (월릿 라이프사이클 + 세션 스토어)",
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",

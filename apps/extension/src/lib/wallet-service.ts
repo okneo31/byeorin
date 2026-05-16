@@ -5,14 +5,17 @@
 // import 되어도 동일한 시맨틱을 제공한다. 실제 wallet 객체는 각 컨텍스트의 메모리에
 // 따로 존재하지만, 세션 저장소가 공유되므로 tryAutoRestore 로 동기화 가능.
 
+// 좁은 import — 본 popup/background 는 EVM 만 사용한다. `@nodong/wallet-sdk` 의
+// 메인 barrel 을 그대로 import 하면 cosmos/ton/xrp/solana/sui/tron/aptos 어댑터가
+// 따라 들어와 bundle 이 6MB+ 로 부풀고 (Buffer / WASM 미허용으로) popup 마운트가
+// 실패한다. core (Wallet/타입/HW 트랜스포트) + evm (EvmAdapter/TTL_CHAIN) 만 가져온다.
 import {
-  EvmAdapter,
-  TTL_CHAIN,
   type HwAppName,
   type HwSigner,
   type WalletAccount,
   type WebHidTransport,
-} from '@nodong/wallet-sdk';
+} from '@nodong/wallet-sdk/core';
+import { EvmAdapter, TTL_CHAIN } from '@nodong/wallet-sdk/evm';
 import { createWalletStore, ExtensionSessionStore } from '@nodong/shell-core';
 import { clearAllGrants } from './grants.js';
 
@@ -109,7 +112,9 @@ export async function connectHardware(
   appName: HwAppName,
   derivationPath?: string,
 ): Promise<HwAccountState> {
-  const sdk = await import('@nodong/wallet-sdk');
+  // /core subpath 로 dynamic import — 전체 barrel 을 가져오면 popup 이 마운트되는
+  // 순간 cosmos/ton/xrp 등이 따라 들어와 bundle 시 chunk 가 통째로 비대해진다.
+  const sdk = await import('@nodong/wallet-sdk/core');
   const transport = await sdk.WebHidTransport.open({ forceRequest: false });
   const path =
     derivationPath ??

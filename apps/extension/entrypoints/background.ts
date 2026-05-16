@@ -6,7 +6,10 @@ import {
   isHex,
   type Hex,
 } from 'viem';
-import { signEvmMessage, TTL_CHAIN } from '@nodong/wallet-sdk';
+// 좁은 subpath — background SW 는 EVM(TTL) 만 라우팅한다.
+// wallet-sdk 의 메인 barrel 을 import 하면 cosmos/ton/xrp/... 까지 함께 끌려오므로
+// background bundle 도 popup 과 같은 6MB chunk 에 공유돼 SW boot 가 무거워진다.
+import { signEvmMessage, TTL_CHAIN } from '@nodong/wallet-sdk/evm';
 import { getActiveAccount, getTtlAdapter, walletStore } from '../src/lib/wallet-service.js';
 import {
   RPC_ERRORS,

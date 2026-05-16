@@ -54,6 +54,7 @@ export {
   type WcMetadata,
   type WcDelegate,
   type WalletConnectSignerOptions,
+  type WalletKitLike,
 } from './dapp/index.js';
 
 // ── ERC-20 토큰 / 활동 로그 / 가격 피드 ─────────────────

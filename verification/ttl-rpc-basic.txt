@@ -1,0 +1,27 @@
+=== eth_blockNumber ===
+{"jsonrpc":"2.0","id":1,"result":"0x7efe1"}
+
+=== eth_syncing ===
+{"jsonrpc":"2.0","id":1,"result":false}
+
+=== eth_gasPrice ===
+{"jsonrpc":"2.0","id":1,"result":"0x3b9aca07"}
+
+=== eth_maxPriorityFeePerGas ===
+{"jsonrpc":"2.0","id":1,"result":"0x3b9aca00"}
+
+=== eth_feeHistory(4, latest, []) ===
+{"jsonrpc":"2.0","id":1,"result":{"oldestBlock":"0x7efde","baseFeePerGas":["0x7","0x7","0x7","0x7","0x7"],"gasUsedRatio":[0,0,0,0]}}
+
+=== net_version ===
+{"jsonrpc":"2.0","id":1,"result":"7777"}
+
+=== net_listening ===
+{"jsonrpc":"2.0","id":1,"result":true}
+
+=== net_peerCount ===
+{"jsonrpc":"2.0","id":1,"result":"0x3"}
+
+=== txpool_status ===
+{"jsonrpc":"2.0","id":1,"result":{"pending":"0x0","queued":"0x0"}}
+

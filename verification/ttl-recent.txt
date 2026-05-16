@@ -1,0 +1,46 @@
+latest=520221
+block 520221 ts=1778946213
+block 520220 ts=1778946208
+block 520216 ts=1778946188
+block 520211 ts=1778946163
+=== admin_nodeInfo ===
+{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+        "id": "74fae07ff1a967120a523b1c3719724af192c79d0a2e27977b0f2b5bcf7b038e",
+        "name": "ttlcoin/v1.13.15-stable-c5ba367e/linux-amd64/go1.22.12",
+        "enode": "enode://12807a21de78760812439fc23250a413cee44c5452e7b5a93c22abb60cc4f021abfec36a2bec8b01565072d2d4c50ccca435be45dc011d064687d3edb5730f37@207.90.195.148:30303",
+        "enr": "enr:-KO4QP9bXAKhLUfXsjq-kQz2L3GFlveo9hL4GcyXg5zPVsJcecEAprB_ogUfQflCWh_qYl2l9q9lp0x765tG0QwVSWaGAZ2OS_bxg2V0aMfGhN5ohk-AgmlkgnY0gmlwhM9aw5SJc2VjcDI1NmsxoQMSgHoh3nh2CBJDn8IyUKQTzuRMVFLntak8Iqu2DMTwIYRzbmFwwIN0Y3CCdl-DdWRwgnZf",
+        "ip": "207.90.195.148",
+        "ports": {
+            "discovery": 30303,
+            "listener": 30303
+        },
+        "listenAddr": "[::]:30303",
+        "protocols": {
+            "eth": {
+                "network": 7777,
+                "difficulty": 651622,
+                "genesis": "0xd62d617750724b7c84183396e956bf35e8716b654ea86e2b2d2cfe082bdba872",
+                "config": {
+                    "chainId": 7777,
+                    "homesteadBlock": 0,
+                    "eip150Block": 0,
+                    "eip155Block": 0,
+                    "eip158Block": 0,
+                    "byzantiumBlock": 0,
+                    "constantinopleBlock": 0,
+                    "petersburgBlock": 0,
+                    "istanbulBlock": 0,
+                    "berlinBlock": 0,
+                    "londonBlock": 0,
+                    "clique": {
+                        "period": 5,
+                        "epoch": 30000
+                    }
+                },
+                "head": "0x4027f179614112dd3d601ef056994830a79492c95e9a106c3c43cfaf5b15b206"
+            },
+            "snap": {}
+        }

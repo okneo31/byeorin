@@ -1,3 +1,6 @@
+// /core subpath — shell-core 는 어떤 chain adapter 구현도 알 필요가 없다.
+// 본 모듈을 통해 wallet-sdk 의 메인 barrel 이 끌려오면 컨슈머(브라우저 확장) bundle 에
+// 모든 체인 라이브러리가 함께 들어가 popup 마운트가 실패한다.
 import {
   Wallet,
   isValidMnemonic,
@@ -5,7 +8,7 @@ import {
   type TransferIntent,
   type TxHash,
   type WalletAccount,
-} from '@nodong/wallet-sdk';
+} from '@nodong/wallet-sdk/core';
 import { shellError } from './errors.js';
 import type { SessionStore } from './session.js';
 import { detectWordlist } from './wordlist.js';
