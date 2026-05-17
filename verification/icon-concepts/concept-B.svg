@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="노동자의 지갑 — 勞 stamp">
+  <title>노동자의 지갑 — Concept B (勞 stamp)</title>
+
+  <!-- Stamp body — same wobbled rounded square as A -->
+  <path
+    d="M 56 22
+       C 80 18 178 18 200 24
+       C 232 30 236 56 236 80
+       C 240 110 240 152 234 178
+       C 230 210 206 234 178 236
+       C 148 240 104 240 78 234
+       C 48 232 22 208 20 178
+       C 16 148 16 104 22 78
+       C 26 48 32 26 56 22 Z"
+    fill="#c41e1e"
+  />
+
+  <path
+    d="M 64 36
+       C 86 32 172 32 192 38
+       C 218 42 220 64 220 84
+       C 224 110 224 148 218 172
+       C 214 200 196 218 172 220
+       C 146 224 110 224 84 218
+       C 58 216 38 196 36 172
+       C 32 146 32 108 38 86
+       C 42 60 46 38 64 36 Z"
+    fill="none"
+    stroke="#fffaf0"
+    stroke-width="2"
+    opacity="0.45"
+  />
+
+  <!-- 勞 (labor) hanja, drawn as simplified path strokes.
+       Structure: 火火 on top (two flames), 冖 cover, 力 (power) on bottom. -->
+  <g fill="#fffaf0">
+    <!-- Top: left flame (火, simplified) -->
+    <path d="M 78 56
+             C 76 54 72 56 72 60
+             L 78 78
+             C 80 84 86 84 88 78
+             L 92 60
+             C 92 56 88 54 86 56
+             L 82 64 Z" />
+    <!-- Top: middle flame -->
+    <path d="M 118 50
+             C 116 48 112 50 112 54
+             L 120 80
+             C 122 86 130 86 132 80
+             L 138 54
+             C 138 50 134 48 132 50
+             L 125 64 Z" />
+    <!-- Top: right flame -->
+    <path d="M 160 56
+             C 158 54 154 56 154 60
+             L 162 78
+             C 164 84 170 84 172 78
+             L 178 60
+             C 178 56 174 54 172 56
+             L 167 64 Z" />
+
+    <!-- 冖 cover: thick horizontal bar with short downward ticks -->
+    <path d="M 50 96
+             L 206 96
+             C 212 96 214 100 212 106
+             L 208 116
+             C 206 122 200 124 192 124
+             L 64 124
+             C 56 124 50 122 48 116
+             L 44 106
+             C 42 100 44 96 50 96 Z" />
+
+    <!-- 力 (power): the bold worker's arm/strength radical at the bottom.
+         Top horizontal hook, descending diagonal, bottom curve into a hook. -->
+    <path d="M 88 138
+             L 174 138
+             C 184 138 188 144 184 152
+             L 178 162
+             C 174 166 170 166 166 162
+             L 162 156
+             L 162 196
+             C 162 208 152 214 138 210
+             L 122 206
+             C 116 204 114 198 118 194
+             L 124 188
+             C 128 186 134 188 138 192
+             L 142 196
+             L 142 158
+             C 142 152 138 150 132 150
+             L 96 150
+             C 90 150 86 146 88 138 Z" />
+
+    <!-- 力 left descending stroke -->
+    <path d="M 92 144
+             L 76 200
+             C 74 208 80 214 88 210
+             L 100 202
+             C 104 198 104 194 100 192
+             L 96 188
+             L 110 146
+             C 112 142 108 138 104 140 Z" />
+  </g>
+
+  <!-- Yellow accent: small dot lower-right corner like a seal carver's mark -->
+  <circle cx="204" cy="206" r="7" fill="#f4c430" />
+</svg>

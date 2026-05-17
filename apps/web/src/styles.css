@@ -1,10 +1,42 @@
 /*
- * apps/web — 앱 레벨 레이아웃 전용 CSS.
+ * apps/web — 앱 레벨 레이아웃 + 웹 셸 전용 위젯.
  *
- * 디자인 토큰과 컴포넌트(.nd-button, .nd-card, .nd-input, .nd-field,
- * .nd-address, .nd-amount)는 @nodong/design-system/tokens.css 가 정의한다.
- * 이 파일은 페이지 그리드 / 헤더 / 푸터 / 화면별 보조 위젯만 담는다.
+ * 디자인 토큰(`--nd-*`) 과 컴포넌트(.nd-button, .nd-card, .nd-input, .nd-field,
+ * .nd-address, .nd-amount) 는 @nodong/design-system/tokens.css 가 정의한다.
+ * 이 파일은 다음 세 가지만 담는다:
+ *   1) 웹 셸 전용 색/표면 (`--web-*`)               — 따뜻한 종이 미감.
+ *   2) 페이지 그리드 / 헤더 / 푸터 / 히어로 / 카드 군간 간격.
+ *   3) 화면별 보조 위젯(니모닉 그리드, 활동 타임라인, 상태 칩, QR 토글…).
+ *
+ * 새 토큰을 만들면 디자인 시스템 영역과 충돌하지 않도록 `--web-*` 네임스페이스를 쓴다.
+ * 브랜드 빨강/노랑은 디자인 시스템 토큰을 그대로 가져다 쓴다.
  */
+
+:root {
+  /* ── Web shell surfaces (따뜻한 종이 톤) ─────────────── */
+  --web-bg: #faf6ee;            /* 메인 배경 — paper 보다 살짝 더 채도 있는 따뜻한 베이지 */
+  --web-surface: #ffffff;
+  --web-surface-elev: #fffaf0;  /* 카드 표면 — 헤더와 대비되도록 약간의 온도감 */
+  --web-border: #e6dfd1;
+  --web-border-soft: #efe9dd;
+  --web-ink: #1a1614;
+  --web-muted: #6e6557;
+
+  /* ── Status pill colors (활동 상태) ──────────────────── */
+  --web-pill-done-bg: #e7f1ea;
+  --web-pill-done-fg: #1f5a3f;
+  --web-pill-pend-bg: #fbf1d5;
+  --web-pill-pend-fg: #6a4a00;
+  --web-pill-fail-bg: #f9e2e2;
+  --web-pill-fail-fg: #861010;
+
+  /* ── Motion (디자인 시스템보다 살짝 느린, "종이 같은" 전환) ── */
+  --web-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --web-dur: 140ms;
+
+  /* ── Inner highlight (버튼/카드의 1px 광택) ──────────── */
+  --web-press-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
 
 * {
   box-sizing: border-box;
@@ -14,14 +46,27 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--nd-bg);
-  color: var(--nd-fg);
-  font-family: var(--nd-font-sans);
+  background: var(--web-bg);
+  color: var(--web-ink);
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
+               'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  font-feature-settings: 'tnum' on;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a {
   color: var(--nd-red);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* 접근성: 전역 포커스 링 (디자인 시스템보다 강한 2px 빨간 외곽) */
+:focus-visible {
+  outline: 2px solid var(--nd-red);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* ── App shell ─────────────────────────────────────────── */
@@ -29,60 +74,90 @@ a {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background: var(--web-bg);
 }
 
 .nd-header {
-  background: var(--nd-black);
-  color: var(--nd-paper);
-  padding: 16px 20px;
+  /* 검정 띠 → 종이 톤으로. 빨간 1px 강조선만 남겨 운동성을 유지한다. */
+  background: var(--web-surface-elev);
+  color: var(--web-ink);
+  padding: 14px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-bottom: 4px solid var(--nd-yellow);
+  border-bottom: 1px solid var(--web-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: saturate(140%) blur(6px);
+}
+.nd-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--nd-red) 0%, var(--nd-yellow) 60%, transparent 100%);
+  opacity: 0.85;
 }
 
 .nd-header__brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 800;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+}
+
+.nd-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .nd-header__action {
   background: transparent;
-  border: 1px solid #555;
-  color: #ddd;
+  border: 1px solid var(--web-border);
+  color: var(--web-ink);
   padding: 6px 12px;
   border-radius: 8px;
   font-size: 13px;
   cursor: pointer;
+  font-family: inherit;
+  transition: background-color var(--web-dur) var(--web-ease),
+              border-color var(--web-dur) var(--web-ease);
+}
+.nd-header__action:hover {
+  background: var(--web-surface);
+  border-color: var(--nd-red);
 }
 
 .nd-main {
   flex: 1;
-  max-width: 560px;
+  max-width: 480px;
   width: 100%;
   margin: 0 auto;
-  padding: 24px 20px 48px;
+  padding: 1.5rem 1.25rem 3rem;
 }
 
 /* ── Screen typography (페이지 헤더 한 줄 + 리드) ─────── */
 .nd-h1 {
-  font-size: 28px;
+  font-size: 1.75rem;
   font-weight: 800;
-  margin: 8px 0 4px;
-  letter-spacing: -0.02em;
-  color: var(--nd-fg);
+  margin: 0.5rem 0 0.25rem;
+  letter-spacing: -0.03em;
+  color: var(--web-ink);
+  line-height: 1.2;
 }
 
 .nd-lead {
-  color: var(--nd-fg-muted);
-  margin: 0 0 24px;
-  font-size: 15px;
-  line-height: 1.55;
+  color: var(--web-muted);
+  margin: 0 0 1.5rem;
+  font-size: 0.9375rem;
+  line-height: 1.6;
 }
 
 /* ── 화면 간 카드/버튼 세로 간격 ─────────────────────── */
@@ -90,60 +165,305 @@ a {
 .nd-card + .nd-button,
 .nd-button + .nd-button,
 .nd-button + .nd-card {
-  margin-top: 12px;
+  margin-top: 0.75rem;
 }
 .nd-card {
-  margin: 16px 0;
+  margin: 1rem 0;
+  background: var(--web-surface-elev);
+  border-color: var(--web-border);
 }
-/* 화면 단위 풀폭 액션 버튼(.nd-button은 inline-flex가 기본) */
+/* 화면 단위 풀폭 액션 버튼 */
 .nd-button--block {
   display: flex;
   width: 100%;
+  min-height: 44px; /* 접근성: 모바일 탭 타깃 ≥ 44px */
+}
+
+/* 디자인 시스템 버튼에 따뜻한 인너 하이라이트 추가 — "눌리는 종이" 느낌 */
+.nd-button {
+  box-shadow: var(--web-press-highlight);
+  transition: background-color var(--web-dur) var(--web-ease),
+              border-color var(--web-dur) var(--web-ease),
+              color var(--web-dur) var(--web-ease),
+              box-shadow var(--web-dur) var(--web-ease),
+              filter var(--web-dur) var(--web-ease),
+              transform var(--web-dur) var(--web-ease);
+}
+.nd-button:hover:not(:disabled):not([aria-disabled='true']) {
+  filter: brightness(1.05);
+}
+.nd-button:active:not(:disabled):not([aria-disabled='true']) {
+  transform: translateY(1px);
 }
 
 .nd-row {
   display: flex;
-  gap: 10px;
+  gap: 0.625rem;
+}
+.nd-row > * {
+  flex: 1;
+  min-width: 0;
 }
 
-/* ── 복구 문구 박스 (디자인 시스템 외 위젯) ─────────── */
-.nd-mnemonic {
-  background: #fff;
-  border: 2px dashed var(--nd-red);
-  border-radius: 12px;
-  padding: 18px;
-  font-family: var(--nd-font-mono);
-  font-size: 16px;
-  line-height: 1.9;
-  word-spacing: 6px;
-  color: var(--nd-black);
-  user-select: all;
+/* ── 홈 히어로 ──────────────────────────────────────── */
+.web-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+  padding: 1.5rem 0 1.25rem;
 }
-
-/* 복구 흐름의 textarea — 디자인 시스템 Input은 현재 textarea 모드가
- * 없어서 일단 native <textarea>에 .nd-input 클래스를 재사용한다.
- * TODO(design-system): Input에 `as="textarea"` 또는 별도 Textarea 컴포넌트 도입. */
-.nd-textarea {
+.web-hero__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.web-hero__tagline {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.3;
+  margin: 0.25rem 0 0;
+  color: var(--web-ink);
+  /* 한국어 한 줄이 길어지면 우아하게 줄바꿈. */
+  word-break: keep-all;
+  max-width: 22ch;
+}
+.web-hero__subtagline {
+  color: var(--web-muted);
+  font-size: 0.9375rem;
+  margin: 0;
+  max-width: 28ch;
+  line-height: 1.55;
+}
+.web-hero__cta-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.625rem;
   width: 100%;
+  margin-top: 1rem;
+}
+/* 좁은 폭에서는 한 줄에 두 개의 한국어 버튼 라벨이 줄바꿈된다 → 폰트 살짝 줄임. */
+.web-hero__cta-row .nd-button {
+  font-size: 0.9375rem;
+  width: 100%;
+}
+.web-hero__footer-note {
+  margin-top: 1.5rem;
+  font-size: 12px;
+  color: var(--web-muted);
+  line-height: 1.55;
+  text-align: center;
+}
+
+/* ── 니모닉 그리드 (4×3, 인장 종이 셀) ───────────────── */
+.web-mnemonic-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.625rem;
+  margin: 0.75rem 0;
+  list-style: none;
+  padding: 0;
+}
+.web-mnemonic-cell {
+  position: relative;
+  background: var(--web-surface);
+  border: 1px solid var(--web-border);
+  border-radius: 8px;
+  padding: 0.75rem 0.625rem 0.5rem;
+  text-align: center;
+  font-family: var(--nd-font-mono);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--web-ink);
+  box-shadow: inset 0 0 0 1px rgba(196, 30, 30, 0.04),
+              0 1px 0 rgba(0, 0, 0, 0.02);
+  user-select: text;
+}
+.web-mnemonic-cell__index {
+  position: absolute;
+  top: 4px;
+  left: 6px;
   font-family: var(--nd-font-sans);
-  font-size: var(--nd-font-size-md);
-  color: var(--nd-fg);
-  background-color: var(--nd-paper);
-  border: 1px solid var(--nd-border);
-  border-radius: var(--nd-radius-md);
-  padding: 10px 12px;
-  line-height: var(--nd-line-normal);
-  min-height: 120px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--nd-red);
+  letter-spacing: 0;
+}
+.web-mnemonic-cell__word {
+  display: block;
+  margin-top: 0.25rem;
+  word-break: keep-all;
+}
+
+/* ── 복구 입력 (line-numbered textarea + 붙여넣기) ───── */
+.web-recover-input {
+  position: relative;
+}
+.web-recover-input__textarea {
+  width: 100%;
+  font-family: var(--nd-font-mono);
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--web-ink);
+  background-color: var(--web-surface);
+  border: 1px solid var(--web-border);
+  border-radius: 8px;
+  padding: 0.75rem 0.875rem;
+  min-height: 130px;
   resize: vertical;
   box-sizing: border-box;
+  transition: border-color var(--web-dur) var(--web-ease),
+              box-shadow var(--web-dur) var(--web-ease);
 }
-.nd-textarea:focus-visible {
+.web-recover-input__textarea:focus-visible {
   outline: none;
   border-color: var(--nd-red);
-  box-shadow: var(--nd-focus-ring);
+  box-shadow: 0 0 0 3px rgba(196, 30, 30, 0.18);
+}
+.web-recover-input__meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+  font-size: 12px;
+  color: var(--web-muted);
+}
+.web-recover-input__paste {
+  background: var(--web-surface);
+  border: 1px solid var(--web-border);
+  color: var(--web-ink);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color var(--web-dur) var(--web-ease),
+              border-color var(--web-dur) var(--web-ease);
+}
+.web-recover-input__paste:hover {
+  background: var(--web-bg);
+  border-color: var(--nd-red);
 }
 
-/* ── 상태 배너 ───────────────────────────────────────── */
+/* ── 계정: 잔액 히어로 ────────────────────────────── */
+.web-balance-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0;
+  text-align: center;
+}
+.web-balance-hero__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--web-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+.web-balance-hero__value {
+  font-family: var(--nd-font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' on;
+  font-size: 2.5rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--web-ink);
+  line-height: 1.1;
+  margin: 0;
+}
+.web-balance-hero__symbol {
+  color: var(--web-muted);
+  margin-left: 0.375rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+.web-balance-hero__usd {
+  color: var(--web-muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+/* ── 계정: 액션 3-버튼 행 ─────────────────────────── */
+.web-action-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+.web-action-row .nd-button {
+  width: 100%;
+  min-height: 44px;
+  font-size: 0.9375rem;
+}
+
+/* ── 계정: 주소 카드 + QR 토글 ────────────────────── */
+.web-address-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.web-qr-toggle {
+  background: transparent;
+  border: 1px solid var(--web-border);
+  color: var(--web-ink);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color var(--web-dur) var(--web-ease),
+              border-color var(--web-dur) var(--web-ease);
+}
+.web-qr-toggle:hover {
+  background: var(--web-bg);
+  border-color: var(--nd-red);
+}
+.web-qr-inline {
+  margin-top: 0.875rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+.web-qr-inline img {
+  width: 200px;
+  height: 200px;
+  image-rendering: pixelated;
+  border-radius: 8px;
+  border: 1px solid var(--web-border);
+  background: #fff;
+  padding: 8px;
+}
+
+/* ── 보조 ───────────────────────────────────────── */
+.nd-muted {
+  color: var(--web-muted);
+  font-size: 13px;
+}
+
+.nd-hash {
+  font-family: var(--nd-font-mono);
+  font-size: 13px;
+  word-break: break-all;
+  color: var(--web-muted);
+}
+
+.nd-footer-note {
+  margin-top: 1.5rem;
+  font-size: 12px;
+  color: var(--web-muted);
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* ── 상태 배너 ───────────────────────────────────── */
 .nd-warn {
   background: #fff8e1;
   border-left: 4px solid var(--nd-yellow);
@@ -173,43 +493,22 @@ a {
   margin-top: 10px;
 }
 
-/* ── QR / 보조 텍스트 ─────────────────────────────────── */
+/* ── QR (기존 호환 — 모달/외부 사용) ───────────────── */
 .nd-qr {
   display: flex;
   justify-content: center;
   padding: 16px;
   background: #fff;
   border-radius: 12px;
-  border: 1px solid var(--nd-border);
+  border: 1px solid var(--web-border);
 }
-
 .nd-qr img {
   width: 200px;
   height: 200px;
   image-rendering: pixelated;
 }
 
-.nd-muted {
-  color: var(--nd-fg-muted);
-  font-size: 13px;
-}
-
-.nd-hash {
-  font-family: var(--nd-font-mono);
-  font-size: 13px;
-  word-break: break-all;
-  color: var(--nd-fg-muted);
-}
-
-.nd-footer-note {
-  margin-top: 24px;
-  font-size: 12px;
-  color: var(--nd-fg-muted);
-  text-align: center;
-  line-height: 1.6;
-}
-
-/* ── 토큰 목록 ────────────────────────────────────────── */
+/* ── 토큰 목록 ────────────────────────────────────── */
 .nd-tokens {
   list-style: none;
   margin: 8px 0 0;
@@ -218,90 +517,201 @@ a {
   flex-direction: column;
   gap: 8px;
 }
-
 .nd-tokens__row {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 12px;
   padding: 8px 0;
-  border-top: 1px solid var(--nd-border);
+  border-top: 1px solid var(--web-border-soft);
 }
-
 .nd-tokens__row:first-child {
   border-top: none;
   padding-top: 0;
 }
-
 .nd-tokens__sym {
   font-weight: 700;
-  color: var(--nd-fg);
+  color: var(--web-ink);
 }
-
 .nd-tokens__name {
   font-size: 12px;
-  color: var(--nd-fg-muted);
+  color: var(--web-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.web-tokens-empty {
+  text-align: center;
+  padding: 0.5rem 0 0;
+}
+.web-tokens-empty p {
+  color: var(--web-muted);
+  font-size: 13px;
+  margin: 0 0 0.375rem;
+}
+.web-tokens-empty__link {
+  background: none;
+  border: none;
+  color: var(--nd-red);
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 4px 8px;
+  font-family: inherit;
+}
 
-/* ── 활동 목록 ────────────────────────────────────────── */
-.nd-activity {
+/* ── 활동 타임라인 ───────────────────────────────── */
+.web-activity {
   list-style: none;
-  margin: 12px 0 0;
+  margin: 0.5rem 0 0;
   padding: 0;
 }
-
-.nd-activity__row {
-  border-top: 1px solid var(--nd-border);
+.web-activity__item {
+  border-top: 1px solid var(--web-border-soft);
 }
-
-.nd-activity__row:first-child {
+.web-activity__item:first-child {
   border-top: none;
 }
-
-.nd-activity__link {
-  display: block;
-  padding: 10px 0;
+.web-activity__row {
+  width: 100%;
+  background: transparent;
+  border: none;
+  font: inherit;
   color: inherit;
-  text-decoration: none;
-}
-
-.nd-activity__link:hover {
-  background: #fafafa;
-}
-
-.nd-activity__meta {
-  display: flex;
-  justify-content: space-between;
+  text-align: left;
+  cursor: pointer;
+  padding: 0.75rem 0.25rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem 1rem;
   align-items: center;
-  gap: 8px;
+  border-radius: 6px;
+  transition: background-color var(--web-dur) var(--web-ease);
+}
+.web-activity__row:hover {
+  background: var(--web-surface);
+}
+.web-activity__time {
+  font-size: 12px;
+  color: var(--web-muted);
+  font-variant-numeric: tabular-nums;
+}
+.web-activity__direction {
   font-size: 13px;
-  font-weight: 700;
-}
-
-.nd-activity__type {
-  color: var(--nd-fg);
-}
-
-.nd-activity__sub {
+  font-weight: 600;
+  color: var(--web-ink);
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 0.375rem;
+}
+.web-activity__counterparty {
   font-family: var(--nd-font-mono);
   font-size: 13px;
+  color: var(--web-muted);
 }
-
-.nd-activity__value {
-  display: inline-flex;
+.web-activity__amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.web-activity__expanded {
+  padding: 0.5rem 0.25rem 0.875rem;
+  font-size: 13px;
+  color: var(--web-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+.web-activity__expanded .nd-hash {
+  font-size: 12px;
+}
+.web-activity__empty {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 0.5rem;
+  padding: 1.5rem 0;
+  text-align: center;
+}
+.web-activity__empty-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--web-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--web-muted);
+  font-size: 18px;
+  border: 1px solid var(--web-border-soft);
 }
 
-/* ── 토큰 추가 모달 ───────────────────────────────────── */
+/* ── 상태 칩 (활동 상태 배지) ────────────────────── */
+.web-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+.web-pill--done {
+  background: var(--web-pill-done-bg);
+  color: var(--web-pill-done-fg);
+}
+.web-pill--pending {
+  background: var(--web-pill-pend-bg);
+  color: var(--web-pill-pend-fg);
+}
+.web-pill--fail {
+  background: var(--web-pill-fail-bg);
+  color: var(--web-pill-fail-fg);
+}
+
+/* ── Send: 확인 단계 (preview 카드) ──────────────── */
+.web-send-review {
+  background: var(--web-surface);
+  border: 1px solid var(--web-border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin: 0.75rem 0;
+}
+.web-send-review__summary {
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--web-ink);
+  margin: 0 0 1rem;
+}
+.web-send-review__amount {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.web-send-review__address {
+  font-family: var(--nd-font-mono);
+  font-size: 0.875rem;
+  color: var(--web-ink);
+  word-break: break-all;
+}
+.web-send-review__row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--web-border-soft);
+  font-size: 13px;
+  color: var(--web-muted);
+}
+.web-send-review__row:first-of-type {
+  border-top: none;
+}
+.web-send-review__irreversible {
+  margin: 0.875rem 0 0;
+  text-align: center;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--web-muted);
+}
+
+/* ── 토큰 추가 모달 ──────────────────────────────── */
 .nd-modal {
   position: fixed;
   inset: 0;
@@ -312,12 +722,27 @@ a {
   padding: 16px;
   z-index: 50;
 }
-
 .nd-modal__sheet {
-  background: var(--nd-paper);
+  background: var(--web-surface-elev);
   border-radius: 12px;
   padding: 20px;
   max-width: 420px;
   width: 100%;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+/* ── 잠금 활동 보기 잠금 화면 (Send 잠금 시) ───── */
+.web-locked-card {
+  text-align: center;
+  padding: 1.5rem 1rem;
+}
+
+/* ── 접근성: prefers-reduced-motion ────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

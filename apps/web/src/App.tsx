@@ -34,7 +34,8 @@ export function App() {
     <div className="nd-app">
       <header className="nd-header">
         <div className="nd-header__brand">
-          <Logo size={32} variant="mark-with-text" />
+          {/* 홈에서는 히어로 안에 큰 로고가 따로 있으므로 헤더는 작은 마크만. */}
+          <Logo size={28} variant="mark-with-text" />
         </div>
         <div className="nd-header__actions">
           <LocaleSwitch />
@@ -56,14 +57,21 @@ export function App() {
         )}
         {screen === 'send' && <Send onBack={() => setScreen('account')} />}
         {screen === 'activity' && <Activity onBack={() => setScreen('account')} />}
-        <p className="nd-footer-note">
-          {t('footer.non_custodial.web').split('\n').map((line, i) => (
-            <span key={i}>
-              {line}
-              <br />
-            </span>
-          ))}
-        </p>
+        {/*
+          비수탁 안내 푸터.
+          - 홈 화면은 자체 히어로 푸터(`home.web_footer_note`)를 갖고 있으므로 여기서는 숨긴다.
+          - 그 외 화면(Account/Send/Activity)에서는 사용자에게 "탭 닫으면 잠금" 안내를 한 번 더.
+        */}
+        {screen !== 'home' && (
+          <p className="nd-footer-note">
+            {t('footer.non_custodial.web').split('\n').map((line, i) => (
+              <span key={i}>
+                {line}
+                <br />
+              </span>
+            ))}
+          </p>
+        )}
       </main>
     </div>
   );

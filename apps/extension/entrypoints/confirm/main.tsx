@@ -5,6 +5,9 @@ import {
   createChromeSyncLocaleStorage,
 } from '@nodong/i18n/react';
 import { App } from './App.js';
+// 디자인 시스템 토큰 + .nd-* 컴포넌트 베이스 스타일.
+// confirm popup 은 다크 테마이므로 styles.css 에서 일부 색상을 오버라이드한다.
+import '@nodong/design-system/tokens.css';
 import './styles.css';
 
 const container = document.getElementById('root');

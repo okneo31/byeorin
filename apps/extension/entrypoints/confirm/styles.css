@@ -10,7 +10,26 @@
   --yellow: #f4c430;
   --paper: #fffaf0;
   --card: #141414;
+  --card-row: #0d0d0d;
   --border: #2a2a2a;
+  --border-strong: #3a3a3a;
+
+  /* method tag — 칩 색상 변종 */
+  --tag-green-bg: #0e3a1f;
+  --tag-green-border: #2d7a3f;
+  --tag-green-fg: #79e29a;
+  --tag-orange-bg: #3a2308;
+  --tag-orange-border: #b87328;
+  --tag-orange-fg: #ffb066;
+  --tag-blue-bg: #0e2540;
+  --tag-blue-border: #3470b8;
+  --tag-blue-fg: #8ec5ff;
+  --tag-red-bg: #401414;
+  --tag-red-border: #c45050;
+  --tag-red-fg: #ff9a9a;
+  --tag-gray-bg: #1a1a1a;
+  --tag-gray-border: #3a3a3a;
+  --tag-gray-fg: #b0b0b0;
 }
 
 * {
@@ -25,7 +44,10 @@ body {
   color: var(--fg);
   font-family: 'Pretendard', system-ui, -apple-system, 'Segoe UI', Roboto, 'Apple SD Gothic Neo',
     sans-serif;
+  font-feature-settings: 'tnum' 1;
   min-height: 100vh;
+  /* 한국어 가독성 — 본문 line-height 1.55. */
+  line-height: 1.55;
 }
 
 body {
@@ -35,23 +57,39 @@ body {
 .confirm {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 20px 18px;
+  gap: 12px;
+  /* 헤더와 본문 간격을 줄여 상단 hier 가 더 가깝게 보이도록. */
+  padding: 14px 16px 18px;
   min-height: 640px;
 }
 
+/* ── Brand header ─────────────────────────────────────────
+   작은 로고 + 브랜드명 + 좌측 빨간 막대. */
 .brand {
-  font-size: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
   font-weight: 800;
   letter-spacing: -0.5px;
   border-left: 4px solid var(--red);
-  padding-left: 10px;
+  padding: 4px 0 4px 10px;
 }
 
+.brand svg {
+  flex: 0 0 auto;
+  display: block;
+}
+
+.brand-text {
+  flex: 1 1 auto;
+}
+
+/* ── Card ────────────────────────────────────────────── */
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -61,16 +99,138 @@ body {
 .card h2 {
   margin: 0;
   font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
+.card h2 > span:first-child {
+  flex: 1 1 auto;
+}
+
+/* ── Method tag chip ─────────────────────────────────────
+   카드 헤더 옆 작은 색상 pill. 메서드별 톤이 위험도를 암시한다. */
+.method-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.method-tag--green {
+  background: var(--tag-green-bg);
+  border-color: var(--tag-green-border);
+  color: var(--tag-green-fg);
+}
+.method-tag--orange {
+  background: var(--tag-orange-bg);
+  border-color: var(--tag-orange-border);
+  color: var(--tag-orange-fg);
+}
+.method-tag--blue {
+  background: var(--tag-blue-bg);
+  border-color: var(--tag-blue-border);
+  color: var(--tag-blue-fg);
+}
+.method-tag--red {
+  background: var(--tag-red-bg);
+  border-color: var(--tag-red-border);
+  color: var(--tag-red-fg);
+}
+.method-tag--gray {
+  background: var(--tag-gray-bg);
+  border-color: var(--tag-gray-border);
+  color: var(--tag-gray-fg);
+}
+
+/* ── Origin row (주소 표시줄 느낌) ─────────────────────── */
+.origin-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: #050505;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
+.origin-row__label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--yellow);
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.origin-row__url {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12.5px;
+  color: var(--paper);
+  word-break: break-all;
+  flex: 1 1 auto;
+}
+
+/* ── Function header banner (contract call) ────────────── */
+.fn-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  border: 1px solid transparent;
+}
+
+.fn-banner--ok {
+  background: var(--tag-green-bg);
+  border-color: var(--tag-green-border);
+  color: var(--tag-green-fg);
+}
+
+.fn-banner--unknown {
+  background: var(--tag-orange-bg);
+  border-color: var(--tag-orange-border);
+  color: var(--tag-orange-fg);
+}
+
+.fn-banner__selector {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.fn-banner__name {
+  flex: 1 1 auto;
+  font-style: normal;
+  opacity: 0.95;
+}
+
+/* ── Row (key-value 그리드 단위 카드) ─────────────────── */
 .row {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   padding: 10px 12px;
-  background: #0d0d0d;
+  background: var(--card-row);
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+
+.row.amount-row {
+  gap: 4px;
+}
+
+.amount-row__main {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }
 
 .label {
@@ -88,14 +248,14 @@ body {
 
 .addr {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--yellow);
   word-break: break-all;
 }
 
 .addr-link {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--yellow);
   word-break: break-all;
   text-decoration: underline dotted;
@@ -109,11 +269,17 @@ body {
   font-size: 18px;
   font-weight: 700;
   color: var(--paper);
+  font-variant-numeric: tabular-nums;
 }
 
 .value-sub {
   font-size: 11px;
   color: var(--muted);
+}
+
+.tabular,
+.value-sub.tabular {
+  font-variant-numeric: tabular-nums;
 }
 
 .muted {
@@ -132,7 +298,7 @@ body {
   color: #ff6b6b;
 }
 
-/* 경고 배너 — 다크 테마에서 충분한 대비. inline style 대신 이 클래스 사용. */
+/* ── 경고 배너 — 다크 테마에서 충분한 대비. inline style 대신 이 클래스 사용. ── */
 .warn-banner {
   display: block;
   background: #3a2a00;          /* 진한 황갈 — 다크 배경 위에서 또렷함 */
@@ -141,13 +307,13 @@ body {
   padding: 10px 12px;
   border-radius: 6px;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.55;
   margin: 0;
 }
 
 .warn-banner.danger {
   background: #4a1414;          /* 진한 적갈 */
-  border-left-color: #ff6b6b;
+  border-left: 4px solid #ff6b6b; /* danger 는 살짝 굵은 4px */
   color: #ffbcbc;               /* 부드러운 적색, 본문 대비 5+ */
 }
 
@@ -167,33 +333,67 @@ body {
   max-height: 200px;
   overflow: auto;
   color: var(--paper);
+  line-height: 1.5;
 }
 
 .msg-block.hex {
   color: var(--muted);
 }
 
-.hex-tag {
+/* 작은 primaryType chip — typed-data view 에서 강조 */
+.primary-type-chip {
   display: inline-block;
-  font-size: 10px;
-  color: var(--muted);
   background: #1a1a1a;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 2px 8px;
-  margin-left: 6px;
-  letter-spacing: 0.3px;
+  border: 1px solid var(--tag-orange-border);
+  color: var(--tag-orange-fg);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* chain chip — 체인 ID 강조 */
+.chain-chip {
+  display: inline-block;
+  background: #1a1a1a;
+  border: 1px solid var(--tag-blue-border);
+  color: var(--tag-blue-fg);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ── Footer (actions + remember toggle) ──────────────── */
+.footer {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .actions {
   display: flex;
   gap: 10px;
-  margin-top: auto;
-  padding-top: 8px;
 }
 
-.actions button {
-  flex: 1;
+/* 거부는 작게(고정 폭), 승인은 크게(주 CTA — flex grow). */
+.actions .btn-ghost {
+  flex: 0 0 38%;
+}
+
+.actions .btn-cta {
+  flex: 1 1 62%;
+  min-height: 46px;
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 button {
@@ -202,10 +402,15 @@ button {
   padding: 12px 14px;
   cursor: pointer;
   border: 1px solid transparent;
-  transition: filter 120ms ease;
+  transition: filter 120ms ease, background-color 120ms ease;
 }
 
-button:hover {
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+button:not(:disabled):hover {
   filter: brightness(1.1);
 }
 
@@ -222,12 +427,31 @@ button:hover {
 }
 
 .btn-sm {
-  padding: 6px 10px;
-  font-size: 12px;
+  padding: 4px 10px;
+  font-size: 11px;
   align-self: flex-start;
+  border-radius: 6px;
 }
 
-/* "1시간 자동 승인" 체크박스 행 — RememberToggle. */
+/* 스피너 — 승인 버튼 처리 중 표시 */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* "1시간 자동 승인" 체크박스 행 — RememberToggle.
+   footer 안에 들어가므로 actions 와의 간격은 .footer gap 으로 처리. */
 .remember-row {
   display: flex;
   align-items: center;
@@ -249,6 +473,7 @@ button:hover {
 .remember-text {
   font-size: 12px;
   color: var(--paper);
+  line-height: 1.5;
 }
 
 /* SignTypedDataView 의 펼치기/접기 row 헤더. */
@@ -257,4 +482,32 @@ button:hover {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+}
+
+/* ── AddressDisplay (디자인 시스템 컴포넌트) 다크 테마 오버라이드 ──
+   tokens.css 의 .nd-address 기본은 종이(밝은) 테마용. confirm popup 은 다크
+   배경이므로 같은 카드 행 안에서도 또렷하게 보이도록 색상만 조정한다. */
+.row .nd-address {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--yellow);
+  padding: 4px 8px;
+}
+.row .nd-address__copy {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.row .nd-address__copy:hover {
+  background: #1a1a1a;
+  color: var(--fg);
+}
+
+/* AmountDisplay 다크 테마 — value 는 종이색, 심볼은 muted 노랑. */
+.amount-row__main .nd-amount__value {
+  color: var(--paper);
+  font-variant-numeric: tabular-nums;
+}
+.amount-row__main .nd-amount__symbol {
+  color: var(--yellow);
 }

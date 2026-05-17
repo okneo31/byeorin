@@ -37,7 +37,12 @@ export const en: Catalog = {
   'common.language': 'Language',
 
   // ──── Home (create / recover entry) ────
+  // `home.web_tagline` is intentionally the same Korean line in both locales —
+  // it doubles as a brand assertion (like "Just Do It" staying in English worldwide).
+  // Subtagline is translated.
   'home.lead': 'Transparent fees, no dark patterns, your data on your device. Use TTL and any EVM-compatible asset, simply and safely.',
+  'home.web_tagline': 'When the chain is free, the worker is free.',
+  'home.web_subtagline': 'A non-custodial wallet. Your keys live only inside your browser.',
   'home.new_user_question': 'New here?',
   'home.recover_question': 'Already have a recovery phrase?',
   'home.create_button': 'Create wallet',
@@ -47,6 +52,9 @@ export const en: Catalog = {
   'home.start_label': 'Get started',
   'home.create_new_wallet': 'Create new wallet',
   'home.recover_from_phrase': 'Recover from phrase',
+  'home.web_cta_create': 'Create new wallet',
+  'home.web_cta_recover': 'Open with recovery phrase',
+  'home.web_footer_note': 'Non-custodial wallet · Your seed never leaves this device',
 
   // ── Create flow ──
   'create.title': 'Remember your recovery phrase',
@@ -59,6 +67,10 @@ export const en: Catalog = {
   'create.mnemonic_label': 'Recovery phrase (12 words)',
   'create.warn_desktop': 'Write down these 12 words and store them somewhere safe. The recovery phrase IS your wallet — if you lose it, your assets cannot be recovered.',
   'create.save_and_start': 'Save and start',
+  'create.mnemonic_grid_label': 'Your 12 recovery words',
+  'create.word_index_label': 'Word #{n}',
+  'recover.paste_button': 'Paste',
+  'recover.word_count': '{n} / 12 words',
 
   // ── Recover flow ──
   'recover.title': 'Recover wallet',
@@ -90,6 +102,9 @@ export const en: Catalog = {
   'account.qr_help': 'Scan the QR code to receive at this address.',
   'account.send': 'Send',
   'account.activity': 'View activity',
+  'account.usd_unavailable': 'Price unavailable',
+  'account.show_qr': 'Show QR',
+  'account.hide_qr': 'Hide QR',
 
   // ── Tokens ──
   'tokens.title': 'Tokens',
@@ -141,6 +156,15 @@ export const en: Catalog = {
   'send.completed_inline': 'Sent · Transaction hash:',
   'send.sending_short': 'Sending…',
   'send.sign_and_send': 'Sign and send',
+  'send.review_title': 'Take one more look',
+  'send.review_summary': 'Sending {amount} {symbol} to {address}.',
+  'send.review_gas_label': 'Estimated network fee',
+  'send.review_gas_unknown': 'Calculated at signing time',
+  'send.review_explorer_preview': 'An explorer link will appear after sending.',
+  'send.review_irreversible': 'This cannot be undone.',
+  'send.review_confirm': 'Confirm and send',
+  'send.review_edit': 'Go back and edit',
+  'send.next_step': 'Next',
 
   // ──── Activity screen ────
   'activity.title': 'Activity',
@@ -161,6 +185,14 @@ export const en: Catalog = {
   'activity.col.counterparty': 'Counterparty',
   'activity.col.amount': 'Amount',
   'activity.col.status': 'Status',
+  'activity.empty_web': 'This wallet has no activity yet.',
+  'activity.status_pending': 'Pending',
+  'activity.status_done': 'Done',
+  'activity.status_fail': 'Failed',
+  'activity.expand': 'Details',
+  'activity.collapse': 'Hide',
+  'activity.tx_hash_label': 'Transaction hash',
+  'activity.view_in_explorer': 'View in explorer ↗',
 
   // ──── Footers / disclaimers ────
   'footer.non_custodial.web': 'Non-custodial wallet · Your recovery phrase is held only in the browser session.\nClosing this tab returns the wallet to its locked state.',
@@ -300,7 +332,13 @@ export const en: Catalog = {
   'confirm.btn.reject': 'Reject',
   'confirm.btn.approve': 'Approve',
   'confirm.btn.add_token': 'Add',
+  'confirm.btn.copy': 'Copy',
+  'confirm.btn.copied': 'Copied',
   'confirm.remember.template': 'Auto-approve this site ({method}) for 1 hour',
+  'confirm.label.recognized_fn': 'Recognized function',
+  'confirm.label.unknown_fn_chip': 'Unknown function',
+  'confirm.label.chain': 'Chain',
+  'confirm.label.site_short': 'Site',
 
   // ──── Portfolio screen (desktop) ────
   'portfolio.title': 'Portfolio',

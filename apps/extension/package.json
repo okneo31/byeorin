@@ -13,6 +13,7 @@
     "test:e2e": "playwright test --config=e2e/playwright.config.ts"
   },
   "dependencies": {
+    "@nodong/design-system": "workspace:*",
     "@nodong/i18n": "workspace:*",
     "@nodong/shell-core": "workspace:*",
     "@nodong/wallet-sdk": "workspace:*",

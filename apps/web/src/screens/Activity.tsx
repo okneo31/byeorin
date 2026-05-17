@@ -1,12 +1,13 @@
 // Activity.tsx — 최근 활동 목록 화면 (web).
 //
 // 잠금이 풀린 상태에서 walletStore.getAccount() 로 주소를 얻고
-// ActivityLog.list() 로 최근 20건을 받아 보여준다. 행 클릭은 explorer 의
-// /tx/{hash} 로 새 탭 이동.
+// ActivityLog.list() 로 최근 20건을 받아 보여준다.
 //
-// 본 화면은 의도적으로 가볍게 만들었다 — refresh 버튼 한 개, 행마다
-// 4개 정보(시간/타입/상대주소/금액) 만. 디자인 시스템에 새 컴포넌트 추가
-// 없이 .nd-card / .nd-button / .nd-muted 만 재사용.
+// UX:
+//   - 행은 button 으로 만들어 키보드 enter 로 확장 가능.
+//   - 클릭 → 인라인 확장(트랜잭션 해시 + 탐색기 링크).
+//   - 상태 칩(완료/보류/실패) 으로 시각 위계 강화.
+//   - 비어 있을 때 중앙 정렬 빈 상태 메시지 + 작은 아이콘.
 
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -41,6 +42,16 @@ function shortAddr(a: string): string {
   return `${a.slice(0, 8)}…${a.slice(-6)}`;
 }
 
+// 상태 → 칩 prop. ActivityLog 의 status 가 'failed' | 'confirmed' | 'pending' 추정.
+type PillKind = 'done' | 'pending' | 'fail';
+function pillKindOf(status: string | undefined): PillKind {
+  if (status === 'failed') return 'fail';
+  if (status === 'pending') return 'pending';
+  // 'confirmed' 외에 빈 값이 와도 일단 done 으로 보여 준다 — Activity API 가
+  // 명시적인 status 를 채우지 않는 어댑터가 있을 수 있다.
+  return 'done';
+}
+
 export function Activity({ onBack }: Props) {
   const t = useT();
   const [account, setAccount] = useState<WalletAccount | null>(null);
@@ -48,6 +59,7 @@ export function Activity({ onBack }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,6 +100,11 @@ export function Activity({ onBack }: Props) {
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
+  const pillLabel = (k: PillKind) =>
+    k === 'done' ? t('activity.status_done')
+    : k === 'pending' ? t('activity.status_pending')
+    : t('activity.status_fail');
+
   return (
     <div>
       <h1 className="nd-h1">{t('activity.title')}</h1>
@@ -100,41 +117,49 @@ export function Activity({ onBack }: Props) {
               ? t('common.loading_ellipsis')
               : t('activity.count', { n: items?.length ?? 0 })}
           </span>
-          <Button variant="ghost" onClick={reload} disabled={loading}>
+          <Button variant="ghost" size="sm" onClick={reload} disabled={loading}>
             {t('common.refresh')}
           </Button>
         </div>
         {error && <div className="nd-error">{error}</div>}
         {!loading && items && items.length === 0 && !error && (
-          <p className="nd-muted" style={{ marginTop: 12 }}>
-            {t('activity.empty')}
-          </p>
+          <div className="web-activity__empty">
+            <div className="web-activity__empty-icon" aria-hidden="true">·</div>
+            <p className="nd-muted" style={{ margin: 0 }}>
+              {t('activity.empty_web')}
+            </p>
+          </div>
         )}
         {items && items.length > 0 && (
-          <ul className="nd-activity">
+          <ul className="web-activity">
             {items.map((it) => {
               const isOutgoing =
                 account?.address?.toLowerCase() === it.from.toLowerCase();
               const counterparty = isOutgoing ? it.to : it.from;
               const sign = isOutgoing ? '-' : '+';
-              const tokenLabel = it.token ? t('activity.label.token') : t('activity.label.native');
+              const rowKey = `${it.hash}-${it.blockNumber}`;
+              const isOpen = expanded === rowKey;
+              const pk = pillKindOf(it.status);
               return (
-                <li key={`${it.hash}-${it.blockNumber}`} className="nd-activity__row">
-                  <a
-                    href={`${EXPLORER}/tx/${it.hash}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="nd-activity__link"
+                <li key={rowKey} className="web-activity__item">
+                  <button
+                    type="button"
+                    className="web-activity__row"
+                    onClick={() => setExpanded(isOpen ? null : rowKey)}
+                    aria-expanded={isOpen}
                   >
-                    <div className="nd-activity__meta">
-                      <span className="nd-activity__type">
-                        {isOutgoing ? t('activity.outgoing') : t('activity.incoming')} · {tokenLabel}
-                      </span>
-                      <span className="nd-muted">{fmtTime(it.timestamp)}</span>
+                    <div>
+                      <div className="web-activity__time">{fmtTime(it.timestamp)}</div>
+                      <div className="web-activity__direction">
+                        <span>{isOutgoing ? t('activity.outgoing') : t('activity.incoming')}</span>
+                        <span className={`web-pill web-pill--${pk}`}>{pillLabel(pk)}</span>
+                      </div>
+                      <div className="web-activity__counterparty">
+                        {shortAddr(counterparty)}
+                      </div>
                     </div>
-                    <div className="nd-activity__sub">
-                      <span className="nd-muted">{shortAddr(counterparty)}</span>
-                      <span className="nd-activity__value">
+                    <div className="web-activity__amount">
+                      <span>
                         {sign}
                         <AmountDisplay
                           value={it.value}
@@ -145,8 +170,24 @@ export function Activity({ onBack }: Props) {
                         />
                       </span>
                     </div>
-                    {it.status === 'failed' && <div className="nd-error">{t('activity.status_failed')}</div>}
-                  </a>
+                  </button>
+                  {isOpen && (
+                    <div className="web-activity__expanded">
+                      <div>
+                        <strong>{t('activity.tx_hash_label')}: </strong>
+                        <span className="nd-hash">{it.hash}</span>
+                      </div>
+                      <div>
+                        <a
+                          href={`${EXPLORER}/tx/${it.hash}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {t('activity.view_in_explorer')}
+                        </a>
+                      </div>
+                    </div>
+                  )}
                 </li>
               );
             })}

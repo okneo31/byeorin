@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatUnits, hexToString, hexToBytes, hexToNumber, isHex, type Hex } from 'viem';
 import { useT } from '@nodong/i18n/react';
+import { AddressDisplay, AmountDisplay, Logo } from '@nodong/design-system';
 import type { BackgroundMessage, ConfirmContext } from '../../src/lib/rpc.js';
 import {
   decode4Byte,
@@ -24,9 +25,18 @@ type State =
   | { kind: 'loading' }
   | { kind: 'ready'; ctx: ConfirmContext }
   | { kind: 'error'; messageKey: string }
+  | { kind: 'submitting'; ctx: ConfirmContext; decision: 'approve' | 'reject' }
   | { kind: 'submitted'; decision: 'approve' | 'reject' };
 
 const TTL_EXPLORER = 'https://scan.ttl1.top';
+
+// 메서드별 색상 매핑 — 헤더 칩에서 사용. 위험도가 높을수록 따뜻한 색.
+//  personal_sign: green   — 자산 이동 없음, 인증 용도
+//  signTypedData: orange  — Permit/Seaport 등 권한 위임 가능
+//  send_tx (no data): blue — 단순 TTL 전송, 직관적
+//  send_tx (with data): red — 컨트랙트 호출, 가장 위험
+//  watch_asset: gray      — 자산 이동 없음
+type TagTone = 'green' | 'orange' | 'blue' | 'red' | 'gray';
 
 function getRequestIdFromUrl(): string | null {
   try {
@@ -44,11 +54,6 @@ function getNonceFromUrl(): string | null {
   } catch {
     return null;
   }
-}
-
-function shorten(a: string): string {
-  if (!a || a.length <= 12) return a;
-  return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
 
 /**
@@ -106,6 +111,15 @@ function messageBytesLen(messageHex: string): number {
   }
 }
 
+/** value(wei hex) → bigint, 파싱 실패 시 0n. AmountDisplay 입력용. */
+function safeBigInt(hex: string): bigint {
+  try {
+    return BigInt(hex);
+  } catch {
+    return 0n;
+  }
+}
+
 export function App() {
   const t = useT();
   const [state, setState] = useState<State>({ kind: 'loading' });
@@ -137,6 +151,12 @@ export function App() {
     const requestId = getRequestIdFromUrl();
     const nonce = getNonceFromUrl();
     if (!requestId || !nonce) return;
+    // optimistic submitting state — 버튼이 비활성화되고 로딩 표시.
+    setState((prev) =>
+      prev.kind === 'ready'
+        ? { kind: 'submitting', ctx: prev.ctx, decision }
+        : prev,
+    );
     const msg: BackgroundMessage = {
       type: 'confirm-result',
       requestId,
@@ -155,7 +175,7 @@ export function App() {
   if (state.kind === 'loading') {
     return (
       <main className="confirm">
-        <header className="brand">{t('brand.name')}</header>
+        <BrandHeader />
         <p className="muted">{t('common.loading_ellipsis')}</p>
       </main>
     );
@@ -164,7 +184,7 @@ export function App() {
   if (state.kind === 'error') {
     return (
       <main className="confirm">
-        <header className="brand">{t('brand.name')}</header>
+        <BrandHeader />
         <section className="card">
           <h2>{t('confirm.error_title')}</h2>
           <p className="error small">{t(state.messageKey)}</p>
@@ -181,7 +201,7 @@ export function App() {
   if (state.kind === 'submitted') {
     return (
       <main className="confirm">
-        <header className="brand">{t('brand.name')}</header>
+        <BrandHeader />
         <section className="card">
           <p>{state.decision === 'approve' ? t('confirm.approved') : t('confirm.rejected')}</p>
           <p className="muted small">{t('confirm.closing_soon')}</p>
@@ -190,13 +210,118 @@ export function App() {
     );
   }
 
-  const { ctx } = state;
-  if (ctx.method === 'personal_sign') return <PersonalSignView ctx={ctx} onDecision={send} />;
+  // ready/submitting 모두 같은 view 를 쓰되, submitting 시에는 awaiting 플래그로 전달.
+  const ctx = state.kind === 'submitting' ? state.ctx : state.ctx;
+  const awaiting = state.kind === 'submitting';
+  if (ctx.method === 'personal_sign')
+    return <PersonalSignView ctx={ctx} awaiting={awaiting} onDecision={send} />;
   if (ctx.method === 'eth_signTypedData_v4')
-    return <SignTypedDataView ctx={ctx} onDecision={send} />;
+    return <SignTypedDataView ctx={ctx} awaiting={awaiting} onDecision={send} />;
   if (ctx.method === 'wallet_watchAsset')
-    return <WatchAssetView ctx={ctx} onDecision={send} />;
-  return <SendTxView ctx={ctx} onDecision={send} />;
+    return <WatchAssetView ctx={ctx} awaiting={awaiting} onDecision={send} />;
+  return <SendTxView ctx={ctx} awaiting={awaiting} onDecision={send} />;
+}
+
+// ── 공용 컴포넌트들 ───────────────────────────────────────────────────────
+
+// 브랜드 헤더 — 좌측 작은 로고(인장) + 브랜드명.
+// method tag 는 카드 헤더(<h2>) 에 붙는다 — 브랜드와 분리해 시각적 hierarchy 유지.
+function BrandHeader() {
+  const t = useT();
+  return (
+    <header className="brand">
+      <Logo size={20} variant="mark" />
+      <span className="brand-text">{t('brand.name')}</span>
+    </header>
+  );
+}
+
+// 메서드 칩 — 카드 <h2> 옆에 붙는 작은 색상 pill.
+function MethodTag({ tone, label }: { tone: TagTone; label: string }) {
+  return <span className={`method-tag method-tag--${tone}`}>{label}</span>;
+}
+
+// 사이트 origin 행 — 주소 표시줄처럼 보이도록 별도 스타일링.
+function OriginRow({ origin }: { origin: string }) {
+  const t = useT();
+  return (
+    <div className="origin-row" title={origin}>
+      <span className="origin-row__label">{t('confirm.label.site_short')}</span>
+      <span className="origin-row__url">{origin}</span>
+    </div>
+  );
+}
+
+// 서명자/보내는 주소 — design-system AddressDisplay 사용.
+// copy 라벨은 i18n 으로 호출자가 주입한다.
+function SignerRow({
+  labelKey,
+  address,
+}: {
+  labelKey: string;
+  address: string;
+}) {
+  const t = useT();
+  return (
+    <div className="row">
+      <span className="label">{t(labelKey)}</span>
+      <AddressDisplay
+        address={address}
+        copyLabel={t('confirm.btn.copy')}
+        copiedLabel={t('confirm.btn.copied')}
+      />
+    </div>
+  );
+}
+
+// 액션 푸터 — 1시간 grant 토글이 버튼 위, separator, 거부(왼쪽) + 승인(오른쪽 강조).
+function ActionFooter({
+  remember,
+  setRemember,
+  method,
+  approveLabel,
+  rejectLabel,
+  onApprove,
+  onReject,
+  awaiting,
+}: {
+  remember?: boolean;
+  setRemember?: (v: boolean) => void;
+  method?: ConfirmContext['method'];
+  approveLabel: string;
+  rejectLabel: string;
+  onApprove: () => void;
+  onReject: () => void;
+  awaiting: boolean;
+}) {
+  return (
+    <div className="footer">
+      {method && setRemember ? (
+        <RememberToggle
+          method={method}
+          checked={remember === true}
+          onChange={setRemember}
+        />
+      ) : null}
+      <div className="actions">
+        <button
+          className="btn-ghost"
+          onClick={onReject}
+          disabled={awaiting}
+        >
+          {rejectLabel}
+        </button>
+        <button
+          className="btn-primary btn-cta"
+          onClick={onApprove}
+          disabled={awaiting}
+        >
+          {awaiting ? <span className="spinner" aria-hidden /> : null}
+          <span>{approveLabel}</span>
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ── wallet_watchAsset 프리뷰 ───────────────────────────────────────────
@@ -207,27 +332,24 @@ export function App() {
 function WatchAssetView({
   ctx,
   onDecision,
+  awaiting,
 }: {
   ctx: Extract<ConfirmContext, { method: 'wallet_watchAsset' }>;
   onDecision: (d: 'approve' | 'reject', rememberFor1h?: boolean) => void;
+  awaiting: boolean;
 }) {
   const t = useT();
   return (
     <main className="confirm">
-      <header className="brand">{t('brand.name')}</header>
+      <BrandHeader />
       <section className="card">
         <h2>
-          {t('confirm.title.watch_asset')}
-          <span className="hex-tag">wallet_watchAsset</span>
+          <span>{t('confirm.title.watch_asset')}</span>
+          <MethodTag tone="gray" label="wallet_watchAsset" />
         </h2>
         <p className="muted small">{t('confirm.lead.watch_asset')}</p>
 
-        <div className="row">
-          <span className="label">{t('confirm.label.site')}</span>
-          <span className="origin" title={ctx.origin}>
-            {ctx.origin}
-          </span>
-        </div>
+        <OriginRow origin={ctx.origin} />
 
         <div className="row">
           <span className="label">{t('confirm.label.token_standard')}</span>
@@ -261,14 +383,13 @@ function WatchAssetView({
 
         <p className="warn small">{t('confirm.warn.watch_asset')}</p>
 
-        <div className="actions">
-          <button className="btn-ghost" onClick={() => onDecision('reject')}>
-            {t('confirm.btn.reject')}
-          </button>
-          <button className="btn-primary" onClick={() => onDecision('approve')}>
-            {t('confirm.btn.add_token')}
-          </button>
-        </div>
+        <ActionFooter
+          approveLabel={t('confirm.btn.add_token')}
+          rejectLabel={t('confirm.btn.reject')}
+          onApprove={() => onDecision('approve')}
+          onReject={() => onDecision('reject')}
+          awaiting={awaiting}
+        />
       </section>
     </main>
   );
@@ -313,64 +434,72 @@ function RememberToggle({
 function PersonalSignView({
   ctx,
   onDecision,
+  awaiting,
 }: {
   ctx: Extract<ConfirmContext, { method: 'personal_sign' }>;
   onDecision: (d: 'approve' | 'reject', rememberFor1h?: boolean) => void;
+  awaiting: boolean;
 }) {
   const t = useT();
   const readable = useMemo(() => tryHexToReadable(ctx.message), [ctx.message]);
   const byteLen = useMemo(() => messageBytesLen(ctx.message), [ctx.message]);
+  // 가독 메시지가 있을 때, raw hex 는 기본 숨김 — 펼치기로 노출.
+  const [showRaw, setShowRaw] = useState(false);
   const [remember, setRemember] = useState(false);
 
   return (
     <main className="confirm">
-      <header className="brand">{t('brand.name')}</header>
+      <BrandHeader />
       <section className="card">
         <h2>
-          {t('confirm.title.personal_sign')}
-          <span className="hex-tag">personal_sign</span>
+          <span>{t('confirm.title.personal_sign')}</span>
+          <MethodTag tone="green" label="personal_sign" />
         </h2>
         <p className="muted small">{t('confirm.lead.personal_sign')}</p>
 
-        <div className="row">
-          <span className="label">{t('confirm.label.site')}</span>
-          <span className="origin" title={ctx.origin}>
-            {ctx.origin}
-          </span>
-        </div>
+        <OriginRow origin={ctx.origin} />
+
+        <SignerRow labelKey="confirm.label.signer" address={ctx.address} />
 
         <div className="row">
-          <span className="label">{t('confirm.label.signer')}</span>
-          <span className="addr" title={ctx.address}>
-            {shorten(ctx.address)}
-          </span>
-        </div>
-
-        <div className="row">
-          <span className="label">
-            {readable
-              ? t('confirm.label.message_to_sign', { byteLen })
-              : t('confirm.label.message_to_sign_raw')}
-          </span>
-          <div className={readable ? 'msg-block' : 'msg-block hex'}>
-            {readable ?? ctx.message}
+          <div className="label-row">
+            <span className="label">
+              {readable
+                ? t('confirm.label.message_to_sign', { byteLen })
+                : t('confirm.label.message_to_sign_raw')}
+            </span>
+            {readable ? (
+              <button
+                className="btn-ghost btn-sm"
+                onClick={() => setShowRaw((v) => !v)}
+                disabled={awaiting}
+              >
+                {showRaw ? t('confirm.label.collapse') : t('confirm.label.expand')}
+              </button>
+            ) : null}
           </div>
+          {readable && !showRaw ? (
+            <div className="msg-block">{readable}</div>
+          ) : (
+            <div className="msg-block hex">{ctx.message}</div>
+          )}
         </div>
 
         <p className="warn small">{t('confirm.warn.personal_sign_proof')}</p>
 
         {/* 1시간 자동 승인 — personal_sign 의 grant 는 임의 메시지를 자동 서명하게 된다. */}
         <p className="warn-banner">{t('confirm.warn.grant_personal_sign')}</p>
-        <RememberToggle method={ctx.method} checked={remember} onChange={setRemember} />
 
-        <div className="actions">
-          <button className="btn-ghost" onClick={() => onDecision('reject')}>
-            {t('confirm.btn.reject')}
-          </button>
-          <button className="btn-primary" onClick={() => onDecision('approve', remember)}>
-            {t('confirm.btn.approve')}
-          </button>
-        </div>
+        <ActionFooter
+          method={ctx.method}
+          remember={remember}
+          setRemember={setRemember}
+          approveLabel={t('confirm.btn.approve')}
+          rejectLabel={t('confirm.btn.reject')}
+          onApprove={() => onDecision('approve', remember)}
+          onReject={() => onDecision('reject')}
+          awaiting={awaiting}
+        />
       </section>
     </main>
   );
@@ -382,13 +511,16 @@ const CALLDATA_TRUNC_AT = 256;
 function SendTxView({
   ctx,
   onDecision,
+  awaiting,
 }: {
   ctx: Extract<ConfirmContext, { method: 'eth_sendTransaction' }>;
   onDecision: (d: 'approve' | 'reject', rememberFor1h?: boolean) => void;
+  awaiting: boolean;
 }) {
   const t = useT();
   const parseFailed = t('confirm.parse_failed');
   const valueFormatted = useMemo(() => formatTtl(ctx.value, parseFailed), [ctx.value, parseFailed]);
+  const valueBigInt = useMemo(() => safeBigInt(ctx.value), [ctx.value]);
   const gasFormatted = useMemo(() => formatGasUnits(ctx.gas), [ctx.gas]);
   const dataNonEmpty = !!(ctx.data && ctx.data !== '0x' && ctx.data !== '');
   const decoded = useMemo(() => (dataNonEmpty ? decode4Byte(ctx.data) : null), [
@@ -421,29 +553,36 @@ function SendTxView({
     return ctx.data.slice(0, CALLDATA_TRUNC_AT) + '…';
   }, [ctx.data, showFullData]);
 
+  // 컨트랙트 호출 = data 있음 → red 칩(가장 위험), 단순 value 전송 → blue 칩.
+  const methodTone: TagTone = dataNonEmpty ? 'red' : 'blue';
+  // 함수 인식 여부에 따른 prominent 칩 — 헤더 바로 아래 띠.
+  const fnRecognized = !!(decoded && decoded.signature);
+
   return (
     <main className="confirm">
-      <header className="brand">{t('brand.name')}</header>
+      <BrandHeader />
       <section className="card">
         <h2>
-          {t('confirm.title.send_tx')}
-          <span className="hex-tag">eth_sendTransaction</span>
+          <span>{t('confirm.title.send_tx')}</span>
+          <MethodTag tone={methodTone} label="eth_sendTransaction" />
         </h2>
         <p className="muted small">{t('confirm.lead.send_tx')}</p>
 
-        <div className="row">
-          <span className="label">{t('confirm.label.site')}</span>
-          <span className="origin" title={ctx.origin}>
-            {ctx.origin}
-          </span>
-        </div>
+        {/* 컨트랙트 호출일 때만 prominent 함수 칩을 헤더 바로 아래에 띄운다. */}
+        {dataNonEmpty && decoded ? (
+          <div className={`fn-banner ${fnRecognized ? 'fn-banner--ok' : 'fn-banner--unknown'}`}>
+            <span className="fn-banner__selector">{decoded.selector}</span>
+            <span className="fn-banner__name">
+              {fnRecognized
+                ? decoded.signature
+                : t('confirm.label.unknown_fn_chip')}
+            </span>
+          </div>
+        ) : null}
 
-        <div className="row">
-          <span className="label">{t('confirm.label.from')}</span>
-          <span className="addr" title={ctx.from}>
-            {shorten(ctx.from)}
-          </span>
-        </div>
+        <OriginRow origin={ctx.origin} />
+
+        <SignerRow labelKey="confirm.label.from" address={ctx.from} />
 
         <div className="row">
           <span className="label">
@@ -460,31 +599,36 @@ function SendTxView({
           </a>
         </div>
 
-        <div className="row">
+        <div className="row amount-row">
           <span className="label">
             {dataNonEmpty ? t('confirm.label.native_with_call') : t('confirm.label.amount')}
           </span>
-          <span className="value">{valueFormatted} TTL</span>
-          <span className="value-sub">{ctx.value} wei</span>
+          <div className="amount-row__main">
+            <AmountDisplay
+              value={valueBigInt}
+              decimals={18}
+              symbol="TTL"
+              size="lg"
+              maxDecimals={6}
+            />
+          </div>
+          <span className="value-sub">
+            {valueFormatted} TTL · {ctx.value} wei
+          </span>
         </div>
 
         {gasFormatted ? (
           <div className="row">
             <span className="label">{t('confirm.label.gas_estimate')}</span>
-            <span className="origin">{gasFormatted}</span>
+            <span className="origin tabular">{gasFormatted}</span>
           </div>
         ) : null}
 
-        {dataNonEmpty && decoded ? (
+        {ctx.chainId ? (
           <div className="row">
-            <span className="label">{t('confirm.label.fn_call_4byte')}</span>
+            <span className="label">{t('confirm.label.chain')}</span>
             <span className="origin">
-              <strong>{decoded.selector}</strong>
-              {decoded.signature ? (
-                <> — {decoded.signature}</>
-              ) : (
-                <> — <em>{t('confirm.label.fn_unknown')}</em></>
-              )}
+              <span className="chain-chip">{ctx.chainId}</span>
             </span>
           </div>
         ) : null}
@@ -502,7 +646,7 @@ function SendTxView({
                 </div>
                 <div className="row">
                   <span className="label">{t('confirm.label.token_amount_raw')}</span>
-                  <span className="value-sub">{erc20.amount.toString()}</span>
+                  <span className="value-sub tabular">{erc20.amount.toString()}</span>
                 </div>
               </>
             ) : null}
@@ -514,7 +658,7 @@ function SendTxView({
                 </div>
                 <div className="row">
                   <span className="label">{t('confirm.label.allowance_raw')}</span>
-                  <span className="value-sub">{erc20.amount.toString()}</span>
+                  <span className="value-sub tabular">{erc20.amount.toString()}</span>
                 </div>
               </>
             ) : null}
@@ -530,7 +674,7 @@ function SendTxView({
                 </div>
                 <div className="row">
                   <span className="label">{t('confirm.label.token_amount_raw')}</span>
-                  <span className="value-sub">{erc20.amount.toString()}</span>
+                  <span className="value-sub tabular">{erc20.amount.toString()}</span>
                 </div>
               </>
             ) : null}
@@ -551,16 +695,19 @@ function SendTxView({
 
         {dataNonEmpty ? (
           <div className="row">
-            <span className="label">{t('confirm.label.raw_calldata')}</span>
+            <div className="label-row">
+              <span className="label">{t('confirm.label.raw_calldata')}</span>
+              {ctx.data.length > CALLDATA_TRUNC_AT ? (
+                <button
+                  className="btn-ghost btn-sm"
+                  onClick={() => setShowFullData((v) => !v)}
+                  disabled={awaiting}
+                >
+                  {showFullData ? t('confirm.label.collapse') : t('confirm.label.show_more')}
+                </button>
+              ) : null}
+            </div>
             <div className="msg-block hex">{dataDisplay}</div>
-            {ctx.data.length > CALLDATA_TRUNC_AT ? (
-              <button
-                className="btn-ghost btn-sm"
-                onClick={() => setShowFullData((v) => !v)}
-              >
-                {showFullData ? t('confirm.label.collapse') : t('confirm.label.show_more')}
-              </button>
-            ) : null}
             <span className="warn small">{t('confirm.warn.contract_call_side_effects')}</span>
           </div>
         ) : null}
@@ -571,16 +718,17 @@ function SendTxView({
             이 사이트가 보낼 모든 트랜잭션(다른 to/value/data 포함) 이 자동 승인된다.
             사용자가 이 점을 정확히 알 수 있도록 별도 경고를 토글 바로 위에 표시. */}
         <p className="warn-banner">{t('confirm.warn.grant_send_tx')}</p>
-        <RememberToggle method={ctx.method} checked={remember} onChange={setRemember} />
 
-        <div className="actions">
-          <button className="btn-ghost" onClick={() => onDecision('reject')}>
-            {t('confirm.btn.reject')}
-          </button>
-          <button className="btn-primary" onClick={() => onDecision('approve', remember)}>
-            {t('confirm.btn.approve')}
-          </button>
-        </div>
+        <ActionFooter
+          method={ctx.method}
+          remember={remember}
+          setRemember={setRemember}
+          approveLabel={t('confirm.btn.approve')}
+          rejectLabel={t('confirm.btn.reject')}
+          onApprove={() => onDecision('approve', remember)}
+          onReject={() => onDecision('reject')}
+          awaiting={awaiting}
+        />
       </section>
     </main>
   );
@@ -590,9 +738,11 @@ function SendTxView({
 function SignTypedDataView({
   ctx,
   onDecision,
+  awaiting,
 }: {
   ctx: Extract<ConfirmContext, { method: 'eth_signTypedData_v4' }>;
   onDecision: (d: 'approve' | 'reject', rememberFor1h?: boolean) => void;
+  awaiting: boolean;
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState(false);
@@ -616,31 +766,23 @@ function SignTypedDataView({
 
   return (
     <main className="confirm">
-      <header className="brand">{t('brand.name')}</header>
+      <BrandHeader />
       <section className="card">
         <h2>
-          {t('confirm.title.typed_data')}
-          <span className="hex-tag">eth_signTypedData_v4</span>
+          <span>{t('confirm.title.typed_data')}</span>
+          <MethodTag tone="orange" label="eth_signTypedData_v4" />
         </h2>
         <p className="muted small">{t('confirm.lead.typed_data')}</p>
 
-        <div className="row">
-          <span className="label">{t('confirm.label.site')}</span>
-          <span className="origin" title={ctx.origin}>
-            {ctx.origin}
-          </span>
-        </div>
+        <OriginRow origin={ctx.origin} />
 
-        <div className="row">
-          <span className="label">{t('confirm.label.signer')}</span>
-          <span className="addr" title={ctx.address}>
-            {shorten(ctx.address)}
-          </span>
-        </div>
+        <SignerRow labelKey="confirm.label.signer" address={ctx.address} />
 
         <div className="row">
           <span className="label">{t('confirm.label.primary_type')}</span>
-          <span className="origin">{ctx.primaryType}</span>
+          <span className="origin">
+            <span className="primary-type-chip">{ctx.primaryType}</span>
+          </span>
         </div>
 
         {ctx.domain.name ? (
@@ -653,7 +795,7 @@ function SignTypedDataView({
         {chainIdLabel ? (
           <div className="row">
             <span className="label">chainId</span>
-            <span className="origin">{chainIdLabel}</span>
+            <span className="origin tabular">{chainIdLabel}</span>
           </div>
         ) : null}
 
@@ -683,6 +825,7 @@ function SignTypedDataView({
             <button
               className="btn-ghost btn-sm"
               onClick={() => setExpanded((v) => !v)}
+              disabled={awaiting}
             >
               {expanded ? t('confirm.label.collapse') : t('confirm.label.expand')}
             </button>
@@ -710,16 +853,17 @@ function SignTypedDataView({
 
         {/* 1시간 자동 승인 — typed-data 자체는 자유 형식이므로 매우 위험하다. */}
         <p className="warn-banner">{t('confirm.warn.grant_typed_data')}</p>
-        <RememberToggle method={ctx.method} checked={remember} onChange={setRemember} />
 
-        <div className="actions">
-          <button className="btn-ghost" onClick={() => onDecision('reject')}>
-            {t('confirm.btn.reject')}
-          </button>
-          <button className="btn-primary" onClick={() => onDecision('approve', remember)}>
-            {t('confirm.btn.approve')}
-          </button>
-        </div>
+        <ActionFooter
+          method={ctx.method}
+          remember={remember}
+          setRemember={setRemember}
+          approveLabel={t('confirm.btn.approve')}
+          rejectLabel={t('confirm.btn.reject')}
+          onApprove={() => onDecision('approve', remember)}
+          onReject={() => onDecision('reject')}
+          awaiting={awaiting}
+        />
       </section>
     </main>
   );

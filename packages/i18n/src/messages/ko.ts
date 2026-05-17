@@ -38,7 +38,16 @@ export const ko: Catalog = {
   'common.language': '언어',
 
   // ──── 홈 (지갑 생성/복구 시작) ────
+  //
+  // 웹 셸 히어로 카피.
+  //   `home.web_tagline` — 가장 큰 한 줄. 후보 검토:
+  //      a) "체인이 자유롭다면 노동자도 자유롭다"          ← 채택. 운동성 + 체인 비유.
+  //      b) "당신의 키, 당신의 돈, 당신의 결정"             — 평범하나 안전한 클래식.
+  //      c) "수수료는 투명하게, 권한은 당신에게"            — 가치 제안형, 다소 사무적.
+  //   `home.web_subtagline` — 위 한 줄 아래 보조 설명. 평이한 톤.
   'home.lead': '수수료 투명, 다크 패턴 없음, 데이터는 당신의 기기에. TTL 체인을 포함한 EVM 호환 자산을 쉽고 안전하게.',
+  'home.web_tagline': '체인이 자유롭다면 노동자도 자유롭다',
+  'home.web_subtagline': '비수탁 지갑. 키는 당신의 브라우저 안에서만 살아 있습니다.',
   'home.new_user_question': '처음 사용하세요?',
   'home.recover_question': '이미 복구 문구가 있나요?',
   'home.create_button': '지갑 생성',
@@ -48,6 +57,9 @@ export const ko: Catalog = {
   'home.start_label': '시작하기',
   'home.create_new_wallet': '새 지갑 만들기',
   'home.recover_from_phrase': '복구 문구로 복원',
+  'home.web_cta_create': '새 지갑 만들기',
+  'home.web_cta_recover': '복구 문구로 열기',
+  'home.web_footer_note': '비수탁 지갑 · 시드는 절대 서버에 가지 않습니다',
 
   // ── 지갑 생성 흐름 ──
   'create.title': '복구 문구를 기억하세요',
@@ -60,6 +72,10 @@ export const ko: Catalog = {
   'create.mnemonic_label': '복구 문구 (12 단어)',
   'create.warn_desktop': '이 12단어를 안전한 곳에 옮겨 적어 두세요. 복구 문구는 지갑 자체이며, 잃어버리면 자산을 되찾을 수 없습니다.',
   'create.save_and_start': '저장하고 시작',
+  'create.mnemonic_grid_label': '12개의 복구 단어',
+  'create.word_index_label': '{n}번 단어',
+  'recover.paste_button': '붙여넣기',
+  'recover.word_count': '{n} / 12 단어',
 
   // ── 복구 흐름 ──
   'recover.title': '지갑 복구',
@@ -91,6 +107,9 @@ export const ko: Catalog = {
   'account.qr_help': 'QR을 스캔해 이 주소로 받을 수 있습니다.',
   'account.send': '송금',
   'account.activity': '활동 보기',
+  'account.usd_unavailable': '시세 정보 없음',
+  'account.show_qr': 'QR 보기',
+  'account.hide_qr': 'QR 숨기기',
 
   // ── 토큰 ──
   'tokens.title': '토큰',
@@ -142,6 +161,15 @@ export const ko: Catalog = {
   'send.completed_inline': '전송 완료 · 트랜잭션 해시:',
   'send.sending_short': '전송 중…',
   'send.sign_and_send': '서명하고 전송',
+  'send.review_title': '한 번 더 확인하세요',
+  'send.review_summary': '{amount} {symbol} 을(를) {address} 로 보냅니다.',
+  'send.review_gas_label': '예상 네트워크 수수료',
+  'send.review_gas_unknown': '서명 시 자동 산정',
+  'send.review_explorer_preview': '전송 후 탐색기 링크가 제공됩니다.',
+  'send.review_irreversible': '되돌릴 수 없습니다.',
+  'send.review_confirm': '확정하고 보내기',
+  'send.review_edit': '돌아가서 수정',
+  'send.next_step': '다음',
 
   // ──── 활동 화면 ────
   'activity.title': '활동',
@@ -162,6 +190,14 @@ export const ko: Catalog = {
   'activity.col.counterparty': '상대',
   'activity.col.amount': '금액',
   'activity.col.status': '상태',
+  'activity.empty_web': '이 지갑의 활동이 아직 없습니다.',
+  'activity.status_pending': '보류',
+  'activity.status_done': '완료',
+  'activity.status_fail': '실패',
+  'activity.expand': '자세히',
+  'activity.collapse': '접기',
+  'activity.tx_hash_label': '트랜잭션 해시',
+  'activity.view_in_explorer': '탐색기에서 보기 ↗',
 
   // ──── 앱 푸터 / 공통 안내 ────
   'footer.non_custodial.web': '비수탁(non-custodial) 지갑 · 복구 문구는 브라우저 세션에만 저장됩니다.\n탭을 닫으면 잠금이 해제 상태로 돌아갑니다.',
@@ -301,7 +337,13 @@ export const ko: Catalog = {
   'confirm.btn.reject': '거부',
   'confirm.btn.approve': '승인',
   'confirm.btn.add_token': '추가',
+  'confirm.btn.copy': '복사',
+  'confirm.btn.copied': '복사됨',
   'confirm.remember.template': '이 사이트({method})에서 1시간 동안 자동 승인',
+  'confirm.label.recognized_fn': '인식된 함수',
+  'confirm.label.unknown_fn_chip': '알 수 없는 함수',
+  'confirm.label.chain': '체인',
+  'confirm.label.site_short': '사이트',
 
   // ──── 포트폴리오 화면 (데스크톱) ────
   'portfolio.title': '포트폴리오',

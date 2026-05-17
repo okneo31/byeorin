@@ -1,14 +1,39 @@
-/* 노동자의 지갑 — 팝업 스타일.
-   브랜드: 적색 #c41e1e / 흑색 #0a0a0a / 황색 #f4c430 */
+/* 노동자의 지갑 — 팝업 스타일 (v0.4 시각 정비)
+ *
+ * 디자인 톤:
+ *   "잉크 묻은 종이" 위에 빨간 인장이 찍힌 다크 모드. 평평한 검정 대신 살짝
+ *   갈색이 도는 어두운 톤(#0d0a08, #1a1612)으로 따뜻함을 더했다. 기업/암호화폐
+ *   특유의 차가운 네온 다크가 아니라, 80년대 한국 민중미술 포스터의 단단함을
+ *   다크 테마로 옮긴다.
+ *
+ * 위계:
+ *   1) 헤더(인장 + 워드마크 + 로케일)
+ *   2) 카드 (주소·잠금 / 사이트 관리 / 자동승인)
+ *   3) 푸터 (비수탁 안내)
+ *
+ * 토큰:
+ *   --nd-* (디자인 시스템 글로벌) 위에 --popup-* (앱 전용) 를 얹는다.
+ *   디자인 시스템 토큰은 직접 수정하지 않는다.
+ */
 
 :root {
-  --bg: #0a0a0a;
-  --fg: #f5f5f5;
-  --muted: #9a9a9a;
-  --red: #c41e1e;
-  --yellow: #f4c430;
-  --card: #141414;
-  --border: #2a2a2a;
+  /* ── 앱 전용 색상 — 디자인 시스템 위에 얹는 다크 테마 팔레트 ──
+   * 의도적으로 슬쩍 갈색이 도는 어두운 톤. 순수 #000 은 너무 차갑고 OLED 검정처럼
+   * 깊이가 없어, 종이에 잉크가 스며든 듯한 #0d0a08~#322a22 그라데이션을 쓴다.
+   */
+  --popup-bg:         #0d0a08;
+  --popup-surface-1:  #1a1612;  /* 카드 배경 */
+  --popup-surface-2:  #241e18;  /* 카드 안의 nested 행(origin/grant) */
+  --popup-border:     #322a22;
+  --popup-border-soft:#2a221c;
+  --popup-text:       #f5ede2;  /* 따뜻한 오프화이트 — 순백 X */
+  --popup-muted:      #a89986;  /* 베이지 톤 muted */
+  --popup-red:        var(--nd-red, #c41e1e);
+  --popup-red-soft:   #e85050;  /* 다크 배경 위 빨강 텍스트(가독성 보정) */
+  --popup-yellow-soft:#ffd54f;  /* 다크 배경 위 노란 텍스트 — 순노랑은 채도 충돌 */
+
+  /* 카드 inset 하이라이트 — 인쇄물 위쪽 종이결 느낌 */
+  --popup-inset-hilite: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 * {
@@ -19,119 +44,269 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: 'Pretendard', system-ui, -apple-system, 'Segoe UI', Roboto, 'Apple SD Gothic Neo',
-    sans-serif;
+  background: var(--popup-bg);
+  color: var(--popup-text);
+  font-family: var(--nd-font-sans, 'Pretendard Variable', Pretendard, -apple-system,
+    BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* 한글은 라틴 대비 세로폭이 커서 line-height 1.6 이 안정적 */
+  line-height: 1.6;
+  /* 숫자(주소·잔액)는 항상 등폭 정렬 */
+  font-variant-numeric: tabular-nums;
 }
 
 body {
-  width: 360px;
-  min-height: 480px;
+  /* 팝업 폭 420 — Chrome MV3 액션 팝업 표준 */
+  width: 420px;
+  min-height: 520px;
 }
 
+/* ── 루트 컨테이너 ─────────────────────────────────────── */
 .popup {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 20px 18px;
+  gap: 14px;
+  padding: 14px 16px 16px;
+  min-height: 100vh;
 }
 
+/* ── 헤더 ──────────────────────────────────────────────── */
+/* test 가 'header.brand >> text=노동자의 지갑' 으로 selector 를 잡으므로
+ * <header class="brand"> 와 워드마크 텍스트는 그대로 유지한다.
+ */
 .brand {
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
-  color: var(--fg);
-  border-left: 4px solid var(--red);
-  padding-left: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 2px 12px;
+  border-bottom: 1px solid var(--popup-border);
+  margin-bottom: 2px;
 }
 
+.brand__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.brand__wordmark {
+  font-size: 17px;
+  font-weight: 800;
+  /* 한글은 letter-spacing 을 살짝 줄이면 단단한 느낌이 강해진다 */
+  letter-spacing: -0.02em;
+  color: var(--popup-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.brand__right {
+  flex: 0 0 auto;
+}
+
+/* 헤더 안에 들어가는 LocaleSwitch 의 기본 색을 다크 톤에 맞춤 */
+.brand__right select,
+.brand__right button {
+  background: transparent;
+  color: var(--popup-muted);
+  border: 1px solid var(--popup-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.brand__right select:hover,
+.brand__right button:hover {
+  color: var(--popup-text);
+  border-color: var(--popup-muted);
+}
+
+/* ── 카드 ──────────────────────────────────────────────── */
 .card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
+  background: var(--popup-surface-1);
+  border: 1px solid var(--popup-border);
+  border-radius: 10px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* 위쪽 1px hairline highlight — 종이결 느낌 */
+  box-shadow: var(--popup-inset-hilite);
 }
 
-.addr {
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 16px;
-  color: var(--yellow);
-  margin: 4px 0;
+/* 인장(stamp) 모티프 — 카드 제목 옆 작은 빨간 사각 */
+.section-title {
+  margin: 0 0 2px 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--popup-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--popup-red);
+  /* 작은 핀홀 — 도장 안의 글자 자리 느낌 */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  flex: 0 0 auto;
 }
 
+/* ── 타이포그래피 보조 ─────────────────────────────────── */
 .muted {
-  color: var(--muted);
+  color: var(--popup-muted);
 }
 
 .small {
   font-size: 12px;
+  line-height: 1.5;
 }
 
 .warn {
-  color: var(--yellow);
+  color: var(--popup-yellow-soft);
 }
 
 .error {
-  color: #ff6b6b;
+  color: var(--popup-red-soft);
+  background: rgba(232, 80, 80, 0.08);
+  border: 1px solid rgba(232, 80, 80, 0.28);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
 }
 
+/* ── 주소 표시 ─────────────────────────────────────────── */
+.addr {
+  font-family: var(--nd-font-mono, 'JetBrains Mono', ui-monospace, Menlo, monospace);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--popup-yellow-soft);
+  margin: 0;
+  /* 주소 한 줄에 깔끔히 들어가게 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 라벨 (체인 / 섹션 보조) ───────────────────────────── */
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--popup-muted);
+  margin: 0;
+}
+
+/* ── 버튼 베이스 ───────────────────────────────────────── */
 button {
   font: inherit;
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   cursor: pointer;
   border: 1px solid transparent;
-  transition: filter 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    filter 120ms ease,
+    color 120ms ease;
+  /* 한글 텍스트 폭 보정 */
+  letter-spacing: -0.01em;
 }
 
-button:hover {
-  filter: brightness(1.1);
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(232, 80, 80, 0.55);
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* Primary — 빨간 인장 CTA. 위쪽 살짝 밝은 1픽셀 highlight 로 입체감. */
 .btn-primary {
-  background: var(--red);
-  color: #fff;
+  background: linear-gradient(180deg, #c41e1e 0%, #a01818 100%);
+  color: #ffffff;
   font-weight: 700;
+  min-height: 44px;
+  border-color: #8e1414;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.btn-primary:active:not(:disabled) {
+  filter: brightness(0.92);
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.2);
 }
 
+/* Ghost — 종이 위 빈 자리. 외곽선만 가지며 hover 시 텍스트가 밝아진다. */
 .btn-ghost {
   background: transparent;
-  color: var(--fg);
-  border-color: var(--border);
+  color: var(--popup-muted);
+  border-color: var(--popup-border);
+  min-height: 36px;
+  font-weight: 500;
+}
+.btn-ghost:hover:not(:disabled) {
+  color: var(--popup-text);
+  border-color: var(--popup-muted);
+  background: rgba(255, 255, 255, 0.02);
 }
 
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 11.5px;
+  min-height: 28px;
+  border-radius: 6px;
+}
+
+/* ── 입력 ──────────────────────────────────────────────── */
 textarea {
-  background: #0d0d0d;
-  color: var(--fg);
-  border: 1px solid var(--border);
+  background: var(--popup-surface-2);
+  color: var(--popup-text);
+  border: 1px solid var(--popup-border);
   border-radius: 8px;
-  padding: 10px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  padding: 10px 12px;
+  font-family: var(--nd-font-mono, 'JetBrains Mono', ui-monospace, monospace);
   font-size: 13px;
+  line-height: 1.55;
   resize: vertical;
+  width: 100%;
 }
 
 textarea:focus {
   outline: none;
-  border-color: var(--yellow);
+  border-color: var(--popup-yellow-soft);
+  box-shadow: 0 0 0 2px rgba(255, 213, 79, 0.18);
 }
 
+textarea::placeholder {
+  color: var(--popup-muted);
+  opacity: 0.7;
+}
+
+/* ── 푸터 ──────────────────────────────────────────────── */
 footer {
   margin-top: auto;
+  padding-top: 6px;
   text-align: center;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--popup-muted);
 }
 
-.section-title {
-  margin: 0 0 4px 0;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--fg);
-}
-
+/* ── 연결된 사이트 / 자동 승인 리스트 ──────────────────── */
 .origin-list {
   list-style: none;
   margin: 0;
@@ -144,31 +319,60 @@ footer {
 .origin-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 8px 10px;
-  background: #0d0d0d;
-  border: 1px solid var(--border);
+  background: var(--popup-surface-2);
+  border: 1px solid var(--popup-border-soft);
   border-radius: 8px;
+  min-width: 0;
 }
 
 .origin-text {
   flex: 1;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 11px;
-  word-break: break-all;
-  color: var(--fg);
+  min-width: 0;
+  font-family: var(--nd-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--popup-text);
+  /* origin 은 길 수 있다 — 한 줄 + 말줄임 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.btn-sm {
-  padding: 6px 10px;
+/* 빈 상태 — 굵게 강조하지 않고 조용히 안내 */
+.empty-state {
   font-size: 12px;
+  color: var(--popup-muted);
+  font-style: italic;
+  margin: 4px 0 0 0;
 }
 
-/* ActiveGrants 의 origin + 메타데이터(메서드 / 남은 시간) 컬럼. */
+/* ActiveGrants 의 origin + 메타 컬럼 */
 .grant-info {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+}
+
+/* ── 하드웨어 월릿 패널 ────────────────────────────────── */
+.hw-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--popup-border);
+}
+
+/* ── 잠금된 상태(생성/복구 home) CTA 영역 ──────────────── */
+/* "지갑이 없습니다." 안내 위에 살짝 강한 폰트로 무게감 */
+.lead {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--popup-text);
+  margin: 0;
 }

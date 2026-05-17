@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { createMnemonic, type HwAppName } from '@nodong/wallet-sdk/core';
 import { ShellError } from '@nodong/shell-core';
 import { LocaleSwitch, useT } from '@nodong/i18n/react';
+import { Logo } from '@nodong/design-system';
 import {
   connectHardware,
   disconnectHardware,
@@ -138,7 +139,7 @@ export function App() {
   if (loading) {
     return (
       <main className="popup">
-        <header className="brand">{t('brand.name')}</header>
+        <BrandHeader t={t} />
         <p className="muted">{t('common.loading_ellipsis')}</p>
       </main>
     );
@@ -146,15 +147,12 @@ export function App() {
 
   return (
     <main className="popup">
-      <header className="brand" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span>{t('brand.name')}</span>
-        <LocaleSwitch showLabel={false} />
-      </header>
+      <BrandHeader t={t} />
 
       {address ? (
         <>
           <section className="card">
-            <p className="muted small">{t('popup.chain_label')}</p>
+            <p className="label">{t('popup.chain_label')}</p>
             <p className="addr" title={address}>{shortenAddress(address)}</p>
             <button className="btn-ghost" onClick={handleLogout}>
               {t('common.lock')}
@@ -174,7 +172,7 @@ export function App() {
       ) : mode === 'home' ? (
         <>
           <section className="card">
-            <p>{t('popup.has_no_wallet')}</p>
+            <p className="lead">{t('popup.has_no_wallet')}</p>
             <button className="btn-primary" onClick={handleCreate}>
               {t('popup.create_new')}
             </button>
@@ -195,9 +193,36 @@ export function App() {
         <RestorePane onSubmit={handleRestore} onCancel={() => setMode('home')} />
       )}
 
-      {error ? <p className="error small">{error}</p> : null}
-      <footer className="muted small">{t('footer.skeleton')}</footer>
+      {error ? <p className="error">{error}</p> : null}
+      <footer>{t('footer.skeleton')}</footer>
     </main>
+  );
+}
+
+/**
+ * 헤더 — 빨간 인장(Logo mark) + "노동자의 지갑" 워드마크 + 로케일 스위치.
+ *
+ * Playwright smoke 가 `header.brand >> text=노동자의 지갑` 로 셀렉트하므로,
+ *  - 루트는 반드시 <header class="brand">
+ *  - 내부 어딘가에 "노동자의 지갑" 텍스트 노드 존재
+ * 두 조건을 만족하면 클래스/구조는 자유롭게 바꿔도 된다.
+ */
+function BrandHeader({ t }: { t: (k: string) => string }) {
+  // Logo 의 기본 <title> 은 "노동자의 지갑" 이라 워드마크 <span> 과 동일 텍스트가
+  // 두 노드에 존재하게 되고, Playwright strict-mode `text=노동자의 지갑` 가
+  // 두 곳 모두 매칭돼 실패한다. 시각 마크는 워드마크가 옆에 있어 의미를 충분히
+  // 전달하므로 로고에는 (브랜드명이 포함되지 않는) 별도 라벨을 준다.
+  const brandName = t('brand.name');
+  return (
+    <header className="brand">
+      <div className="brand__left">
+        <Logo size={28} variant="mark" title="Brand mark" />
+        <span className="brand__wordmark">{brandName}</span>
+      </div>
+      <div className="brand__right">
+        <LocaleSwitch showLabel={false} />
+      </div>
+    </header>
   );
 }
 
@@ -205,7 +230,7 @@ function CreatePane({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: 
   const t = useT();
   return (
     <section className="card">
-      <p>{t('popup.create_explain')}</p>
+      <p className="lead">{t('popup.create_explain')}</p>
       <p className="warn small">{t('popup.create_v02_note')}</p>
       <button className="btn-primary" onClick={onConfirm}>
         {t('popup.create_action')}
@@ -228,7 +253,7 @@ function RestorePane({
   const [text, setText] = useState('');
   return (
     <section className="card">
-      <label className="muted small" htmlFor="m">
+      <label className="label" htmlFor="m">
         {t('popup.mnemonic_label')}
       </label>
       <textarea
@@ -272,8 +297,8 @@ function HwConnectPanel({
   const t = useT();
   if (hw) {
     return (
-      <div className="hw-panel" style={{ marginTop: 12 }}>
-        <p className="muted small">{t('hw.label.title')} · {hw.appName.toUpperCase()}</p>
+      <div className="hw-panel">
+        <p className="label">{t('hw.label.title')} · {hw.appName.toUpperCase()}</p>
         <p className="addr" title={hw.address}>{shortenAddress(hw.address)}</p>
         <p className="muted small">{t('hw.label.derivation_path', { path: hw.derivationPath })}</p>
         <button
@@ -287,7 +312,7 @@ function HwConnectPanel({
     );
   }
   return (
-    <div className="hw-panel" style={{ marginTop: 12 }}>
+    <div className="hw-panel">
       <button
         className="btn-ghost"
         onClick={() => onConnect('solana')}
@@ -300,11 +325,10 @@ function HwConnectPanel({
         className="btn-ghost btn-sm"
         onClick={() => onConnect('cosmos')}
         disabled={busy}
-        style={{ marginTop: 4 }}
       >
         {busy ? t('hw.connecting') : t('hw.connect.cosmos')}
       </button>
-      <p className="muted small" style={{ marginTop: 4 }}>
+      <p className="muted small">
         {t('hw.evm_v05_note')}
       </p>
     </div>
@@ -350,7 +374,7 @@ function ConnectedSites({ methodLabel }: { methodLabel: (m: GrantMethod) => stri
         {origins === null ? (
           <p className="muted small">{t('common.loading_ellipsis')}</p>
         ) : origins.length === 0 ? (
-          <p className="muted small">{t('popup.connected_sites.empty')}</p>
+          <p className="empty-state">{t('popup.connected_sites.empty')}</p>
         ) : (
           <ul className="origin-list">
             {origins.map((o) => (
@@ -414,7 +438,7 @@ function ActiveGrants({ methodLabel }: { methodLabel: (m: GrantMethod) => string
       {grants === null ? (
         <p className="muted small">{t('common.loading_ellipsis')}</p>
       ) : grants.length === 0 ? (
-        <p className="muted small">{t('popup.grants.empty')}</p>
+        <p className="empty-state">{t('popup.grants.empty')}</p>
       ) : (
         <ul className="origin-list">
           {grants.map((g) => {

@@ -16,6 +16,12 @@ interface Props {
   onBack: () => void;
 }
 
+// 송금 흐름은 두 단계로 분리한다:
+//   1) `compose`  — 주소·금액·자산 입력. "다음" 으로 확인 화면 진입.
+//   2) `review`   — 큰 미리보기, "되돌릴 수 없습니다" 안내, "확정하고 보내기".
+// 사용자가 review 에서 돌아오면 입력은 유지된다(`step` 만 바뀜).
+// 송금이 시작되면 `pending` 으로, 성공/실패는 `sent` / `error` 상태로 전이.
+type Step = 'compose' | 'review';
 type Status =
   | { kind: 'idle' }
   | { kind: 'pending' }
@@ -26,13 +32,8 @@ type Status =
 const TTL_DECIMALS = 18;
 
 // 입력 검증 — 비어있지 않은 10진수, 소수점은 18자리 이하 (토큰별 decimals 는
-// parseUnits 가 동적으로 처리). 끝/앞 공백은 trim 단계에서 제거되므로
-// 정규식은 순수 숫자만 검사한다.
+// parseUnits 가 동적으로 처리).
 const AMOUNT_RE = /^\d+(\.\d{1,18})?$/;
-
-// 스모크 체크:
-//   parseUnits('0.7', 18) === 700000000000000000n  ✓ (정확)
-//   parseFloat('0.7') * 1e18 === 6.999999999999999e17 → Math.floor → 699999999999999900  ✗ (-100 wei)
 
 // "native" 는 TTL 송금. 그 외 값은 토큰 컨트랙트 주소(소문자 비교 X — UI 식별자).
 type AssetKey = 'native' | string;
@@ -41,10 +42,10 @@ const sharedRegistry = new TokenRegistry();
 
 export function Send({ onBack }: Props) {
   const t = useT();
+  const [step, setStep] = useState<Step>('compose');
   const [to, setTo] = useState('');
   const [amount, setAmount] = useState('');
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
-  const [senderAddress, setSenderAddress] = useState<string | null>(null);
   const [tokens, setTokens] = useState<DiscoveredBalance[]>([]);
   const [asset, setAsset] = useState<AssetKey>('native');
 
@@ -53,7 +54,6 @@ export function Send({ onBack }: Props) {
     if (!walletStore.isUnlocked()) return;
     void walletStore.getAccount().then((acc) => {
       if (cancelled) return;
-      setSenderAddress(acc.address);
       const adapter = walletStore.getDefaultAdapter() as unknown as Parameters<
         typeof discoverTokens
       >[0];
@@ -96,12 +96,10 @@ export function Send({ onBack }: Props) {
   const showAmountError = trimmedAmount.length > 0 && !validAmount;
 
   const locked = status.kind === 'pending' || status.kind === 'sent';
-  const disabled = !validAddress || !validAmount || locked;
+  const canProceed = validAddress && validAmount && !locked;
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (disabled) return;
-
+  // 실제 송금 호출 — review 화면에서만 실행된다.
+  const performSend = async () => {
     let value: bigint;
     try {
       value = parseUnits(trimmedAmount, decimals);
@@ -136,8 +134,94 @@ export function Send({ onBack }: Props) {
     }
   };
 
-  void senderAddress;
+  // ── Step 2: review ────────────────────────────────────────
+  if (step === 'review') {
+    const shortAddr =
+      trimmedTo.length > 14
+        ? `${trimmedTo.slice(0, 6)}…${trimmedTo.slice(-4)}`
+        : trimmedTo;
 
+    return (
+      <div>
+        <h1 className="nd-h1">{t('send.review_title')}</h1>
+
+        <div className="web-send-review">
+          <p className="web-send-review__summary">
+            {/*
+              한국어 문장 구조상 "{amount} {symbol} 을(를) {address} 로 보냅니다." 가 자연스럽다.
+              따로 분리된 span 으로 강조를 입혀 시각적 위계를 만든다.
+            */}
+            {t('send.review_summary', {
+              amount: trimmedAmount,
+              symbol,
+              address: shortAddr,
+            })}
+          </p>
+          <div className="web-send-review__row">
+            <span>{t('send.review_gas_label')}</span>
+            <span>{t('send.review_gas_unknown')}</span>
+          </div>
+          <div className="web-send-review__row">
+            <span>{t('send.view_in_explorer').replace(' ↗', '')}</span>
+            <span>{t('send.review_explorer_preview')}</span>
+          </div>
+          <p className="web-send-review__irreversible">
+            {t('send.review_irreversible')}
+          </p>
+        </div>
+
+        {status.kind === 'pending' && (
+          <div className="nd-warn">{t('send.pending')}</div>
+        )}
+        {status.kind === 'sent' && (
+          <Card>
+            <div className="nd-success">{t('send.sent_title')}</div>
+            <div style={{ marginTop: 6 }}>
+              <a
+                href={`https://scan.ttl1.top/tx/${status.hash}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t('send.view_in_explorer')}
+              </a>
+            </div>
+            <div className="nd-hash" style={{ marginTop: 6 }}>
+              {status.hash}
+            </div>
+          </Card>
+        )}
+        {status.kind === 'error' && <div className="nd-error">{status.message}</div>}
+
+        {status.kind === 'sent' ? (
+          <Button variant="primary" className="nd-button--block" onClick={onBack}>
+            {t('send.back_to_wallet')}
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            className="nd-button--block"
+            disabled={!canProceed}
+            loading={status.kind === 'pending'}
+            onClick={() => void performSend()}
+          >
+            {status.kind === 'pending'
+              ? t('send.sending')
+              : t('send.review_confirm')}
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          className="nd-button--block"
+          onClick={() => setStep('compose')}
+          disabled={status.kind === 'pending' || status.kind === 'sent'}
+        >
+          {t('send.review_edit')}
+        </Button>
+      </div>
+    );
+  }
+
+  // ── Step 1: compose ───────────────────────────────────────
   return (
     <div>
       <h1 className="nd-h1">{t('send.title')}</h1>
@@ -147,7 +231,14 @@ export function Send({ onBack }: Props) {
           : t('send.lead_native')}
       </p>
 
-      <form onSubmit={onSubmit}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (canProceed) setStep('review');
+        }}
+      >
+        {/* 토큰 선택은 dropdown 으로 보이지만, 어차피 자산 1개(TTL)만 있는 경우가
+            대부분이라 사용자 인지 부담을 줄이기 위해 한 Card 안에 모아 둔다. */}
         <Card>
           <label className="nd-field__label" htmlFor="nd-asset-select">
             {t('send.asset_label')}
@@ -202,57 +293,19 @@ export function Send({ onBack }: Props) {
           />
         </Card>
 
-        {status.kind === 'pending' && (
-          <div className="nd-warn">{t('send.pending')}</div>
-        )}
-
-        {status.kind === 'sent' && (
-          <Card>
-            <div className="nd-success">{t('send.sent_title')}</div>
-            <div style={{ marginTop: 6 }}>
-              <a
-                href={`https://scan.ttl1.top/tx/${status.hash}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {t('send.view_in_explorer')}
-              </a>
-            </div>
-            <div className="nd-hash" style={{ marginTop: 6 }}>
-              {status.hash}
-            </div>
-          </Card>
-        )}
-
-        {status.kind === 'error' && <div className="nd-error">{status.message}</div>}
-
-        {status.kind === 'sent' ? (
-          <Button
-            type="button"
-            variant="primary"
-            className="nd-button--block"
-            onClick={onBack}
-          >
-            {t('send.back_to_wallet')}
-          </Button>
-        ) : (
-          <Button
-            type="submit"
-            variant="primary"
-            className="nd-button--block"
-            disabled={disabled}
-            loading={status.kind === 'pending'}
-          >
-            {status.kind === 'pending' ? t('send.sending') : t('send.submit')}
-          </Button>
-        )}
-
+        <Button
+          type="submit"
+          variant="primary"
+          className="nd-button--block"
+          disabled={!canProceed}
+        >
+          {t('send.next_step')}
+        </Button>
         <Button
           type="button"
           variant="ghost"
           className="nd-button--block"
           onClick={onBack}
-          disabled={status.kind === 'pending'}
         >
           {t('common.back')}
         </Button>

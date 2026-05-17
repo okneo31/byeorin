@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="노동자의 지갑 — open-hand stamp">
+  <title>노동자의 지갑 — Concept C (open hand holding coin)</title>
+
+  <!-- Stamp body — same wobbled rounded square -->
+  <path
+    d="M 56 22
+       C 80 18 178 18 200 24
+       C 232 30 236 56 236 80
+       C 240 110 240 152 234 178
+       C 230 210 206 234 178 236
+       C 148 240 104 240 78 234
+       C 48 232 22 208 20 178
+       C 16 148 16 104 22 78
+       C 26 48 32 26 56 22 Z"
+    fill="#c41e1e"
+  />
+
+  <path
+    d="M 64 36
+       C 86 32 172 32 192 38
+       C 218 42 220 64 220 84
+       C 224 110 224 148 218 172
+       C 214 200 196 218 172 220
+       C 146 224 110 224 84 218
+       C 58 216 38 196 36 172
+       C 32 146 32 108 38 86
+       C 42 60 46 38 64 36 Z"
+    fill="none"
+    stroke="#fffaf0"
+    stroke-width="2"
+    opacity="0.45"
+  />
+
+  <!-- Open palm — single positive shape.
+       Wrist at bottom, palm bowl curved upward, 4 fingers + thumb fanning to receive a coin.
+       Designed to read as a hand at small sizes; finger separation collapses into bowl shape. -->
+  <path
+    d="M 60 200
+       C 56 196 56 188 62 184
+       L 84 168
+       C 80 160 78 148 80 138
+       L 80 110
+       C 80 102 86 96 94 96
+       C 102 96 108 102 108 110
+       L 108 140
+       C 110 140 112 138 112 134
+       L 112 88
+       C 112 80 118 74 126 74
+       C 134 74 140 80 140 88
+       L 140 134
+       C 142 134 144 132 144 128
+       L 144 92
+       C 144 84 150 78 158 78
+       C 166 78 172 84 172 92
+       L 172 134
+       C 174 134 176 132 176 130
+       L 176 108
+       C 176 100 182 94 190 94
+       C 198 94 204 100 204 108
+       L 204 160
+       C 204 184 184 204 160 204
+       L 70 204
+       C 66 204 62 202 60 200 Z"
+    fill="#fffaf0"
+  />
+
+  <!-- Coin — yellow disc resting just above the palm bowl. Carries TTL/₩ identity. -->
+  <circle cx="148" cy="68" r="28" fill="#f4c430" />
+  <circle cx="148" cy="68" r="28" fill="none" stroke="#c41e1e" stroke-width="3" opacity="0.35" />
+
+  <!-- Coin notch: a single short tick to suggest currency / ₩ without committing to a glyph that needs a font -->
+  <rect x="135" y="56" width="26" height="4" rx="2" fill="#c41e1e" />
+  <rect x="135" y="78" width="26" height="4" rx="2" fill="#c41e1e" />
+  <rect x="146" y="50" width="4" height="36" rx="2" fill="#c41e1e" />
+</svg>
