@@ -48,11 +48,27 @@ function codesToString(codes: number[]): string {
   return String.fromCharCode.apply(null, codes);
 }
 
+// 곡괭이 인장 마크 — 노동의 도구 + 채굴 이중 의미.
+// SVG 내부에 비-ASCII 문자가 없으므로 raw string 으로 안전. 한글 글자 합성 불필요.
+// 본 SVG 는 apps/extension/public/icon/icon-eip6963.svg 와 byte-equivalent 한 인장 + 교차
+// 곡괭이 + 노란 印朱점 디자인. dApp picker 의 우리 아이콘 = 확장 toolbar 아이콘 = 동일 외관.
 const ICON_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
-  '<rect width="64" height="64" rx="12" fill="#c41e1e"/>' +
-  '<text x="32" y="44" font-size="36" font-family="sans-serif" font-weight="800" ' +
-  'text-anchor="middle" fill="#fff">' + codesToString([0xB178]) + '</text></svg>';
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">' +
+  '<path d="M56 22C80 18 178 18 200 24C232 30 236 56 236 80C240 110 240 152 234 178C230 210 206 234 178 236C148 240 104 240 78 234C48 232 22 208 20 178C16 148 16 104 22 78C26 48 32 26 56 22Z" fill="#c41e1e"/>' +
+  '<path d="M64 36C86 32 172 32 192 38C218 42 220 64 220 84C224 110 224 148 218 172C214 200 196 218 172 220C146 224 110 224 84 218C58 216 38 196 36 172C32 146 32 108 38 86C42 60 46 38 64 36Z" fill="none" stroke="#fffaf0" stroke-width="2" opacity="0.4"/>' +
+  '<g transform="translate(128 134) rotate(-45) scale(0.82)">' +
+  '<path d="M-100-8C-96-11-50-10 0-10C30-10 56-9 72-7L72 7C56 9 30 10 0 10C-50 10-96 11-100 8C-103 6-103-6-100-8Z" fill="#fffaf0"/>' +
+  '<path d="M78-86L96-76C100-54 100-28 100-8C106-6 108-2 108 0C108 2 106 6 100 8C100 26 102 46 104 56L88 62L76 36L70 12L66 0L70-12L76-36L78-86Z" fill="#fffaf0"/>' +
+  '</g>' +
+  '<g transform="translate(128 134) rotate(-135) scale(0.82)">' +
+  '<path d="M-100-8C-96-11-50-10 0-10C30-10 56-9 72-7L72 7C56 9 30 10 0 10C-50 10-96 11-100 8C-103 6-103-6-100-8Z" fill="#fffaf0"/>' +
+  '<path d="M78-86L96-76C100-54 100-28 100-8C106-6 108-2 108 0C108 2 106 6 100 8C100 26 102 46 104 56L88 62L76 36L70 12L66 0L70-12L76-36L78-86Z" fill="#fffaf0"/>' +
+  '</g>' +
+  '<circle cx="128" cy="58" r="6" fill="#f4c430"/>' +
+  '<circle cx="128" cy="58" r="2" fill="#c41e1e"/>' +
+  '<circle cx="102" cy="50" r="3" fill="#fffaf0"/>' +
+  '<circle cx="154" cy="50" r="3" fill="#fffaf0"/>' +
+  '</svg>';
 const ICON_DATA_URL = 'data:image/svg+xml,' + encodeURIComponent(ICON_SVG);
 
 // EIP-6963 표기명 — '노동자의 지갑'.

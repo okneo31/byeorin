@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="노동자의 지갑 — Concept A: lone vertical pickaxe">
+  <title>Concept A — vertical pickaxe in red stamp</title>
+
+  <!-- Stamp body -->
+  <path d="M 56 22 C 80 18 178 18 200 24 C 232 30 236 56 236 80 C 240 110 240 152 234 178 C 230 210 206 234 178 236 C 148 240 104 240 78 234 C 48 232 22 208 20 178 C 16 148 16 104 22 78 C 26 48 32 26 56 22 Z" fill="#c41e1e"/>
+  <!-- Inner hairline ring -->
+  <path d="M 64 36 C 86 32 172 32 192 38 C 218 42 220 64 220 84 C 224 110 224 148 218 172 C 214 200 196 218 172 220 C 146 224 110 224 84 218 C 58 216 38 196 36 172 C 32 146 32 108 38 86 C 42 60 46 38 64 36 Z" fill="none" stroke="#fffaf0" stroke-width="2" opacity="0.4"/>
+
+  <!--
+    Vertical pickaxe: head at top (horizontal bar with pick on left, chisel on right),
+    handle straight down. Pure axe-as-emblem. Reads strong even at 16px.
+  -->
+
+  <!-- Iron head: horizontal bar at top with sharp PICK on left, shorter CHISEL on right -->
+  <!-- pick tip at left, chisel tip at right, both extending from a central socket -->
+  <path d="M 40 78
+           L 56 64
+           C 80 60 104 60 116 64
+           L 122 56
+           L 134 56
+           L 140 64
+           C 156 60 180 60 200 64
+           L 212 78
+           L 200 92
+           C 180 90 156 92 140 96
+           L 134 100
+           L 122 100
+           L 116 96
+           C 104 92 80 90 56 92 L 40 78 Z"
+        fill="#fffaf0"/>
+
+  <!-- Handle: vertical, tapered, ends rounded -->
+  <path d="M 118 96 L 138 96 L 142 218 C 142 224 138 226 128 226 C 118 226 114 224 114 218 Z" fill="#fffaf0"/>
+  <!-- Wood grain -->
+  <path d="M 124 110 C 124 150 126 190 126 218" stroke="#c41e1e" stroke-width="1.4" opacity="0.30" fill="none"/>
+
+  <!-- Sweat/spark yellow accent (印朱 — small dot upper-right) -->
+  <circle cx="200" cy="56" r="7" fill="#f4c430"/>
+  <circle cx="200" cy="56" r="2.5" fill="#c41e1e"/>
+</svg>

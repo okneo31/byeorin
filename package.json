@@ -15,6 +15,9 @@
     "setup-check": "node scripts/setup-check.mjs"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "opentype.js": "^2.0.0",
+    "sharp": "^0.34.5",
     "typescript": "^5.6.3"
   },
   "pnpm": {
