@@ -157,7 +157,7 @@ export function App() {
             <p className="muted small">{t('popup.chain_label')}</p>
             <p className="addr" title={address}>{shortenAddress(address)}</p>
             <button className="btn-ghost" onClick={handleLogout}>
-              {t('common.logout')}
+              {t('common.lock')}
             </button>
             <p className="warn small">
               {t('popup.session_only_warn')}

@@ -86,8 +86,9 @@
     <p style="font-size:12px;color:var(--gray)">아래 JSON 은 ERC-2612 Permit 패턴. 우리 popup 에서 빨간 경고 배너가 떠야 정상.</p>
     <textarea id="typed" rows="14"></textarea>
     <div class="row">
-      <button onclick="signTyped()">signTypedData_v4 — Permit 경고 팝업 검증</button>
+      <button onclick="signPermitForced()">signTypedData_v4 — Permit 경고 팝업 검증 (Permit 강제)</button>
       <button onclick="signTypedSimple()" class="secondary">Permit 아닌 일반 typed data</button>
+      <button onclick="signTyped()" class="secondary">현재 textarea 그대로 서명</button>
     </div>
     <pre id="typed-out">대기 중…</pre>
   </div>
@@ -259,6 +260,13 @@
     };
 
     document.getElementById('typed').value = JSON.stringify(permitJson, null, 2);
+
+    async function signPermitForced() {
+      // 빨간 버튼: textarea를 무조건 permitJson 으로 reset 후 서명. 사용자가 typed 박스를
+      // 만지고 와도 항상 Permit primaryType 으로 보내져서 popup 의 빨간 danger 배너 검증 가능.
+      document.getElementById('typed').value = JSON.stringify(permitJson, null, 2);
+      await signTyped();
+    }
 
     async function signTyped() {
       try {
