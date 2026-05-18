@@ -7,8 +7,8 @@ import {
   View,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
-import type { WalletAccount } from '@nodong/wallet-sdk';
-import { useT } from '@nodong/i18n/react';
+import type { WalletAccount } from '@byeorin/wallet-sdk';
+import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../store';
 import { colors, radius, spacing, theme } from '../theme';
 import { AddressDisplay, AmountDisplay, Button, Card } from '../ui';

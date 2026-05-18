@@ -1,6 +1,6 @@
-# 노동자의 지갑 Cold — Firmware
+# 벼린 요세 — Firmware
 
-Firmware for the **노동자의 지갑 Cold** (Worker's Wallet Cold) hardware wallet.
+Firmware for the **벼린 요세** (Worker's Wallet Cold) hardware wallet.
 Target SoC: Nordic **nRF52840**. Secure Element: NXP **SE050**.
 Runs on **Zephyr RTOS**. Communicates with the companion software (`apps/desktop`, `packages/wallet-sdk`) over **USB-HID** and **BLE GATT**.
 
@@ -36,13 +36,13 @@ west zephyr-export
 
 # 3. Build for the development board
 west build -b nrf52840dk_nrf52840 firmware/app \
-  -- -DDTC_OVERLAY_FILE=boards/nrf52840_nodong_cold.overlay
+  -- -DDTC_OVERLAY_FILE=boards/nrf52840_byeorin_yose.overlay
 
 # 4. Flash
 west flash
 ```
 
-For production hardware (custom board `nodong_cold`), the board file lives under `firmware/boards/`. Pass `-b nodong_cold` once the board YAML is added.
+For production hardware (custom board `byeorin_yose`), the board file lives under `firmware/boards/`. Pass `-b byeorin_yose` once the board YAML is added.
 
 ### Bootloader (MCUBoot)
 
@@ -60,7 +60,7 @@ firmware/
 │   ├── prj.conf
 │   ├── Kconfig
 │   ├── boards/
-│   │   └── nrf52840_nodong_cold.overlay
+│   │   └── nrf52840_byeorin_yose.overlay
 │   └── src/
 │       ├── main.c
 │       ├── version.h

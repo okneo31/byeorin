@@ -1,17 +1,17 @@
 import {
-  NODONG_MSG_TAG,
+  BYEORIN_MSG_TAG,
   type JsonRpcRequest,
   type JsonRpcResponse,
   type WindowEnvelope,
 } from '../src/lib/rpc.js';
 
 // 페이지 MAIN world 에서 실행되는 inpage 스크립트.
-// window.ethereum / window.nodong (EIP-1193 호환) 을 노출한다.
+// window.ethereum / window.byeorin (EIP-1193 호환) 을 노출한다.
 //
 // 본 스켈레톤은 최소 표면만 구현한다:
 //  - request({ method, params }): Promise<unknown>
 //  - on/removeListener (chainChanged/accountsChanged 이벤트 큐만 보관)
-//  - isMetaMask: false, isNodong: true
+//  - isMetaMask: false, isByeorin: true
 //
 // H2 fix:
 //  - EIP-6963 announceProvider 구현 (MetaMask 와 공존)
@@ -21,18 +21,18 @@ import {
 type Listener = (...args: unknown[]) => void;
 
 // EIP-6963 식별자(build 별 고정 UUID — 본 빌드 표지).
-const EIP6963_UUID = '6e6f646f-6e67-4e4f-444f-4e472d574c54'; // "nodong-NODONG-WLT"
-const EIP6963_RDNS = 'top.ttl1.nodong';
+const EIP6963_UUID = '6e6f646f-6e67-4e4f-444f-4e472d574c54'; // "byeorin-BYEORIN-WLT"
+const EIP6963_RDNS = 'top.ttl1.byeorin';
 
 // 작은 SVG 아이콘 — 적색 사각형 + 흰색 '노' 글자.
 // data URL 화(외부 fetch 없음, < 1KB).
 //
 // NOTE 1: 한글 "노" (U+B178) 는 Latin1 범위를 벗어나므로 btoa() 가 InvalidCharacterError 를
 //   던진다. inpage.ts 는 모듈 평가 시점에 실행되므로 그 예외가 발생하면 window.ethereum /
-//   window.nodong / EIP-6963 announce 가 *모두* 동작하지 않아 dApp 에서 지갑이 보이지 않는다.
+//   window.byeorin / EIP-6963 announce 가 *모두* 동작하지 않아 dApp 에서 지갑이 보이지 않는다.
 //   따라서 base64 가 아닌 URI 인코딩 형태(`data:image/svg+xml,<encoded>`)를 사용한다.
 //   EIP-6963 사양은 두 형태를 모두 허용하며 dApp 의 <img src=...> 에도 그대로 들어간다.
-// NOTE 2: 한글 글자(노/노동자의 지갑)는 String.fromCharCode 로 *런타임* 에 만든다.
+// NOTE 2: 한글 글자(노/벼린)는 String.fromCharCode 로 *런타임* 에 만든다.
 //   vite/esbuild 는 소스의 raw 한글과 \uXXXX 이스케이프를 모두 UTF-8 바이트로 동일하게
 //   출력한다. inpage.js 가 chrome-extension:// 에서 charset header 없이 페이지로 로드되면
 //   그 UTF-8 이 ISO-8859-1 로 해석돼 mojibake (예: e85b8 → 'ë…¸') 가 된다.
@@ -71,16 +71,16 @@ const ICON_SVG =
   '</svg>';
 const ICON_DATA_URL = 'data:image/svg+xml,' + encodeURIComponent(ICON_SVG);
 
-// EIP-6963 표기명 — '노동자의 지갑'.
+// EIP-6963 표기명 — '벼린'.
 //   노 U+B178 · 동 U+B3D9 · 자 U+C790 · 의 U+C758 · (공백) · 지 U+C9C0 · 갑 U+AC11
 const BRAND_NAME = codesToString([0xB178, 0xB3D9, 0xC790, 0xC758, 0x20, 0xC9C0, 0xAC11]);
 
-class NodongInpageProvider {
+class ByeorinInpageProvider {
   // ── 식별 플래그 ────────────────────────────────────────────
   // 우리는 MetaMask 가 *아니다*. 사칭 금지 — 일부 dApp 이 isMetaMask 만 보고
-  // legacy MM 분기를 타려고 해도 EIP-6963 / isNodong 으로 우리를 구분해야 한다.
+  // legacy MM 분기를 타려고 해도 EIP-6963 / isByeorin 으로 우리를 구분해야 한다.
   readonly isMetaMask = false;
-  readonly isNodong = true;
+  readonly isByeorin = true;
 
   // ── eager (legacy) 표면 ───────────────────────────────────
   // EIP-1193 은 chainId/selectedAddress 를 *권장* 사항으로만 두지만, 실제 dApp
@@ -106,7 +106,7 @@ class NodongInpageProvider {
     window.addEventListener('message', (event: MessageEvent<WindowEnvelope>) => {
       if (event.source !== window) return;
       const data = event.data;
-      if (!data || data.tag !== NODONG_MSG_TAG) return;
+      if (!data || data.tag !== BYEORIN_MSG_TAG) return;
       if (data.dir === 'cs-to-page') {
         const res = data.payload as JsonRpcResponse;
         const slot = this.pending.get(res.id);
@@ -141,7 +141,7 @@ class NodongInpageProvider {
     }
     const id = this.nextId++;
     const req: JsonRpcRequest = { id, method: args.method, params: args.params };
-    const envelope: WindowEnvelope = { tag: NODONG_MSG_TAG, dir: 'page-to-cs', payload: req };
+    const envelope: WindowEnvelope = { tag: BYEORIN_MSG_TAG, dir: 'page-to-cs', payload: req };
     const result = await new Promise<unknown>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       window.postMessage(envelope, '*');
@@ -237,7 +237,7 @@ class NodongInpageProvider {
 // 모든 EIP-1193 메서드(eth_requestAccounts 등)는 여전히 background 의 per-origin 동의를
 // 거쳐야 한다. provider.chainId 와 networkVersion 만 정적 노출되며, 이는 우리가 지원하는
 // 체인(TTL=7777) 의 상수일 뿐이라 노출되어도 무방하다.
-function announceEip6963(provider: NodongInpageProvider): void {
+function announceEip6963(provider: ByeorinInpageProvider): void {
   const info = Object.freeze({
     uuid: EIP6963_UUID,
     name: BRAND_NAME,
@@ -255,15 +255,15 @@ function announceEip6963(provider: NodongInpageProvider): void {
 }
 
 export default defineUnlistedScript(() => {
-  const provider = new NodongInpageProvider();
+  const provider = new ByeorinInpageProvider();
 
   // EIP-6963: 자기 announce 및 dApp 의 requestProvider 에 대한 응답.
   announceEip6963(provider);
   window.addEventListener('eip6963:requestProvider', () => announceEip6963(provider));
 
-  // window.nodong — 브랜드 별칭은 우리 namespace 이므로 고정 가능.
+  // window.byeorin — 브랜드 별칭은 우리 namespace 이므로 고정 가능.
   try {
-    Object.defineProperty(window, 'nodong', {
+    Object.defineProperty(window, 'byeorin', {
       value: provider,
       writable: false,
       configurable: false,

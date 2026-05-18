@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
- * 노동자의 지갑 Cold — BTC chain app.
+ * 벼린 요세 — BTC chain app.
  */
 #include "apps/btc_app.h"
 #include "log.h"
@@ -8,7 +8,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-LOG_MODULE_REGISTER(nodong_btc, CONFIG_LOG_DEFAULT_LEVEL);
+LOG_MODULE_REGISTER(byeorin_btc, CONFIG_LOG_DEFAULT_LEVEL);
 
 static bool m_session_approved;
 
@@ -17,7 +17,7 @@ void btc_app_end_session(void)
 	m_session_approved = false;
 }
 
-enum nodong_confirm_result btc_app_confirm(const uint8_t *chain_label,
+enum byeorin_confirm_result btc_app_confirm(const uint8_t *chain_label,
 					   size_t chain_label_len,
 					   const uint8_t *to_summary,
 					   size_t to_len,
@@ -28,7 +28,7 @@ enum nodong_confirm_result btc_app_confirm(const uint8_t *chain_label,
 
 	if (m_session_approved) {
 		/* Subsequent inputs in an already-approved batch. */
-		return NODONG_CONFIRM_OK;
+		return BYEORIN_CONFIRM_OK;
 	}
 
 	char to_buf[64];
@@ -39,7 +39,7 @@ enum nodong_confirm_result btc_app_confirm(const uint8_t *chain_label,
 	memcpy(to_buf, to_summary, tl);  to_buf[tl] = '\0';
 	memcpy(amt_buf, amount_summary, al); amt_buf[al] = '\0';
 
-	enum nodong_confirm_result r = confirm_tx("Send BTC", to_buf, amt_buf);
-	if (r == NODONG_CONFIRM_OK) { m_session_approved = true; }
+	enum byeorin_confirm_result r = confirm_tx("Send BTC", to_buf, amt_buf);
+	if (r == BYEORIN_CONFIRM_OK) { m_session_approved = true; }
 	return r;
 }

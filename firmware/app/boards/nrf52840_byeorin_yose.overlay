@@ -1,8 +1,8 @@
 /*
- * Devicetree overlay for the 노동자의 지갑 Cold board.
+ * Devicetree overlay for the 벼린 요세 board.
  *
  * Pin assignments mirror hardware/pin-map.md. When the real board file
- * lands under firmware/boards/nodong_cold/, this overlay becomes obsolete
+ * lands under firmware/boards/byeorin_yose/, this overlay becomes obsolete
  * for production — but it keeps `west build -b nrf52840dk_nrf52840` working
  * for early development on the Nordic DK.
  *

@@ -12,7 +12,7 @@ import {
   createMemoryLocaleStorage,
   useLocale,
   useT,
-} from '@nodong/i18n/react';
+} from '@byeorin/i18n/react';
 import { Home } from './src/screens/Home';
 import { Account } from './src/screens/Account';
 import { Send } from './src/screens/Send';

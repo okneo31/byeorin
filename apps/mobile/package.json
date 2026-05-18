@@ -1,8 +1,8 @@
 {
-  "name": "@nodong/mobile",
+  "name": "@byeorin/mobile",
   "version": "0.0.1",
   "private": true,
-  "description": "노동자의 지갑 — 모바일 셸 (React Native Bare)",
+  "description": "벼린 — 모바일 셸 (React Native Bare)",
   "scripts": {
     "start": "react-native start",
     "android": "react-native run-android",
@@ -10,10 +10,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@nodong/design-system": "workspace:*",
-    "@nodong/i18n": "workspace:*",
-    "@nodong/shell-core": "workspace:*",
-    "@nodong/wallet-sdk": "workspace:*",
+    "@byeorin/design-system": "workspace:*",
+    "@byeorin/i18n": "workspace:*",
+    "@byeorin/shell-core": "workspace:*",
+    "@byeorin/wallet-sdk": "workspace:*",
     "react": "^18.3.1",
     "react-native": "^0.76.1",
     "react-native-keychain": "^9.2.2",

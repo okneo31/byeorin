@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
- * 노동자의 지갑 Cold — confirmation dialog.
+ * 벼린 요세 — confirmation dialog.
  */
 #include "ui/confirm.h"
 #include "ui/display.h"
@@ -9,9 +9,9 @@
 
 #include <zephyr/kernel.h>
 
-LOG_MODULE_REGISTER(nodong_confirm, CONFIG_LOG_DEFAULT_LEVEL);
+LOG_MODULE_REGISTER(byeorin_confirm, CONFIG_LOG_DEFAULT_LEVEL);
 
-static enum nodong_confirm_result render_and_wait(const char *title,
+static enum byeorin_confirm_result render_and_wait(const char *title,
 						  const char *line1,
 						  const char *line2,
 						  const char *line3)
@@ -25,16 +25,16 @@ static enum nodong_confirm_result render_and_wait(const char *title,
 	(void)display_draw_text(152, 176, 1, "[CANCEL]");
 	(void)display_refresh_full();
 
-	k_timeout_t to = K_SECONDS(CONFIG_NODONG_CONFIRM_TIMEOUT_SEC);
-	nodong_button_t b = buttons_wait(to);
+	k_timeout_t to = K_SECONDS(CONFIG_BYEORIN_CONFIRM_TIMEOUT_SEC);
+	byeorin_button_t b = buttons_wait(to);
 	switch (b) {
-	case NODONG_BUTTON_OK:     return NODONG_CONFIRM_OK;
-	case NODONG_BUTTON_CANCEL: return NODONG_CONFIRM_CANCEL;
-	default:                   return NODONG_CONFIRM_TIMEOUT;
+	case BYEORIN_BUTTON_OK:     return BYEORIN_CONFIRM_OK;
+	case BYEORIN_BUTTON_CANCEL: return BYEORIN_CONFIRM_CANCEL;
+	default:                   return BYEORIN_CONFIRM_TIMEOUT;
 	}
 }
 
-enum nodong_confirm_result confirm_tx(const char *label,
+enum byeorin_confirm_result confirm_tx(const char *label,
 				      const char *to,
 				      const char *amount_str)
 {
@@ -48,7 +48,7 @@ enum nodong_confirm_result confirm_tx(const char *label,
 			       to_line, amt_line, NULL);
 }
 
-enum nodong_confirm_result confirm_generic_sign(void)
+enum byeorin_confirm_result confirm_generic_sign(void)
 {
 	return render_and_wait("Sign?",
 			       "Unknown chain.",
@@ -56,7 +56,7 @@ enum nodong_confirm_result confirm_generic_sign(void)
 			       "Are you sure?");
 }
 
-enum nodong_confirm_result confirm_message(const char *title,
+enum byeorin_confirm_result confirm_message(const char *title,
 					   const char *line1,
 					   const char *line2)
 {

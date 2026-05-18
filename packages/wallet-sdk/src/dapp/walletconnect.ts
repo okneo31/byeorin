@@ -32,7 +32,7 @@
  *     concrete WalletStore.
  *
  * Mobile-native TODO:
- *   QR-scan and `nodong://wc?uri=…` deep-link handoff require native config
+ *   QR-scan and `byeorin://wc?uri=…` deep-link handoff require native config
  *   (`AndroidManifest.xml` intent-filter, iOS URL Types in `Info.plist`).
  *   The mobile entry point in this repo can ship the JS layer today and add
  *   native plumbing once the `android/`/`ios/` folders exist.

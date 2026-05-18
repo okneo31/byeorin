@@ -1,5 +1,5 @@
 /**
- * AmountDisplay — RN mirror of `@nodong/design-system`'s HTML AmountDisplay.
+ * AmountDisplay — RN mirror of `@byeorin/design-system`'s HTML AmountDisplay.
  *
  * API parity:
  *   value: bigint                  (DS web accepts bigint | string; RN tightened

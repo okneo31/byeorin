@@ -6,9 +6,9 @@ import {
   type DiscoveredBalance,
   type TransferIntent,
   type WalletAccount,
-} from '@nodong/wallet-sdk';
-import { AddressDisplay, Button, Card, Input } from '@nodong/design-system';
-import { useT } from '@nodong/i18n/react';
+} from '@byeorin/wallet-sdk';
+import { AddressDisplay, Button, Card, Input } from '@byeorin/design-system';
+import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../wallet-store.js';
 
 interface Props {

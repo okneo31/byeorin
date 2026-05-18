@@ -1,13 +1,13 @@
-# 노동자의 지갑 — 수동 테스트 가이드 (Manual Test Guide)
+# 벼린 — 수동 테스트 가이드 (Manual Test Guide)
 
-본 문서는 **노동자의 지갑(Worker's Wallet)** 4종 셸(웹/확장/데스크톱/모바일) + 하드웨어 월릿 연결 경로를
+본 문서는 **벼린(Worker's Wallet)** 4종 셸(웹/확장/데스크톱/모바일) + 하드웨어 월릿 연결 경로를
 사람이 직접 단계별로 검증하기 위한 한국어 매뉴얼입니다.
 
 - **대상 빌드**: `pnpm -r build` 후 산출물
 - **체인**: TTL Chain ID `7777`, RPC `https://rpc.ttl1.top`, Explorer `https://scan.ttl1.top`
 - **API**: `https://api.ttl1.top` (포트 4000)
 - **인스톨러 서버**: `http://207.90.195.148:8080`
-- **브랜드 명**: 노동자의 지갑 (영문 토글 시에도 브랜드명은 그대로 유지)
+- **브랜드 명**: 벼린 (영문 토글 시에도 브랜드명은 그대로 유지)
 - **언어**: Korean primary / English baseline (i18n 토글)
 
 > 한 섹션이 **차단(blocker)** 으로 실패한 경우, 해당 섹션 끝의 안내에 따라 **다음 섹션으로 건너뛰어도 됩니다.**
@@ -98,10 +98,10 @@ pnpm -r build    # 약 3-5분 (모든 패키지)
 ### 1.1 명령
 
 ```bash
-pnpm --filter @nodong/wallet-sdk test
-pnpm --filter @nodong/shell-core test
-pnpm --filter @nodong/extension test
-pnpm --filter @nodong/i18n test
+pnpm --filter @byeorin/wallet-sdk test
+pnpm --filter @byeorin/shell-core test
+pnpm --filter @byeorin/extension test
+pnpm --filter @byeorin/i18n test
 ```
 
 또는 한 번에:
@@ -125,9 +125,9 @@ Test Files  18 passed (18)
 
 | 증상 | 원인 | 조치 |
 |------|------|------|
-| `@nodong/wallet-sdk` 실패 | 노드 버전 / SDK 버전 불일치 | `node --version` 확인, 22로 맞춤 |
-| `@nodong/shell-core` 실패 | i18n 키 누락 | `pnpm --filter @nodong/i18n build` 재실행 |
-| `@nodong/extension` 실패 | jsdom Provider mock | `pnpm -r build` 한 뒤 재시도 |
+| `@byeorin/wallet-sdk` 실패 | 노드 버전 / SDK 버전 불일치 | `node --version` 확인, 22로 맞춤 |
+| `@byeorin/shell-core` 실패 | i18n 키 누락 | `pnpm --filter @byeorin/i18n build` 재실행 |
+| `@byeorin/extension` 실패 | jsdom Provider mock | `pnpm -r build` 한 뒤 재시도 |
 | 모든 패키지 fail | 빌드 산출물 누락 | 0.3절 재실행 |
 
 > **차단 시**: SDK 또는 shell-core 테스트가 실패하면 이후 모든 셸이 영향을 받음. 우선 수정 후 진행 권장. 단, **수치적으로 5건 이하** 실패라면 셸 테스트는 계속 진행 가능.
@@ -139,7 +139,7 @@ Test Files  18 passed (18)
 ### 2.1 시작
 
 ```bash
-pnpm --filter @nodong/web dev
+pnpm --filter @byeorin/web dev
 ```
 
 브라우저에서 `http://localhost:5173` 접속.
@@ -147,9 +147,9 @@ pnpm --filter @nodong/web dev
 ### 2.2 체크리스트
 
 #### 2.2.1 브랜드 / i18n
-- [ ] 헤더에 **"노동자의 지갑"** 텍스트 + 우상단 **KO / EN** 토글 표시
+- [ ] 헤더에 **"벼린"** 텍스트 + 우상단 **KO / EN** 토글 표시
 - [ ] **EN 토글 클릭** → 화면 텍스트가 영문으로 즉시 변환 (페이지 리로드 없이)
-- [ ] **브랜드명은 그대로 "노동자의 지갑"** 유지 (영문화 X)
+- [ ] **브랜드명은 그대로 "벼린"** 유지 (영문화 X)
 - [ ] **KO 토글 복귀** → 다시 한국어로 즉시 변환
 
 #### 2.2.2 지갑 생성
@@ -183,9 +183,9 @@ pnpm --filter @nodong/web dev
 
 | 증상 | 조치 |
 |------|------|
-| 5173 포트 충돌 | `pnpm --filter @nodong/web dev -- --port 5174` |
-| 한글 mnemonic이 영문으로 표시 | i18n 빌드 누락. `pnpm --filter @nodong/i18n build` |
-| 주소 0x000... 표시 | wallet-sdk 빌드 누락. `pnpm --filter @nodong/wallet-sdk build` |
+| 5173 포트 충돌 | `pnpm --filter @byeorin/web dev -- --port 5174` |
+| 한글 mnemonic이 영문으로 표시 | i18n 빌드 누락. `pnpm --filter @byeorin/i18n build` |
+| 주소 0x000... 표시 | wallet-sdk 빌드 누락. `pnpm --filter @byeorin/wallet-sdk build` |
 | RPC 타임아웃 | `https://rpc.ttl1.top` 도달 가능? curl 로 확인 |
 
 > **차단 시**: 다음 섹션(확장)으로 건너뛰기 가능 — 확장은 별개 빌드 산출물 사용.
@@ -197,7 +197,7 @@ pnpm --filter @nodong/web dev
 ### 3.1 빌드
 
 ```bash
-pnpm --filter @nodong/extension build
+pnpm --filter @byeorin/extension build
 ```
 
 산출물: `apps/extension/.output/chrome-mv3/`
@@ -208,7 +208,7 @@ pnpm --filter @nodong/extension build
 2. 우측 상단 **개발자 모드 ON**
 3. **"압축해제된 확장 프로그램 로드"** 버튼 클릭
 4. `D:/TTLCOINWalet/apps/extension/.output/chrome-mv3` 폴더 선택
-5. 확장 목록에 **"노동자의 지갑"** 등장 확인
+5. 확장 목록에 **"벼린"** 등장 확인
 
 ### 3.3 체크리스트
 
@@ -217,30 +217,30 @@ pnpm --filter @nodong/extension build
 - [ ] **"지갑 생성"** → 12단어 한국어 mnemonic → Account 화면
 - [ ] **잔액 0 TTL**, 주소 0x... 표시
 
-#### 3.3.2 Injected Provider (`window.nodong`)
+#### 3.3.2 Injected Provider (`window.byeorin`)
 
 새 탭에서 `https://example.com` 열고 DevTools Console에서:
 
 ```js
-window.nodong                                    // 객체가 존재해야 함
-await window.nodong.request({method:'eth_chainId'})        // '0x1e61' (7777)
-await window.nodong.request({method:'eth_accounts'})       // []  (아직 연결 안 됨)
+window.byeorin                                    // 객체가 존재해야 함
+await window.byeorin.request({method:'eth_chainId'})        // '0x1e61' (7777)
+await window.byeorin.request({method:'eth_accounts'})       // []  (아직 연결 안 됨)
 ```
 
-- [ ] `window.nodong` 가 truthy
+- [ ] `window.byeorin` 가 truthy
 - [ ] `eth_chainId` → `'0x1e61'`
 - [ ] `eth_accounts` → `[]` (빈 배열)
 
 #### 3.3.3 Connect Flow
 
 ```js
-await window.nodong.request({method:'eth_requestAccounts'})
+await window.byeorin.request({method:'eth_requestAccounts'})
 ```
 
 - [ ] **connect 팝업이 새 창**으로 열림 (확장 popup이 아닌 별도 dialog)
 - [ ] 팝업에 **origin (`https://example.com`)** 표시
 - [ ] **승인** 클릭 → 콘솔에 `[ '0x...' ]` 주소 배열 반환
-- [ ] 다시 `await window.nodong.request({method:'eth_accounts'})` → **주소 배열 반환** (allowlist 작동)
+- [ ] 다시 `await window.byeorin.request({method:'eth_accounts'})` → **주소 배열 반환** (allowlist 작동)
 
 #### 3.3.4 연결된 사이트 관리
 - [ ] 확장 popup 열기 → **"연결된 사이트"** 메뉴에 `example.com` 표시
@@ -258,7 +258,7 @@ window.dispatchEvent(new Event('eip6963:requestProvider'));
 
 - [ ] 콘솔에 다음과 같은 객체 출력:
   ```
-  { name: '노동자의 지갑', rdns: 'top.ttl1.nodong', icon: 'data:image/...', uuid: '...' }
+  { name: '벼린', rdns: 'top.ttl1.byeorin', icon: 'data:image/...', uuid: '...' }
   ```
 
 #### 3.3.6 dApp 호환성 (선택, MetaMask Test dApp)
@@ -281,9 +281,9 @@ https://metamask.github.io/test-dapp/ 접속 (확장 1개만 활성화 권장 �
 
 | 증상 | 조치 |
 |------|------|
-| `window.nodong` undefined | content script 미주입. 페이지 새로고침 + 콘솔에서 errors 확인 |
+| `window.byeorin` undefined | content script 미주입. 페이지 새로고침 + 콘솔에서 errors 확인 |
 | connect 팝업 안 뜸 | 팝업 차단기 확인. `chrome://settings/content/popups` |
-| `eth_chainId` 다른 값 | 빌드 환경 변수 잘못. `pnpm --filter @nodong/extension build` 재실행 |
+| `eth_chainId` 다른 값 | 빌드 환경 변수 잘못. `pnpm --filter @byeorin/extension build` 재실행 |
 | EIP-6963 announce 미발생 | inpage script 로드 타이밍. document_start 주입 확인 |
 
 > **차단 시**: 다음 섹션(데스크톱)으로 건너뛰기 가능.
@@ -305,13 +305,13 @@ cargo --version
 
 #### A) Vite 단독 (Rust 없어도 됨)
 ```bash
-pnpm --filter @nodong/desktop dev
+pnpm --filter @byeorin/desktop dev
 ```
 브라우저에서 `http://localhost:5173` (또는 충돌 시 5174) → 데스크톱 셸 **UI만** 검증 가능.
 
 #### B) Full Tauri (Rust 필요)
 ```bash
-pnpm --filter @nodong/desktop tauri dev
+pnpm --filter @byeorin/desktop tauri dev
 ```
 별도 네이티브 윈도우가 열림. WebHID(하드웨어 월릿)·OS clipboard·시스템 알림 검증 가능.
 
@@ -330,7 +330,7 @@ pnpm --filter @nodong/desktop tauri dev
 
 #### 4.3.2 i18n
 - [ ] 설정 → 언어 → **EN 선택** → 사이드바 텍스트 전부 영문화
-- [ ] **브랜드명은 "노동자의 지갑"** 유지
+- [ ] **브랜드명은 "벼린"** 유지
 - [ ] **KO 복귀** → 한국어 즉시 복원
 
 #### 4.3.3 dApp 뷰
@@ -373,24 +373,24 @@ pnpm --filter @nodong/desktop tauri dev
 
 ```bash
 cd apps/mobile
-npx @react-native-community/cli@latest init NodongMobile --template react-native-template-typescript@latest
+npx @react-native-community/cli@latest init ByeorinMobile --template react-native-template-typescript@latest
 ```
 
 생성 결과에서 다음 두 폴더만 `apps/mobile/` 로 복사:
 - `ios/`
 - `android/`
 
-그리고 패키지명을 **`top.ttl1.nodong.mobile`** 로 변경:
+그리고 패키지명을 **`top.ttl1.byeorin.mobile`** 로 변경:
 
 - **Android**: `android/app/build.gradle`
   ```gradle
-  applicationId "top.ttl1.nodong.mobile"
+  applicationId "top.ttl1.byeorin.mobile"
   ```
   + `android/app/src/main/AndroidManifest.xml` 의 `package` 속성
-- **iOS**: `ios/NodongMobile/Info.plist` 의 `CFBundleIdentifier` →
+- **iOS**: `ios/ByeorinMobile/Info.plist` 의 `CFBundleIdentifier` →
   ```xml
   <key>CFBundleIdentifier</key>
-  <string>top.ttl1.nodong.mobile</string>
+  <string>top.ttl1.byeorin.mobile</string>
   ```
 
 ### 5.3 실행
@@ -398,7 +398,7 @@ npx @react-native-community/cli@latest init NodongMobile --template react-native
 #### Android
 ```bash
 # 에뮬레이터 또는 실 디바이스 USB 연결 후
-pnpm --filter @nodong/mobile android
+pnpm --filter @byeorin/mobile android
 ```
 
 #### iOS (macOS 전용)
@@ -406,13 +406,13 @@ pnpm --filter @nodong/mobile android
 cd apps/mobile/ios
 pod install
 cd ..
-pnpm --filter @nodong/mobile ios
+pnpm --filter @byeorin/mobile ios
 ```
 
 ### 5.4 체크리스트
 
 #### 5.4.1 첫 진입
-- [ ] 스플래시 → "노동자의 지갑" 로고
+- [ ] 스플래시 → "벼린" 로고
 - [ ] 한국어 UI 기본 (디바이스 locale=ko-KR 가정)
 
 #### 5.4.2 지갑 생성 / 복구
@@ -576,7 +576,7 @@ https://scan.ttl1.top/address/<자기 주소>
 | 1 | **TTL 테스트넷 없음** | 실 송금 검증 불가 | 메인넷 소액으로만 검증 |
 | 2 | iOS/Android 네이티브 폴더 미포함 | 사용자가 §5.2로 생성 | — |
 | 3 | USB VID 미등록 | 펌웨어 BUILD_ASSERT 작동 | release 펌웨어 사용 |
-| 4 | WC v2 모바일 deep-link 미배선 (`nodong://`) | dApp 탭에 "준비 중" | 데스크톱 WC URI 페이스트 사용 |
+| 4 | WC v2 모바일 deep-link 미배선 (`byeorin://`) | dApp 탭에 "준비 중" | 데스크톱 WC URI 페이스트 사용 |
 | 5 | EVM / BTC HW signer | v0.5 예정 | Cosmos/Solana만 HW 가능 |
 | 6 | 다국어: KO/EN 만 (현재) | JA/ZH는 후속 | — |
 | 7 | Reown projectId 미설정 시 dApp 뷰 placeholder | — | env에 projectId 주입 |
@@ -657,18 +657,18 @@ pnpm install && pnpm -r build
 pnpm -r --parallel test
 
 # 웹
-pnpm --filter @nodong/web dev          # 5173
+pnpm --filter @byeorin/web dev          # 5173
 
 # 확장
-pnpm --filter @nodong/extension build  # .output/chrome-mv3/
+pnpm --filter @byeorin/extension build  # .output/chrome-mv3/
 
 # 데스크톱
-pnpm --filter @nodong/desktop dev          # Vite 단독
-pnpm --filter @nodong/desktop tauri dev    # 풀 네이티브
+pnpm --filter @byeorin/desktop dev          # Vite 단독
+pnpm --filter @byeorin/desktop tauri dev    # 풀 네이티브
 
 # 모바일
-pnpm --filter @nodong/mobile android
-pnpm --filter @nodong/mobile ios
+pnpm --filter @byeorin/mobile android
+pnpm --filter @byeorin/mobile ios
 
 # 검증
 node scripts/verify-addresses.mjs       # 10/10
@@ -697,4 +697,4 @@ node scripts/verify-addresses.mjs       # 10/10
 
 피드백은 §10 양식으로 부탁드립니다.
 
-— 노동자의 지갑 팀
+— 벼린 팀

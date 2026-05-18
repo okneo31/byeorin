@@ -1,12 +1,12 @@
-# 노동자의 지갑 Cold — Hardware Specification (v0)
+# 벼린 요세 — Hardware Specification (v0)
 
-> 노동자의 지갑 — 노동의 가치를 지키는 작은 금고. *Worker's Wallet Cold: a small vault for the value of labor.*
+> 벼린 — 노동의 가치를 지키는 작은 금고. *Worker's Wallet Cold: a small vault for the value of labor.*
 
 | Field | Value |
 |---|---|
 | Document version | v0 (pre-EVT) |
 | Date | 2026-05 |
-| Owner | Hardware team, 노동자의 지갑 project |
+| Owner | Hardware team, 벼린 project |
 | Status | Draft — for hardware vendor + SE distributor review |
 | Companion document | `docs/PLAN.md` §3 |
 
@@ -14,8 +14,8 @@
 
 ## 1. Overview
 
-**노동자의 지갑 Cold** is a USB-C + BLE hardware wallet co-designed with the
-노동자의 지갑 software suite (Web / Browser-Extension / Desktop / Mobile)
+**벼린 요세** is a USB-C + BLE hardware wallet co-designed with the
+벼린 software suite (Web / Browser-Extension / Desktop / Mobile)
 already shipping atop `packages/wallet-sdk`. The device generates and stores
 BIP-39 seeds inside a CC EAL6+ Secure Element, displays transaction details on
 a 1.54" e-ink panel, and requires physical button confirmation before any
@@ -75,7 +75,7 @@ hashes to sign and never the parsed transaction**.
 
 ```
         ┌────────── Host (PC / Phone) ───────────┐
-        │  노동자의 지갑 SW (Web/Ext/Desk/Mobile)│
+        │  벼린 SW (Web/Ext/Desk/Mobile)│
         │  @ledgerhq/hw-transport-*  (HID/BLE)   │
         └───────────────┬────────────────────────┘
                         │  Ledger-style APDU
@@ -293,7 +293,7 @@ Optional 1V8 rail (DNP footprint): AP2112K-1.8 LDO from 3V3, populated only if a
 
 - USB-IF VID/PID strategy: **Apply for a real USB-IF VID** (cost: USD ~6,000 one-time) — required for Apple notarisation and to avoid VID/PID squatting. Until issued, use a sub-licensed PID from openmoko/pid.codes for EVT/DVT only.
 - Class: HID, single Interface, Report Size 64 bytes IN + 64 bytes OUT, no consumer reports — same descriptor shape as Ledger Nano S so `@ledgerhq/hw-transport-webhid` enumerates without changes.
-- Reported product string: `"Nodong Cold"`.
+- Reported product string: `"Byeorin Yose"`.
 
 ### 8.2 APDU Framing (Ledger-compatible)
 
@@ -313,7 +313,7 @@ convention) with our own INS bytes per chain app — see `firmware/protocol.md`
 
 ### 8.3 BLE GATT
 
-- Custom Primary Service UUID: `6e400001-1234-4e6f-646f-6e672d77616c` (deterministic from "nodong-walet"; final UUID issued at DVT).
+- Custom Primary Service UUID: `6e400001-1234-4e6f-646f-6e672d77616c` (deterministic from "byeorin-walet"; final UUID issued at DVT).
 - Two characteristics:
   - `…-0002` Write, Write-Without-Response (host → device, APDU chunks, 244 B MTU)
   - `…-0003` Notify (device → host)

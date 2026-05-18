@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
- * 노동자의 지갑 Cold — Cosmos chain-app.
+ * 벼린 요세 — Cosmos chain-app.
  *
  * Recipients are bech32 strings ("cosmos1..." / "ttl1..."). We render
  * them with the HRP intact so the user can sanity-check the network
@@ -11,9 +11,9 @@
 
 #include <string.h>
 
-LOG_MODULE_REGISTER(nodong_cosmos, CONFIG_LOG_DEFAULT_LEVEL);
+LOG_MODULE_REGISTER(byeorin_cosmos, CONFIG_LOG_DEFAULT_LEVEL);
 
-enum nodong_confirm_result cosmos_app_confirm(const uint8_t *chain_label,
+enum byeorin_confirm_result cosmos_app_confirm(const uint8_t *chain_label,
 					      size_t chain_label_len,
 					      const uint8_t *to_bech32,
 					      size_t to_len,

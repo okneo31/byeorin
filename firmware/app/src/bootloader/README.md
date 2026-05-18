@@ -1,6 +1,6 @@
-# Bootloader — 노동자의 지갑 Cold
+# Bootloader — 벼린 요세
 
-The 노동자의 지갑 Cold uses **MCUBoot** as its secure bootloader. MCUBoot is built as a **separate Zephyr application**; the manifest (`firmware/west.yml`) pulls in `mcuboot` v2.1.0 alongside Zephyr.
+The 벼린 요세 uses **MCUBoot** as its secure bootloader. MCUBoot is built as a **separate Zephyr application**; the manifest (`firmware/west.yml`) pulls in `mcuboot` v2.1.0 alongside Zephyr.
 
 ## Why MCUBoot
 
@@ -11,7 +11,7 @@ The 노동자의 지갑 Cold uses **MCUBoot** as its secure bootloader. MCUBoot 
 
 ## Flash layout
 
-Matches `app/boards/nrf52840_nodong_cold.overlay`:
+Matches `app/boards/nrf52840_byeorin_yose.overlay`:
 
 | Partition       | Offset     | Size      | Notes                                       |
 |-----------------|-----------:|----------:|---------------------------------------------|

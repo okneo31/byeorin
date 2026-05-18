@@ -1,4 +1,4 @@
-# 법률 자문 의뢰서 — 노동자의 지갑 (Worker's Wallet)
+# 법률 자문 의뢰서 — 벼린 (Worker's Wallet)
 
 **Legal Engagement Brief — Worker's Wallet (KR primary market)**
 
@@ -32,7 +32,7 @@ The seven questions in section 3 are the minimum set. The firm is welcome to rai
 
 ### 2.1 제품 개요
 
-"노동자의 지갑(Worker's Wallet)"은 **비커스토디얼(non-custodial) 멀티체인 암호화폐 월릿**입니다. 사용자는 본인의 시드 구문/개인키를 본인의 디바이스(브라우저, PC, 모바일, 하드웨어 디바이스)에 저장하며, **운영사는 어떤 시점에도 사용자의 시드/키/자금을 보관·접근·전송할 수 없습니다.**
+"벼린(Worker's Wallet)"은 **비커스토디얼(non-custodial) 멀티체인 암호화폐 월릿**입니다. 사용자는 본인의 시드 구문/개인키를 본인의 디바이스(브라우저, PC, 모바일, 하드웨어 디바이스)에 저장하며, **운영사는 어떤 시점에도 사용자의 시드/키/자금을 보관·접근·전송할 수 없습니다.**
 
 제품군:
 
@@ -127,7 +127,7 @@ The seven questions in section 3 are the minimum set. The firm is welcome to rai
 
 (a) **금융위 가상자산 광고 가이드라인** (있다면 최신 버전 기준) 상 우리 마케팅의 허용 한계. "수익률·시세전망" 표시 금지, 위험 고지 의무 등.
 
-(b) **표시·광고의 공정화에 관한 법률** 상 부당광고 리스크. "노동자의 지갑" 브랜딩이 특정 계층 호객 행위로 해석될 위험.
+(b) **표시·광고의 공정화에 관한 법률** 상 부당광고 리스크. "벼린" 브랜딩이 특정 계층 호객 행위로 해석될 위험.
 
 (c) **인플루언서·SNS 마케팅** 시 광고 표시 의무, 후원 표시 의무 (공정거래위원회 가이드라인).
 

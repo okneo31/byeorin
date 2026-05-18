@@ -2,10 +2,10 @@
 # fragments and CMake hooks without the user passing -DEXTRA_* flags.
 #
 # The actual application lives under app/. By exposing both as a Zephyr
-# "module" we get to ship board-overlays, Kconfig symbols (CONFIG_NODONG_*),
+# "module" we get to ship board-overlays, Kconfig symbols (CONFIG_BYEORIN_*),
 # and (future) shared library code under firmware/lib/ from a single place.
 
-name: nodong_cold
+name: byeorin_yose
 
 build:
   cmake: ../app
@@ -16,5 +16,5 @@ build:
 
 # Application identity — surfaced in the MCUBoot image header.
 package-helpers:
-  - name: nodong_cold
+  - name: byeorin_yose
     version: 0.0.1-dev

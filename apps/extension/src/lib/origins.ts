@@ -1,4 +1,4 @@
-// 노동자의 지갑 — 연결 승인 origin 관리 모듈.
+// 벼린 — 연결 승인 origin 관리 모듈.
 //
 // EIP-1102/1193 의 명시적 사용자 동의(per-origin consent)를 영속화한다.
 // chrome.storage.local 에는 origin 문자열 배열만 저장한다.

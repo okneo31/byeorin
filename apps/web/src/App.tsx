@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Logo } from '@nodong/design-system';
-import { LocaleSwitch, useT } from '@nodong/i18n/react';
+import { Logo } from '@byeorin/design-system';
+import { LocaleSwitch, useT } from '@byeorin/i18n/react';
 import { Home } from './screens/Home.js';
 import { Account } from './screens/Account.js';
 import { Send } from './screens/Send.js';

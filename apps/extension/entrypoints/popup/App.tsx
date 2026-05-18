@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createMnemonic, type HwAppName } from '@nodong/wallet-sdk/core';
-import { ShellError } from '@nodong/shell-core';
-import { LocaleSwitch, useT } from '@nodong/i18n/react';
-import { Logo } from '@nodong/design-system';
+import { createMnemonic, type HwAppName } from '@byeorin/wallet-sdk/core';
+import { ShellError } from '@byeorin/shell-core';
+import { LocaleSwitch, useT } from '@byeorin/i18n/react';
+import { Logo } from '@byeorin/design-system';
 import {
   connectHardware,
   disconnectHardware,
@@ -24,10 +24,10 @@ import {
   type GrantRecord,
 } from '../../src/lib/grants.js';
 
-// 노동자의 지갑 — 확장 팝업.
+// 벼린 — 확장 팝업.
 // 셸 수준: 없음 → 생성/복구 → 상태표시 → 로그아웃.
 // v0.1: 평문 니모닉을 chrome.storage.session(휘발) 에만 저장 — 모든 라이프사이클은
-//       @nodong/shell-core 의 WalletStore 가 담당.
+//       @byeorin/shell-core 의 WalletStore 가 담당.
 // TODO(v0.2): passphrase + scrypt + AES-GCM keystore 도입.
 
 type Mode = 'home' | 'create' | 'restore';
@@ -200,16 +200,16 @@ export function App() {
 }
 
 /**
- * 헤더 — 빨간 인장(Logo mark) + "노동자의 지갑" 워드마크 + 로케일 스위치.
+ * 헤더 — 빨간 인장(Logo mark) + "벼린" 워드마크 + 로케일 스위치.
  *
- * Playwright smoke 가 `header.brand >> text=노동자의 지갑` 로 셀렉트하므로,
+ * Playwright smoke 가 `header.brand >> text=벼린` 로 셀렉트하므로,
  *  - 루트는 반드시 <header class="brand">
- *  - 내부 어딘가에 "노동자의 지갑" 텍스트 노드 존재
+ *  - 내부 어딘가에 "벼린" 텍스트 노드 존재
  * 두 조건을 만족하면 클래스/구조는 자유롭게 바꿔도 된다.
  */
 function BrandHeader({ t }: { t: (k: string) => string }) {
-  // Logo 의 기본 <title> 은 "노동자의 지갑" 이라 워드마크 <span> 과 동일 텍스트가
-  // 두 노드에 존재하게 되고, Playwright strict-mode `text=노동자의 지갑` 가
+  // Logo 의 기본 <title> 은 "벼린" 이라 워드마크 <span> 과 동일 텍스트가
+  // 두 노드에 존재하게 되고, Playwright strict-mode `text=벼린` 가
   // 두 곳 모두 매칭돼 실패한다. 시각 마크는 워드마크가 옆에 있어 의미를 충분히
   // 전달하므로 로고에는 (브랜드명이 포함되지 않는) 별도 라벨을 준다.
   const brandName = t('brand.name');

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# 노동자의 지갑 Cold — application CMakeLists.
+# 벼린 요세 — application CMakeLists.
 #
 # Targets Zephyr 3.7. Builds against board overlays in ./boards/.
 # Bootloader (MCUBoot) is a separate build configuration — see src/bootloader/README.md.
@@ -14,10 +14,10 @@ endif()
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
-project(nodong_cold
+project(byeorin_yose
   VERSION 0.0.1
   LANGUAGES C
-  DESCRIPTION "Worker's Wallet (노동자의 지갑) Cold — hardware wallet firmware"
+  DESCRIPTION "Worker's Wallet (벼린) Cold — hardware wallet firmware"
 )
 
 # C99 + a couple of common warning escalations.

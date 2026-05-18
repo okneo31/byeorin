@@ -1,4 +1,4 @@
-# 노동자의 지갑 Cold — Hardware Threat Model (v0)
+# 벼린 요세 — Hardware Threat Model (v0)
 
 Companion to `hardware/SPEC.md`. References to spec sections use the form `SPEC §N`.
 

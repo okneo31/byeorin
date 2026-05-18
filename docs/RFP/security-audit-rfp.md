@@ -1,6 +1,6 @@
-# Security Audit RFP — Worker's Wallet (노동자의 지갑)
+# Security Audit RFP — Worker's Wallet (벼린)
 
-**Project**: Worker's Wallet (노동자의 지갑) — multi-chain non-custodial wallet
+**Project**: Worker's Wallet (벼린) — multi-chain non-custodial wallet
 **Issued by**: [COMPANY_LEGAL_NAME] ([COMPANY_SHORT_NAME])
 **Primary contact**: [YOUR_NAME], [YOUR_TITLE]
 **Email (PGP preferred)**: [YOUR_EMAIL]
@@ -23,7 +23,7 @@ This document is sent to a shortlist of 3-5 firms. Sections marked with `[PLACEH
 
 ### 1.1 What it is
 
-Worker's Wallet (Korean: 노동자의 지갑) is a non-custodial, multi-chain wallet for retail end users. The product family is:
+Worker's Wallet (Korean: 벼린) is a non-custodial, multi-chain wallet for retail end users. The product family is:
 
 - **SDK** (`packages/wallet-sdk`) — TypeScript library with chain adapters (signing, key derivation, encoding, RPC, fee estimation) for EVM, UTXO (BTC/LTC), Cosmos SDK chains, Solana, TON, Aptos, Sui — 9 adapters in total.
 - **Shell core** (`packages/shell-core`) — wallet lifecycle, session, account model, keystore integration. Used by all four UI shells.

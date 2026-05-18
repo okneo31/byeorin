@@ -15,9 +15,9 @@ import {
   TTL_CHAIN,
   type Activity as ActivityT,
   type WalletAccount,
-} from '@nodong/wallet-sdk';
-import { AmountDisplay, Button, Card } from '@nodong/design-system';
-import { useT } from '@nodong/i18n/react';
+} from '@byeorin/wallet-sdk';
+import { AmountDisplay, Button, Card } from '@byeorin/design-system';
+import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../wallet-store.js';
 
 interface Props {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Independent verification of cross-chain addresses derived by
- * `@nodong/wallet-sdk` from the standard test mnemonic:
+ * `@byeorin/wallet-sdk` from the standard test mnemonic:
  *   "test test test test test test test test test test test junk"
  *
  * For each chain we compute the address three ways:

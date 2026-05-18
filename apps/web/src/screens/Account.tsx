@@ -8,9 +8,9 @@ import {
   type DiscoveredBalance,
   type TokenInfo,
   type WalletAccount,
-} from '@nodong/wallet-sdk';
-import { AddressDisplay, AmountDisplay, Button, Card } from '@nodong/design-system';
-import { useT } from '@nodong/i18n/react';
+} from '@byeorin/wallet-sdk';
+import { AddressDisplay, AmountDisplay, Button, Card } from '@byeorin/design-system';
+import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../wallet-store.js';
 
 interface Props {

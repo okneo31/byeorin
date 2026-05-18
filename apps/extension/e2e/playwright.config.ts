@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-// Playwright config for "노동자의 지갑" MV3 extension smoke tests.
+// Playwright config for "벼린" MV3 extension smoke tests.
 //
 // 핵심:
 //  - MV3 확장은 launchPersistentContext 로 --load-extension 인자를 줘야 로드된다.

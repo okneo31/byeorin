@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useT } from '@nodong/i18n/react';
+import { useT } from '@byeorin/i18n/react';
 import type { BackgroundMessage, ConnectContext } from '../../src/lib/rpc.js';
 
-// 노동자의 지갑 — 사이트 연결 동의 popup.
+// 벼린 — 사이트 연결 동의 popup.
 //
 // background 가 chrome.windows.create('connect.html?origin=...&requestId=...') 로 띄운다.
 // 본 화면은:

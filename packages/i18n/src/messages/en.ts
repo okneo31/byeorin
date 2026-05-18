@@ -1,7 +1,7 @@
 // en.ts — English catalog.
 //
 // Translation policy:
-//  - Brand name "노동자의 지갑" stays in Korean. The English subtitle "Worker's Wallet"
+//  - Brand name "벼린" stays in Korean. The English subtitle "Worker's Wallet"
 //    appears alongside it in places where a tagline is appropriate.
 //  - Cryptocurrency symbols (TTL, BTC, ETH, ATOM, SOL...) are never translated.
 //  - Tone: plain, friendly, pro-labor. We avoid corporate-speak.
@@ -11,10 +11,10 @@ import type { Catalog } from '../i18n.js';
 
 export const en: Catalog = {
   // ──── Brand / common ────
-  'brand.name': '노동자의 지갑',
+  'brand.name': '벼린',
   'brand.subtitle_en': 'Worker\'s Wallet',
   'brand.tagline': 'Self-determination for working people.',
-  'app.title': '노동자의 지갑 — Worker\'s Wallet',
+  'app.title': '벼린 — Worker\'s Wallet',
 
   'common.back': 'Back',
   'common.cancel': 'Cancel',
@@ -47,7 +47,7 @@ export const en: Catalog = {
   'home.recover_question': 'Already have a recovery phrase?',
   'home.create_button': 'Create wallet',
   'home.recover_button': 'Recover',
-  'home.welcome_title': 'Welcome to 노동자의 지갑',
+  'home.welcome_title': 'Welcome to 벼린',
   'home.welcome_lead': 'A non-custodial desktop wallet. Create a fresh wallet or restore an existing recovery phrase.',
   'home.start_label': 'Get started',
   'home.create_new_wallet': 'Create new wallet',
@@ -353,8 +353,8 @@ export const en: Catalog = {
   'dapp.title_full': 'dApp connection (WalletConnect)',
   'dapp.lead': 'Paste the wc: URI shown by the dApp below to start pairing.',
   'dapp.lead_mobile': 'WalletConnect v2 — connect to dApps securely.',
-  'dapp.wc_name_desktop': '노동자의 지갑 (Desktop)',
-  'dapp.wc_name_mobile': '노동자의 지갑 (Mobile)',
+  'dapp.wc_name_desktop': '벼린 (Desktop)',
+  'dapp.wc_name_mobile': '벼린 (Mobile)',
   'dapp.wc_description': 'A multichain wallet for the TTL ecosystem',
   'dapp.init_failed': 'Initialization failed: {detail}',
   'dapp.signer_not_ready': 'The wallet is not ready. Please unlock first.',
@@ -394,7 +394,7 @@ export const en: Catalog = {
   'settings.title': 'Settings',
   'settings.lead': 'Manage language, theme, hardware wallet, and more.',
   'settings.language.title': 'Language',
-  'settings.language.help': 'The brand name "노동자의 지갑" stays in Korean even in the English UI.',
+  'settings.language.help': 'The brand name "벼린" stays in Korean even in the English UI.',
   'settings.theme.title': 'Theme',
   'settings.theme.light': 'Light',
   'settings.theme.dark': 'Dark',
@@ -405,6 +405,6 @@ export const en: Catalog = {
   'settings.hw.aria_label': 'Connect hardware wallet (coming soon)',
   'settings.hw.note': 'Ledger / Trezor over USB support is coming soon.',
   'settings.info.title': 'About',
-  'settings.info.app_line': '노동자의 지갑 (Worker\'s Wallet) — Desktop · v{version}',
+  'settings.info.app_line': '벼린 (Worker\'s Wallet) — Desktop · v{version}',
   'settings.info.chain_line': 'TTL Chain ID 7777 · https://rpc.ttl1.top',
 };

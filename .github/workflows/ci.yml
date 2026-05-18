@@ -37,11 +37,11 @@ jobs:
       - name: Typecheck (all workspaces)
         run: pnpm -r typecheck
 
-      - name: Test — @nodong/wallet-sdk
-        run: pnpm --filter @nodong/wallet-sdk test
+      - name: Test — @byeorin/wallet-sdk
+        run: pnpm --filter @byeorin/wallet-sdk test
 
-      - name: Test — @nodong/shell-core
-        run: pnpm --filter @nodong/shell-core test
+      - name: Test — @byeorin/shell-core
+        run: pnpm --filter @byeorin/shell-core test
 
       - name: Build (all workspaces)
         run: pnpm -r build

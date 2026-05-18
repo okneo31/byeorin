@@ -1,5 +1,5 @@
 /**
- * RN UI primitives for `apps/mobile`. Mirrors the API of `@nodong/design-system`
+ * RN UI primitives for `apps/mobile`. Mirrors the API of `@byeorin/design-system`
  * HTML components where the shapes translate cleanly to React Native.
  *
  * These are deliberately NOT shared with web/desktop — they depend on RN core

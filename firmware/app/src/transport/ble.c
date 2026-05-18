@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  * SECURITY-CRITICAL: changes require security review.
- * 노동자의 지갑 Cold — BLE GATT transport.
+ * 벼린 요세 — BLE GATT transport.
  *
  * Protocol summary (mirrors transport/ble.h):
  *
@@ -26,7 +26,7 @@
  *   - CCC descriptor also requires encryption so an unpaired peer
  *     cannot even subscribe to notifications.
  *   - apdu.c gates SIGN_HASH off the BLE transport unless the build
- *     opts in via CONFIG_NODONG_ALLOW_BLE_SIGNING. We do NOT need to
+ *     opts in via CONFIG_BYEORIN_ALLOW_BLE_SIGNING. We do NOT need to
  *     re-check here; the dispatch layer is authoritative.
  *   - Authentication failures (pairing rejected by the user) are
  *     LOG_ERR'd so a noisy attacker shows up in field-logs.
@@ -48,7 +48,7 @@
 #include <zephyr/settings/settings.h>
 #endif
 
-LOG_MODULE_REGISTER(nodong_ble, CONFIG_LOG_DEFAULT_LEVEL);
+LOG_MODULE_REGISTER(byeorin_ble, CONFIG_LOG_DEFAULT_LEVEL);
 
 /*
  * Service UUID block. These are PLACEHOLDERS — a real allocation must
@@ -74,7 +74,7 @@ static struct bt_uuid_128 ww_svc_uuid    = BT_UUID_INIT_128(BT_UUID_WW_SVC_VAL);
 static struct bt_uuid_128 ww_write_uuid  = BT_UUID_INIT_128(BT_UUID_WW_WRITE_VAL);
 static struct bt_uuid_128 ww_notify_uuid = BT_UUID_INIT_128(BT_UUID_WW_NOTIFY_VAL);
 
-static nodong_ble_apdu_cb m_cb;
+static byeorin_ble_apdu_cb m_cb;
 static bool               m_notify_enabled;
 static struct bt_conn    *m_conn;       /* current peer (peripheral, max 1) */
 static bool               m_advertising;
@@ -123,10 +123,10 @@ static ssize_t on_write_apdu(struct bt_conn *conn,
 	}
 	/*
 	 * MUST validate length BEFORE handing the pointer to the next
-	 * layer. CONFIG_NODONG_MAX_APDU_LEN is the hard ceiling shared
+	 * layer. CONFIG_BYEORIN_MAX_APDU_LEN is the hard ceiling shared
 	 * with the USB-HID transport and the main-thread queue buffer.
 	 */
-	if (len > (uint16_t)CONFIG_NODONG_MAX_APDU_LEN) {
+	if (len > (uint16_t)CONFIG_BYEORIN_MAX_APDU_LEN) {
 		ND_LOG_WRN("ble: oversize write len=%u, rejecting", len);
 		return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
 	}
@@ -190,18 +190,18 @@ static const struct bt_data k_adv[] = {
 	 * Use the Kconfig'd ASCII name. The pretty Korean name
 	 * "노동자의지갑" is 9 UTF-8 code-points × 3 bytes = 27 bytes which
 	 * blows the BLE adv length budget once flags + UUID are added, so
-	 * we ship "NodongCold" by default. The full name can still be
+	 * we ship "ByeorinYose" by default. The full name can still be
 	 * surfaced in a GAP Device Name characteristic if desired.
 	 */
 	BT_DATA(BT_DATA_NAME_COMPLETE,
-		CONFIG_NODONG_BLE_NAME, sizeof(CONFIG_NODONG_BLE_NAME) - 1),
+		CONFIG_BYEORIN_BLE_NAME, sizeof(CONFIG_BYEORIN_BLE_NAME) - 1),
 };
 
 static const struct bt_data k_scan_rsp[] = {
 	BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_WW_SVC_VAL),
 };
 
-void nodong_ble_register_apdu_cb(nodong_ble_apdu_cb cb) { m_cb = cb; }
+void byeorin_ble_register_apdu_cb(byeorin_ble_apdu_cb cb) { m_cb = cb; }
 
 /* ----------------------- Connection callbacks --------------------------- */
 
@@ -258,7 +258,7 @@ static void on_disconnected(struct bt_conn *conn, uint8_t reason)
 	 * deliberately do not retry in a tight loop here — the next call
 	 * site (UI button or main-loop tick) can re-arm.
 	 */
-	(void)nodong_ble_start_advertising();
+	(void)byeorin_ble_start_advertising();
 }
 
 static void on_security_changed(struct bt_conn *conn,
@@ -297,7 +297,7 @@ static void on_le_param_updated(struct bt_conn *conn,
 		   interval, latency, timeout);
 }
 
-BT_CONN_CB_DEFINE(nodong_conn_cb) = {
+BT_CONN_CB_DEFINE(byeorin_conn_cb) = {
 	.connected        = on_connected,
 	.disconnected     = on_disconnected,
 	.security_changed = on_security_changed,
@@ -362,13 +362,13 @@ static const struct bt_conn_auth_cb m_auth_cb = {
 	 * window. Before shipping:
 	 *   1) provision a per-device 6-digit passkey into keystore-meta
 	 *      at manufacture time,
-	 *   2) call bt_passkey_set() from nodong_ble_init() before
+	 *   2) call bt_passkey_set() from byeorin_ble_init() before
 	 *      bt_enable() (or immediately after, per Zephyr docs),
 	 *   3) wire a passkey_display callback that paints the passkey on
 	 *      the e-ink during the pairing exchange so the user can
 	 *      compare it against the value shown by the companion app.
 	 * Until (1)–(3) ship, BLE pairing MUST be considered untrusted and
-	 * SIGN_HASH over BLE MUST stay off (see CONFIG_NODONG_ALLOW_BLE_SIGNING).
+	 * SIGN_HASH over BLE MUST stay off (see CONFIG_BYEORIN_ALLOW_BLE_SIGNING).
 	 */
 };
 
@@ -380,7 +380,7 @@ static const struct bt_conn_auth_info_cb m_auth_info_cb = {
 
 /* ----------------------- Lifecycle -------------------------------------- */
 
-int nodong_ble_init(void)
+int byeorin_ble_init(void)
 {
 	int rc;
 
@@ -449,7 +449,7 @@ int nodong_ble_init(void)
  * cleanly before swapping, then bt_enable() again afterwards.
  */
 
-int nodong_ble_start_advertising(void)
+int byeorin_ble_start_advertising(void)
 {
 	if (!m_bt_enabled) {
 		return -EINVAL;
@@ -498,11 +498,11 @@ int nodong_ble_start_advertising(void)
 		return rc;
 	}
 	m_advertising = true;
-	ND_LOG_INF("ble: advertising as '%s'", CONFIG_NODONG_BLE_NAME);
+	ND_LOG_INF("ble: advertising as '%s'", CONFIG_BYEORIN_BLE_NAME);
 	return 0;
 }
 
-void nodong_ble_stop_advertising(void)
+void byeorin_ble_stop_advertising(void)
 {
 	if (!m_advertising) {
 		return;
@@ -516,12 +516,12 @@ void nodong_ble_stop_advertising(void)
 
 /* ----------------------- TX: response → notifications ------------------- */
 
-int nodong_ble_send(const uint8_t *apdu, size_t len)
+int byeorin_ble_send(const uint8_t *apdu, size_t len)
 {
 	if (!apdu || len == 0) {
 		return -EINVAL;
 	}
-	if (len > (size_t)CONFIG_NODONG_MAX_APDU_LEN) {
+	if (len > (size_t)CONFIG_BYEORIN_MAX_APDU_LEN) {
 		return -EINVAL;
 	}
 	if (!m_conn || !m_notify_enabled) {
@@ -544,7 +544,7 @@ int nodong_ble_send(const uint8_t *apdu, size_t len)
 		return -EMSGSIZE;
 	}
 
-	uint8_t  frame[CONFIG_NODONG_MAX_APDU_LEN + 7];
+	uint8_t  frame[CONFIG_BYEORIN_MAX_APDU_LEN + 7];
 	size_t   cursor = 0;
 	uint16_t seq    = 0;
 

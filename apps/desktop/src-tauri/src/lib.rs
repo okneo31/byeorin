@@ -1,9 +1,9 @@
-// 노동자의 지갑 — Tauri 2 library entry point.
+// 벼린 — Tauri 2 library entry point.
 // Keeping the runtime in `lib.rs` makes mobile targets (iOS/Android) trivial later.
 
 #[tauri::command]
 fn greet(name: &str) -> String {
-    format!("안녕하세요, {name}! 노동자의 지갑입니다.")
+    format!("안녕하세요, {name}! 벼린입니다.")
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

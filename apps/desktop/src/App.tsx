@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Logo } from '@nodong/design-system';
-import { LocaleSwitch, useT } from '@nodong/i18n/react';
+import { Button, Logo } from '@byeorin/design-system';
+import { LocaleSwitch, useT } from '@byeorin/i18n/react';
 import { Wallet } from './views/Wallet.js';
 import { Send } from './views/Send.js';
 import { Portfolio } from './views/Portfolio.js';

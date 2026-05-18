@@ -6,7 +6,7 @@
 //
 // All RPC payloads are JSON-RPC-style { id, method, params }.
 
-export const NODONG_MSG_TAG = 'nodong-wallet';
+export const BYEORIN_MSG_TAG = 'byeorin-wallet';
 
 export type JsonRpcRequest = {
   id: number;
@@ -28,9 +28,9 @@ export type JsonRpcResponse = JsonRpcSuccess | JsonRpcError;
 
 // Window message envelope between inpage <-> content script.
 export type WindowEnvelope =
-  | { tag: typeof NODONG_MSG_TAG; dir: 'page-to-cs'; payload: JsonRpcRequest }
-  | { tag: typeof NODONG_MSG_TAG; dir: 'cs-to-page'; payload: JsonRpcResponse }
-  | { tag: typeof NODONG_MSG_TAG; dir: 'cs-to-page-event'; event: string; data?: unknown };
+  | { tag: typeof BYEORIN_MSG_TAG; dir: 'page-to-cs'; payload: JsonRpcRequest }
+  | { tag: typeof BYEORIN_MSG_TAG; dir: 'cs-to-page'; payload: JsonRpcResponse }
+  | { tag: typeof BYEORIN_MSG_TAG; dir: 'cs-to-page-event'; event: string; data?: unknown };
 
 // content script 가 background 로 전달하는 RPC 메시지.
 // background 는 sender.origin 또는 sender.url 에서 origin 을 산출한다(MV3 sender 객체).

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Button, Card } from '@nodong/design-system';
-import { useLocale, useT } from '@nodong/i18n/react';
+import { Button, Card } from '@byeorin/design-system';
+import { useLocale, useT } from '@byeorin/i18n/react';
 
 export function Settings() {
   const t = useT();

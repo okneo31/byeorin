@@ -10,7 +10,7 @@ import {
   type ChainAdapter,
   type SignRequest,
   type TransferIntent,
-} from '@nodong/wallet-sdk';
+} from '@byeorin/wallet-sdk';
 import { WalletStore } from '../src/store.js';
 import { MemorySessionStore, ExtensionSessionStore, type SessionStore } from '../src/session.js';
 import { ShellError } from '../src/errors.js';

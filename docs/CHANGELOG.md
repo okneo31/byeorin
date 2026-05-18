@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to **노동자의 지갑** (Nodong / Worker's Wallet) are documented here.
+All notable changes to **벼린** (Byeorin / Worker's Wallet) are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Until v0.1 tagging, each commit is its own release entry.
 
@@ -47,7 +47,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Unt
 ## [a334e20] feat: review wave 4 — insurance v2 + keystore + ext confirm + RN UI + Tron fix — 2026-05-16
 
 ### Added
-- `docs/INSURANCE.md` (849 lines) — v2 standalone insurance system design. Recommends HW = KB insurance bundle + SW = Nexus/InsurAce distribution + self-pool permanently deferred. 5 kill criteria, legal-first roadmap, 노동자의 지갑 identity alignment check.
+- `docs/INSURANCE.md` (849 lines) — v2 standalone insurance system design. Recommends HW = KB insurance bundle + SW = Nexus/InsurAce distribution + self-pool permanently deferred. 5 kill criteria, legal-first roadmap, 벼린 identity alignment check.
 - `packages/shell-core/src/keystore.ts` — scrypt (N=2^16) + AES-GCM `EncryptedKeystoreStore` with `LocalStorageBackend` + `ChromeLocalBackend`.
 - `apps/extension/entrypoints/confirm/` — consent popup for `personal_sign` and `eth_sendTransaction`. EIP-191 prefixed hash + v=recovery+27. Hard-enforces chainId 7777 and rejects contract calls (data != 0x) until v0.3.
 - `apps/mobile/src/ui/` — RN primitives (Button / Card / Input / AddressDisplay / AmountDisplay). 3 screens (Home / Account / Send) migrated from inline styles to primitives.
@@ -69,7 +69,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Unt
 - New test: same seed yields `inj1...` 20-byte address ≡ EVM `0x...` 20-byte.
 
 ### Changed
-- `apps/mobile` adopts `@nodong/design-system` — `tokens.color` / `space` / `radius` / `font`. 6 hardcoded hex literals replaced.
+- `apps/mobile` adopts `@byeorin/design-system` — `tokens.color` / `space` / `radius` / `font`. 6 hardcoded hex literals replaced.
 - Korean font stack added (System → Apple SD Gothic Neo / Noto Sans CJK).
 - Dark chrome colors retained at v0.1 (DS exposes light palette only for now).
 
@@ -78,10 +78,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Unt
 
 ---
 
-## [72887dc] refactor: review wave 2 — ChainAdapter signRequests[] + @nodong/shell-core — 2026-05-16
+## [72887dc] refactor: review wave 2 — ChainAdapter signRequests[] + @byeorin/shell-core — 2026-05-16
 
 ### Added
-- `@nodong/shell-core` package — `WalletStore` + `SessionStore` interface. Eliminates wallet-store.ts duplication across 4 shells (web / desktop / mobile / extension).
+- `@byeorin/shell-core` package — `WalletStore` + `SessionStore` interface. Eliminates wallet-store.ts duplication across 4 shells (web / desktop / mobile / extension).
 - `WebSessionStore` (autoRestoreAllowed=false, v0.1 in-memory only — H1 security policy).
 - `ExtensionSessionStore` (`chrome.storage.session`, autoRestoreAllowed=true).
 - `MemorySessionStore` (mobile default).
@@ -104,7 +104,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Unt
 ### Added
 - Extension EIP-1193: per-origin consent flow + connect popup + EIP-6963 announce + scope restricted to `https://` and `localhost` (C1 + H2 + H3).
 - Desktop Wallet: triple-state balance UI (loading / error / success) + "retry" button (M1).
-- Web / Desktop: `@nodong/design-system` adoption (Logo / Button / Card / Input / AddressDisplay / AmountDisplay).
+- Web / Desktop: `@byeorin/design-system` adoption (Logo / Button / Card / Input / AddressDisplay / AmountDisplay).
 - Firmware APDU: APDU_ERR_BAD_LC error code (M5).
 
 ### Changed
@@ -136,7 +136,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Unt
 - `apps/extension` — **WXT** (MV3), EIP-1193 provider, popup.
 - `apps/desktop` — **Tauri 2** + React, `src-tauri/` Rust scaffold (Rust toolchain not required at this stage).
 - `apps/mobile` — **React Native 0.76 Bare** TypeScript, monorepo metro config.
-- `packages/design-system` — `@nodong/design-system`. tokens.css + Logo / Button / Card / Input / AddressDisplay / AmountDisplay.
+- `packages/design-system` — `@byeorin/design-system`. tokens.css + Logo / Button / Card / Input / AddressDisplay / AmountDisplay.
 - `BtcAdapter` — BIP-84 p2wpkh + Esplora, multi-input signing.
 - `XrpAdapter` — xrpl v4, half-SHA-512, DER re-encoding.
 - `CosmosAdapter` — cosmoshub-4 / osmosis-1 / etc., hand-rolled `TxRaw`.
@@ -149,11 +149,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Unt
 
 ---
 
-## [05f00a1] init: monorepo + @nodong/wallet-sdk with EVM/TTL working — 2026-05-15
+## [05f00a1] init: monorepo + @byeorin/wallet-sdk with EVM/TTL working — 2026-05-15
 
 ### Added
 - pnpm + turbo monorepo bootstrap.
-- `@nodong/wallet-sdk` initial scaffold: `Wallet.fromMnemonic` → `Wallet.account(adapter)` → `Wallet.transfer(account, intent)` flow.
+- `@byeorin/wallet-sdk` initial scaffold: `Wallet.fromMnemonic` → `Wallet.account(adapter)` → `Wallet.transfer(account, intent)` flow.
 - `EvmAdapter` working against TTL (chain 7777) via viem.
 - `SoftSigner` (secp256k1 / ed25519, 65-byte `r‖s‖recovery` blob for secp).
 - BIP-39 (English wordlist) + BIP-32 + SLIP-0010.

@@ -1,11 +1,11 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  * SECURITY-CRITICAL: changes require security review.
- * 노동자의 지갑 Cold — USB-HID transport (Ledger-style framing).
+ * 벼린 요세 — USB-HID transport (Ledger-style framing).
  *
  * Protocol summary (mirrors transport/usb_hid.h):
  *
- *   Each HID OUT/IN report is exactly HID_REPORT_LEN (CONFIG_NODONG_USB_HID_REPORT_LEN,
+ *   Each HID OUT/IN report is exactly HID_REPORT_LEN (CONFIG_BYEORIN_USB_HID_REPORT_LEN,
  *   default 64) bytes. Inside each report:
  *
  *     Byte 0..1 : channel ID, big-endian, fixed 0x0101
@@ -58,10 +58,10 @@
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/usb/class/usb_hid.h>
 
-LOG_MODULE_REGISTER(nodong_usb, CONFIG_LOG_DEFAULT_LEVEL);
+LOG_MODULE_REGISTER(byeorin_usb, CONFIG_LOG_DEFAULT_LEVEL);
 
-#define HID_REPORT_LEN  CONFIG_NODONG_USB_HID_REPORT_LEN
-#define MAX_APDU_LEN    CONFIG_NODONG_MAX_APDU_LEN
+#define HID_REPORT_LEN  CONFIG_BYEORIN_USB_HID_REPORT_LEN
+#define MAX_APDU_LEN    CONFIG_BYEORIN_MAX_APDU_LEN
 
 /*
  * Compile-time sanity: the Ledger framing uses an 8-bit-aligned 64-byte
@@ -79,7 +79,7 @@ BUILD_ASSERT(MAX_APDU_LEN >= HID_REPORT_LEN,
  * support up to 1024-byte packets: 64 is the Ledger-protocol convention and
  * what every companion SDK in the wild assumes. Widening this would force
  * SDK changes on every host platform we support. If we ever need to push
- * larger reports, bump CONFIG_NODONG_USB_HID_REPORT_LEN and pin the
+ * larger reports, bump CONFIG_BYEORIN_USB_HID_REPORT_LEN and pin the
  * companion SDK version simultaneously.
  */
 
@@ -91,7 +91,7 @@ BUILD_ASSERT(MAX_APDU_LEN >= HID_REPORT_LEN,
  * reordering shows up at build time, not as a silent enumeration breakage
  * in the field.
  */
-#define NODONG_HID_INTERFACE 0
+#define BYEORIN_HID_INTERFACE 0
 #if defined(CONFIG_USB_CDC_ACM) || defined(CONFIG_USB_MASS_STORAGE)
 /*
  * If another USB class lands in the build, the linker order determines the
@@ -99,7 +99,7 @@ BUILD_ASSERT(MAX_APDU_LEN >= HID_REPORT_LEN,
  * legacy stack's macros, so leave a loud reminder for the embedded dev to
  * re-verify with `lsusb -v` after enabling the additional class.
  */
-#warning "Additional USB class enabled — verify NODONG_HID_INTERFACE is still 0"
+#warning "Additional USB class enabled — verify BYEORIN_HID_INTERFACE is still 0"
 #endif
 
 /*
@@ -117,13 +117,13 @@ BUILD_ASSERT(MAX_APDU_LEN >= HID_REPORT_LEN,
  *
  * We deliberately use BUILD_ASSERT rather than #warning so a release build
  * cannot accidentally ship with the squatted VID; if you are doing bench
- * work, define NODONG_VID_SQUAT_ACK in the per-developer overlay file.
+ * work, define BYEORIN_VID_SQUAT_ACK in the per-developer overlay file.
  */
-#if !defined(NODONG_VID_SQUAT_ACK)
+#if !defined(BYEORIN_VID_SQUAT_ACK)
 BUILD_ASSERT(CONFIG_USB_DEVICE_VID != 0x2C97,
 	     "CONFIG_USB_DEVICE_VID=0x2C97 is Ledger's VID. "
 	     "Allocate our own VID before release, or define "
-	     "NODONG_VID_SQUAT_ACK in a per-developer overlay to silence "
+	     "BYEORIN_VID_SQUAT_ACK in a per-developer overlay to silence "
 	     "this for bench work only. See TODO in usb_hid.c.");
 #endif
 
@@ -143,7 +143,7 @@ struct rx_ctx {
 };
 
 static struct rx_ctx           m_rx;
-static nodong_apdu_inbound_cb  m_inbound_cb;
+static byeorin_apdu_inbound_cb  m_inbound_cb;
 
 /* USB HID device handle + ready flag for write path. */
 static const struct device *m_hdev;
@@ -166,7 +166,7 @@ static void rx_reset(void)
 	memset(m_rx.buf, 0, sizeof(m_rx.buf));
 }
 
-void nodong_usb_hid_register_apdu_cb(nodong_apdu_inbound_cb cb)
+void byeorin_usb_hid_register_apdu_cb(byeorin_apdu_inbound_cb cb)
 {
 	m_inbound_cb = cb;
 }
@@ -228,7 +228,7 @@ static void hid_on_report_out(const uint8_t *report, size_t len)
 	uint16_t seq = ((uint16_t)report[3] << 8) | report[4];
 	size_t   payload_off = 5;
 
-	if (ch != NODONG_HID_CHANNEL_ID || tag != NODONG_HID_TAG_APDU) {
+	if (ch != BYEORIN_HID_CHANNEL_ID || tag != BYEORIN_HID_TAG_APDU) {
 		ND_LOG_WRN("hid: wrong channel/tag");
 		return;
 	}
@@ -352,7 +352,7 @@ static const struct hid_ops m_ops = {
 
 /* ----------------------- Lifecycle -------------------------------------- */
 
-int nodong_usb_hid_init(void)
+int byeorin_usb_hid_init(void)
 {
 	rx_reset();
 
@@ -384,7 +384,7 @@ int nodong_usb_hid_init(void)
 	return 0;
 }
 
-int nodong_usb_hid_start(void)
+int byeorin_usb_hid_start(void)
 {
 	if (!m_hdev) {
 		return -EINVAL;
@@ -414,7 +414,7 @@ int nodong_usb_hid_start(void)
 	return 0;
 }
 
-void nodong_usb_hid_stop(void)
+void byeorin_usb_hid_stop(void)
 {
 	if (!m_started) {
 		return;
@@ -450,7 +450,7 @@ static int wait_in_ready(void)
 	return 0;
 }
 
-int nodong_usb_hid_send(const uint8_t *apdu, size_t len)
+int byeorin_usb_hid_send(const uint8_t *apdu, size_t len)
 {
 	if (!apdu || len == 0 || len > MAX_APDU_LEN) {
 		return -EINVAL;
@@ -465,9 +465,9 @@ int nodong_usb_hid_send(const uint8_t *apdu, size_t len)
 
 	while (cursor < len) {
 		memset(report, 0, sizeof(report));
-		report[0] = (uint8_t)(NODONG_HID_CHANNEL_ID >> 8);
-		report[1] = (uint8_t)(NODONG_HID_CHANNEL_ID & 0xFF);
-		report[2] = NODONG_HID_TAG_APDU;
+		report[0] = (uint8_t)(BYEORIN_HID_CHANNEL_ID >> 8);
+		report[1] = (uint8_t)(BYEORIN_HID_CHANNEL_ID & 0xFF);
+		report[2] = BYEORIN_HID_TAG_APDU;
 		report[3] = (uint8_t)(seq >> 8);
 		report[4] = (uint8_t)(seq & 0xFF);
 

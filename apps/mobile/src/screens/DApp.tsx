@@ -6,8 +6,8 @@ import {
   type WcDelegate,
   type WcSession,
   type WcSessionProposal,
-} from '@nodong/wallet-sdk';
-import { useT } from '@nodong/i18n/react';
+} from '@byeorin/wallet-sdk';
+import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../store';
 import { colors, radius, spacing, theme } from '../theme';
 import { Button, Card, Input } from '../ui';
@@ -21,10 +21,10 @@ import { Button, Card, Input } from '../ui';
  *   - 활성 세션 목록 표시 / 연결 해제
  *
  * Native TODO (deep link / QR):
- *   `nodong://wc?uri=<wc-uri>` 형태의 deep link 를 받아 자동 페어링하려면
+ *   `byeorin://wc?uri=<wc-uri>` 형태의 deep link 를 받아 자동 페어링하려면
  *   - Android: `AndroidManifest.xml` 에 intent-filter 추가
- *       <data android:scheme="nodong" android:host="wc" />
- *   - iOS: `Info.plist` 의 `CFBundleURLTypes` 에 `nodong` scheme 등록
+ *       <data android:scheme="byeorin" android:host="wc" />
+ *   - iOS: `Info.plist` 의 `CFBundleURLTypes` 에 `byeorin` scheme 등록
  *   - JS 측: react-native `Linking.getInitialURL` + `addEventListener('url')`
  *   현재 본 repo 는 `android/` / `ios/` 폴더가 없어 네이티브 설정을 적용할 수
  *   없다. JS 레이어만 ship 하고 네이티브는 별도 PR 로 다룬다.
@@ -38,7 +38,7 @@ interface Props {
 }
 
 const PROJECT_ID =
-  (process.env.WC_PROJECT_ID as string | undefined) ?? '__nodong_dev_placeholder__';
+  (process.env.WC_PROJECT_ID as string | undefined) ?? '__byeorin_dev_placeholder__';
 
 type ProposalView = {
   proposal: WcSessionProposal;
@@ -169,7 +169,7 @@ export function DApp({ onBack }: Props) {
       <Text style={styles.h1}>{t('dapp.title')}</Text>
       <Text style={styles.lead}>{t('dapp.lead_mobile')}</Text>
 
-      {PROJECT_ID === '__nodong_dev_placeholder__' && (
+      {PROJECT_ID === '__byeorin_dev_placeholder__' && (
         <View style={styles.warn}>
           <Text style={styles.warnText}>
             {t('dapp.projectid_missing_mobile')}

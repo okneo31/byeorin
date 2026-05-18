@@ -2,7 +2,7 @@
  * apps/desktop — 데스크톱 셸 전용 CSS.
  *
  * 디자인 토큰과 컴포넌트(.nd-button, .nd-card, .nd-input, .nd-field,
- * .nd-address, .nd-amount)는 @nodong/design-system/tokens.css 가 정의한다.
+ * .nd-address, .nd-amount)는 @byeorin/design-system/tokens.css 가 정의한다.
  * 이 파일은 사이드바 / 메인 패널 / 데스크톱 셸 뷰 크롬만 담는다.
  */
 

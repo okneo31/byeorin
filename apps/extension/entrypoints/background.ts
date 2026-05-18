@@ -9,7 +9,7 @@ import {
 // 좁은 subpath — background SW 는 EVM(TTL) 만 라우팅한다.
 // wallet-sdk 의 메인 barrel 을 import 하면 cosmos/ton/xrp/... 까지 함께 끌려오므로
 // background bundle 도 popup 과 같은 6MB chunk 에 공유돼 SW boot 가 무거워진다.
-import { signEvmMessage, TTL_CHAIN } from '@nodong/wallet-sdk/evm';
+import { signEvmMessage, TTL_CHAIN } from '@byeorin/wallet-sdk/evm';
 import { getActiveAccount, getTtlAdapter, walletStore } from '../src/lib/wallet-service.js';
 import {
   RPC_ERRORS,
@@ -31,7 +31,7 @@ import {
 } from '../src/lib/origins.js';
 import { addGrant, hasGrant, type GrantMethod } from '../src/lib/grants.js';
 
-// 노동자의 지갑 백그라운드 서비스 워커.
+// 벼린 백그라운드 서비스 워커.
 // dApp 으로부터 들어오는 EIP-1193 RPC 를 SDK 로 라우팅한다.
 //
 // C1 fix: eth_requestAccounts 는 origin 별 명시적 사용자 동의를 요구한다.
@@ -672,7 +672,7 @@ async function handleRpc(
       //   - 일부 dApp 은 v3 만 호출하므로 method 별칭으로 받아들여 호환성을 확보한다.
       if (req.method === 'eth_signTypedData_v3') {
         console.warn(
-          '[nodong] eth_signTypedData_v3 is deprecated; routing through v4 path',
+          '[byeorin] eth_signTypedData_v3 is deprecated; routing through v4 path',
         );
       }
       const params = Array.isArray(req.params) ? req.params : [];
@@ -880,7 +880,7 @@ function rejectAllPending(reason: string): void {
   }
   pendingConfirms.clear();
   // 명시적으로 reason 을 로깅(개발자 도구) — 외부에 노출되지 않음.
-  console.warn('[nodong] pending 요청 정리:', reason);
+  console.warn('[byeorin] pending 요청 정리:', reason);
 }
 
 function requestUserConsent(origin: string, address: string): Promise<'approve' | 'reject'> {

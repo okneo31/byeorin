@@ -1,5 +1,5 @@
 /**
- * Card — RN mirror of `@nodong/design-system`'s HTML Card.
+ * Card — RN mirror of `@byeorin/design-system`'s HTML Card.
  *
  * API parity:
  *   elevation: 'flat' | 'default' | 'elevated'   (same)

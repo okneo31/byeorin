@@ -1,5 +1,5 @@
 /**
- * 노동자의 지갑 — RN entry point.
+ * 벼린 — RN entry point.
  * Component name must match `name` in app.json.
  */
 import { AppRegistry } from 'react-native';

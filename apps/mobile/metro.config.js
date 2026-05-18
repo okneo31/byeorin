@@ -5,7 +5,7 @@ const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
  * Metro config tuned for pnpm workspaces.
  *
  * pnpm uses a non-hoisted node_modules layout, so Metro's default upward lookup
- * does not find workspace siblings (e.g. `@nodong/wallet-sdk`). We:
+ * does not find workspace siblings (e.g. `@byeorin/wallet-sdk`). We:
  *   1. Watch the monorepo root so file changes in `packages/*` trigger reloads.
  *   2. Tell Metro exactly where the two node_modules trees live (app + root).
  *   3. Disable hierarchical lookup so resolution is deterministic.

@@ -1,4 +1,4 @@
-// 노동자의 지갑 — extension icon generator (PNG, RGBA8).
+// 벼린 — extension icon generator (PNG, RGBA8).
 //
 // Renders the crossed-pickaxes mark (the brand mark.svg) at 16/32/48/128 and
 // writes them to apps/extension/public/icon/.

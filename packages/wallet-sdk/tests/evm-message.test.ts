@@ -26,7 +26,7 @@ describe('signEvmMessage — EIP-191 personal_sign', () => {
     const privBytes = hexToBytes(HARDHAT_PRIVKEY.slice(2));
     const signer = new SoftSigner({ curve: 'secp256k1', privateKey: privBytes });
 
-    const message = 'Hello nodong';
+    const message = 'Hello byeorin';
     const ours = await signEvmMessage(signer, account.address, message);
     const viemSig = await signMessage({
       message,

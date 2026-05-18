@@ -8,7 +8,7 @@ import {
   type TransferIntent,
   type TxHash,
   type WalletAccount,
-} from '@nodong/wallet-sdk/core';
+} from '@byeorin/wallet-sdk/core';
 import { shellError } from './errors.js';
 import type { SessionStore } from './session.js';
 import { detectWordlist } from './wordlist.js';

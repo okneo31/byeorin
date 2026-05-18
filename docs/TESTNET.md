@@ -2,7 +2,7 @@
 
 This document records what we know (and probed) about TTL chain RPC
 endpoints, the state of a public testnet, and how to broadcast a
-transaction against either from the `@nodong/wallet-sdk`.
+transaction against either from the `@byeorin/wallet-sdk`.
 
 ---
 
@@ -135,7 +135,7 @@ import {
   Wallet,
   EvmAdapter,
   TTL_CHAIN,
-} from '@nodong/wallet-sdk';
+} from '@byeorin/wallet-sdk';
 import { parseEther } from 'viem';
 
 const MNEMONIC = '...your 12/24 BIP-39 words...';

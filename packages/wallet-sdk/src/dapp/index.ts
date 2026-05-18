@@ -1,7 +1,7 @@
 // Public surface for the `dapp/` module.
 //
 // Wallet shells importing WalletConnect should go through
-//   `import { WalletConnectSigner, ... } from '@nodong/wallet-sdk'`
+//   `import { WalletConnectSigner, ... } from '@byeorin/wallet-sdk'`
 // rather than reaching into this file directly.
 
 export {

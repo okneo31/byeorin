@@ -1,6 +1,6 @@
 # firmware/test
 
-Unit + integration tests for the 노동자의 지갑 Cold firmware.
+Unit + integration tests for the 벼린 요세 firmware.
 
 ## Approach
 
@@ -12,7 +12,7 @@ The firmware runs on a Cortex-M4 — we cannot run its tests on the host directl
 2. **Emulated firmware tests via Renode**:
    For modules that need Zephyr running (`transport/usb_hid.c` state machine, `ui/buttons.c` debounce, `ui/confirm.c` flow), we boot the firmware ELF inside [Renode](https://renode.io) with a virtual nRF52840 platform plus a Python-driven SE050 mock and a virtual e-ink panel.
 
-   The Renode scripts will live under `firmware/test/renode/` and are invoked by `pnpm --filter @nodong/firmware-tests run renode`.
+   The Renode scripts will live under `firmware/test/renode/` and are invoked by `pnpm --filter @byeorin/firmware-tests run renode`.
 
 ## What is *not* tested here
 

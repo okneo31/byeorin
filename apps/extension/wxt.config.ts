@@ -1,6 +1,6 @@
 import { defineConfig } from 'wxt';
 
-// 노동자의 지갑 — WXT 빌드 구성 (MV3)
+// 벼린 — WXT 빌드 구성 (MV3)
 // 아이콘 placeholder: 실제 PNG는 packages/design-system 에서 공급 예정.
 // public/icon/{16,32,48,128}.png 는 디자인 자원 합류 후 채워 넣는다.
 export default defineConfig({
@@ -8,11 +8,11 @@ export default defineConfig({
   srcDir: '.',
   outDir: '.output',
   manifest: {
-    name: '노동자의 지갑',
+    name: '벼린',
     description: 'TTL 생태계 멀티체인 월릿 (EIP-1193 호환)',
     permissions: ['storage'],
     action: {
-      default_title: '노동자의 지갑',
+      default_title: '벼린',
     },
     icons: {
       16: 'icon/16.png',

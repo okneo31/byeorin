@@ -1,5 +1,5 @@
 /**
- * AddressDisplay — RN mirror of `@nodong/design-system`'s HTML AddressDisplay.
+ * AddressDisplay — RN mirror of `@byeorin/design-system`'s HTML AddressDisplay.
  *
  * API parity:
  *   address: string                (same)

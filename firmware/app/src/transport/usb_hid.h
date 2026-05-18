@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
- * 노동자의 지갑 Cold — USB-HID transport.
+ * 벼린 요세 — USB-HID transport.
  *
  * APDUs travel inside Ledger-compatible HID reports:
  *
@@ -10,35 +10,35 @@
  *   First fragment only — Byte 5..6 : total APDU length, big-endian
  *   Remaining payload bytes follow until the report is full.
  *
- * Each report is exactly CONFIG_NODONG_USB_HID_REPORT_LEN bytes
+ * Each report is exactly CONFIG_BYEORIN_USB_HID_REPORT_LEN bytes
  * (default 64). Responses use the same framing in reverse.
  */
-#ifndef NODONG_USB_HID_H_
-#define NODONG_USB_HID_H_
+#ifndef BYEORIN_USB_HID_H_
+#define BYEORIN_USB_HID_H_
 
 #include <stddef.h>
 #include <stdint.h>
 
-#define NODONG_HID_CHANNEL_ID   0x0101u
-#define NODONG_HID_TAG_APDU     0x05u
+#define BYEORIN_HID_CHANNEL_ID   0x0101u
+#define BYEORIN_HID_TAG_APDU     0x05u
 
 /* Lifecycle */
-int  nodong_usb_hid_init(void);
-int  nodong_usb_hid_start(void); /* enables the USB device + endpoints */
-void nodong_usb_hid_stop(void);
+int  byeorin_usb_hid_init(void);
+int  byeorin_usb_hid_start(void); /* enables the USB device + endpoints */
+void byeorin_usb_hid_stop(void);
 
 /*
  * Pushes one outgoing APDU response. The transport will fragment it
  * across as many 64-byte reports as needed. Returns 0 on success.
  * Thread context: callable from the dispatcher thread only.
  */
-int nodong_usb_hid_send(const uint8_t *apdu, size_t len);
+int byeorin_usb_hid_send(const uint8_t *apdu, size_t len);
 
 /*
  * Caller-side hook: the transport calls this with a fully reassembled
  * inbound APDU. Implemented by the dispatch layer.
  */
-typedef void (*nodong_apdu_inbound_cb)(const uint8_t *apdu, size_t len);
-void nodong_usb_hid_register_apdu_cb(nodong_apdu_inbound_cb cb);
+typedef void (*byeorin_apdu_inbound_cb)(const uint8_t *apdu, size_t len);
+void byeorin_usb_hid_register_apdu_cb(byeorin_apdu_inbound_cb cb);
 
-#endif /* NODONG_USB_HID_H_ */
+#endif /* BYEORIN_USB_HID_H_ */

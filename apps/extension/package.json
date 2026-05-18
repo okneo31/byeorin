@@ -1,9 +1,9 @@
 {
-  "name": "@nodong/extension",
+  "name": "@byeorin/extension",
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "노동자의 지갑 — 브라우저 확장 (MV3, EIP-1193)",
+  "description": "벼린 — 브라우저 확장 (MV3, EIP-1193)",
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",
@@ -13,10 +13,10 @@
     "test:e2e": "playwright test --config=e2e/playwright.config.ts"
   },
   "dependencies": {
-    "@nodong/design-system": "workspace:*",
-    "@nodong/i18n": "workspace:*",
-    "@nodong/shell-core": "workspace:*",
-    "@nodong/wallet-sdk": "workspace:*",
+    "@byeorin/design-system": "workspace:*",
+    "@byeorin/i18n": "workspace:*",
+    "@byeorin/shell-core": "workspace:*",
+    "@byeorin/wallet-sdk": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "viem": "^2.21.40"

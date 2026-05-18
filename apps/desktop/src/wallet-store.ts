@@ -7,8 +7,8 @@ import {
   type HwAppName,
   type HwSigner,
   type WebHidTransport,
-} from '@nodong/wallet-sdk';
-import { createWalletStore, WebSessionStore } from '@nodong/shell-core';
+} from '@byeorin/wallet-sdk';
+import { createWalletStore, WebSessionStore } from '@byeorin/shell-core';
 
 export const walletStore = createWalletStore({
   defaultAdapter: new EvmAdapter({ chain: TTL_CHAIN }),
@@ -60,7 +60,7 @@ export async function connectHardware(
   appName: HwAppName,
   derivationPath?: string,
 ): Promise<HwAccountState> {
-  const sdk = await import('@nodong/wallet-sdk');
+  const sdk = await import('@byeorin/wallet-sdk');
   const transport = await sdk.WebHidTransport.open({ forceRequest: false });
   const path =
     derivationPath ??

@@ -1,17 +1,17 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
- * 노동자의 지갑 Cold — e-ink display wrapper.
+ * 벼린 요세 — e-ink display wrapper.
  *
  * Panel: 1.54" 200x200, SSD1681 controller (UC8151 is the fallback
  * variant on dev boards). Connected over SPI3 plus DC/RST/BUSY GPIOs
- * as wired in app/boards/nrf52840_nodong_cold.overlay.
+ * as wired in app/boards/nrf52840_byeorin_yose.overlay.
  *
  * Frame buffer is 1bpp (200*200/8 = 5000 bytes). Partial updates are
  * supported on SSD1681 and let us refresh the "current selection"
  * highlight without ghosting the whole screen.
  */
-#ifndef NODONG_DISPLAY_H_
-#define NODONG_DISPLAY_H_
+#ifndef BYEORIN_DISPLAY_H_
+#define BYEORIN_DISPLAY_H_
 
 #include <stddef.h>
 #include <stdint.h>
@@ -43,7 +43,7 @@ typedef enum {
 	ND_ICON_USB,
 	ND_ICON_BLE,
 	ND_ICON_LOCK,
-} nodong_icon_t;
-int  display_draw_icon(uint16_t x, uint16_t y, nodong_icon_t icon);
+} byeorin_icon_t;
+int  display_draw_icon(uint16_t x, uint16_t y, byeorin_icon_t icon);
 
-#endif /* NODONG_DISPLAY_H_ */
+#endif /* BYEORIN_DISPLAY_H_ */

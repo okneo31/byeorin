@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>노동자의 지갑 — 직접 테스트</title>
+  <title>벼린 — 직접 테스트</title>
   <style>
     :root {
       --red: #c41e1e; --black: #0a0a0a; --yellow: #f4c430;
@@ -40,14 +40,14 @@
   </style>
 </head>
 <body>
-  <h1>노동자의 지갑 — 자체 dApp 테스트</h1>
+  <h1>벼린 — 자체 dApp 테스트</h1>
   <p>이 페이지는 EIP-1193 + EIP-6963 모든 핵심 메서드를 직접 호출합니다. 외부 chainId 등록 의존 없음.</p>
 
   <div class="card">
     <h2>1. Provider 발견</h2>
     <div class="row">
       <button onclick="discover()">EIP-6963 announce 수집 (300ms)</button>
-      <button onclick="useNodongDirectly()" class="secondary">window.nodong 직접 사용</button>
+      <button onclick="useByeorinDirectly()" class="secondary">window.byeorin 직접 사용</button>
     </div>
     <pre id="discover-out">대기 중…</pre>
   </div>
@@ -74,7 +74,7 @@
   <div class="card">
     <h2>4. personal_sign — confirm 팝업 검증</h2>
     <label>서명할 메시지 (한글 가능)</label>
-    <textarea id="msg">노동자의 지갑 첫 서명 — Hello from test dApp</textarea>
+    <textarea id="msg">벼린 첫 서명 — Hello from test dApp</textarea>
     <div class="row">
       <button onclick="personalSign()">personal_sign — 확인 팝업이 떠야 함</button>
     </div>
@@ -143,7 +143,7 @@
       window.dispatchEvent(new Event('eip6963:requestProvider'));
       setTimeout(() => {
         window.removeEventListener('eip6963:announceProvider', handler);
-        const found = wallets.find(w => w.rdns === 'top.ttl1.nodong');
+        const found = wallets.find(w => w.rdns === 'top.ttl1.byeorin');
         if (found) {
           provider = wallets[0]; // EIP-6963 detail.provider 가 진짜인데 info 만 쌓았으니 다시 모음
           // 재시도 — provider 객체까지 캡처
@@ -153,31 +153,31 @@
           window.dispatchEvent(new Event('eip6963:requestProvider'));
           setTimeout(() => {
             window.removeEventListener('eip6963:announceProvider', h2);
-            const ours = fullWallets.find(w => w.info.rdns === 'top.ttl1.nodong');
+            const ours = fullWallets.find(w => w.info.rdns === 'top.ttl1.byeorin');
             if (ours) {
               provider = ours.provider;
               log('discover-out', { count: fullWallets.length, wallets: fullWallets.map(w => w.info), active: ours.info });
             } else {
-              log('discover-out', '노동자의 지갑 announce 안 됨. 확장 새로고침 + 페이지 새로고침 필요.', false);
+              log('discover-out', '벼린 announce 안 됨. 확장 새로고침 + 페이지 새로고침 필요.', false);
             }
           }, 200);
         } else {
-          log('discover-out', '노동자의 지갑 못 찾음. announce 이벤트 들었으나 rdns=top.ttl1.nodong 미발견. 확장 활성 확인.', false);
+          log('discover-out', '벼린 못 찾음. announce 이벤트 들었으나 rdns=top.ttl1.byeorin 미발견. 확장 활성 확인.', false);
         }
       }, 300);
     }
 
-    function useNodongDirectly() {
-      if (!window.nodong) {
-        log('discover-out', 'window.nodong 없음. 확장이 inpage 주입 안 함.', false);
+    function useByeorinDirectly() {
+      if (!window.byeorin) {
+        log('discover-out', 'window.byeorin 없음. 확장이 inpage 주입 안 함.', false);
         return;
       }
-      provider = window.nodong;
-      log('discover-out', { source: 'window.nodong', chainId: provider.chainId, isNodong: provider.isNodong });
+      provider = window.byeorin;
+      log('discover-out', { source: 'window.byeorin', chainId: provider.chainId, isByeorin: provider.isByeorin });
     }
 
     function ensureProvider() {
-      if (!provider) provider = window.nodong;
+      if (!provider) provider = window.byeorin;
       if (!provider) throw new Error('Provider 미선택. 1번 박스에서 발견부터.');
       return provider;
     }
@@ -189,7 +189,7 @@
           chainId: p.chainId,
           networkVersion: p.networkVersion,
           isMetaMask: p.isMetaMask,
-          isNodong: p.isNodong,
+          isByeorin: p.isByeorin,
           isConnected: p.isConnected?.(),
           selectedAddress: p.selectedAddress,
         });
@@ -294,7 +294,7 @@
           ],
         },
         primaryType: 'Mail',
-        domain: { name: '노동자의 지갑 테스트', version: '1', chainId: 7777 },
+        domain: { name: '벼린 테스트', version: '1', chainId: 7777 },
         message: { from: 'alice', to: 'bob', content: '안녕하세요' },
       };
       document.getElementById('typed').value = JSON.stringify(json, null, 2);

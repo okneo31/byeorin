@@ -1,5 +1,5 @@
 /**
- * Input — RN mirror of `@nodong/design-system`'s HTML Input.
+ * Input — RN mirror of `@byeorin/design-system`'s HTML Input.
  *
  * API parity:
  *   label?: string                         (same; web accepts ReactNode, RN string)

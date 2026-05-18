@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
- * 노동자의 지갑 Cold — EVM chain-app.
+ * 벼린 요세 — EVM chain-app.
  *
  * Recipient is rendered as 0x-prefixed hex with EIP-55 checksum
  * (validation is done host-side, we just display what we got).
@@ -11,9 +11,9 @@
 #include <stdio.h>
 #include <string.h>
 
-LOG_MODULE_REGISTER(nodong_evm, CONFIG_LOG_DEFAULT_LEVEL);
+LOG_MODULE_REGISTER(byeorin_evm, CONFIG_LOG_DEFAULT_LEVEL);
 
-enum nodong_confirm_result evm_app_confirm(const uint8_t *chain_label,
+enum byeorin_confirm_result evm_app_confirm(const uint8_t *chain_label,
 					   size_t chain_label_len,
 					   const uint8_t *to,
 					   size_t to_len,

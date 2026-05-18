@@ -1,7 +1,7 @@
 {
-  "name": "@nodong/wallet-sdk",
+  "name": "@byeorin/wallet-sdk",
   "version": "0.0.1",
-  "description": "노동자의 지갑 코어 SDK — 멀티체인(EVM/BTC/XRP/Cosmos+) HD 월릿",
+  "description": "벼린 코어 SDK — 멀티체인(EVM/BTC/XRP/Cosmos+) HD 월릿",
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.cjs",

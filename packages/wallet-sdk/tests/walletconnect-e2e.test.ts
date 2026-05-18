@@ -226,7 +226,7 @@ async function makeSigner(kit: MockWalletKit, chainId = 7777): Promise<WalletCon
     metadata: {
       name: 'TTL Wallet (test)',
       description: 'e2e harness',
-      url: 'https://nodong.test',
+      url: 'https://byeorin.test',
       icons: [],
     },
     chainId,
@@ -318,7 +318,7 @@ describe('WalletConnect v2 e2e — full session lifecycle', () => {
     const delegate = makeRealDelegate();
     signer.bindDelegate(delegate);
 
-    const message: Hex = '0x48656c6c6f6e6f646f6e67'; // "Hellonodong"
+    const message: Hex = '0x48656c6c6f6e6f646f6e67'; // "Hellobyeorin"
     kit.emit('session_request', {
       id: 1,
       topic: 'topic-1',
@@ -361,7 +361,7 @@ describe('WalletConnect v2 e2e — full session lifecycle', () => {
     signer.bindDelegate(delegate);
 
     const typed = {
-      domain: { name: 'Nodong', version: '1', chainId: 7777 },
+      domain: { name: 'Byeorin', version: '1', chainId: 7777 },
       types: {
         EIP712Domain: [
           { name: 'name', type: 'string' },
@@ -407,7 +407,7 @@ describe('WalletConnect v2 e2e — full session lifecycle', () => {
     signer.bindDelegate(delegate);
 
     const typed = {
-      domain: { name: 'Nodong', version: '1', chainId: 7777 },
+      domain: { name: 'Byeorin', version: '1', chainId: 7777 },
       types: {
         EIP712Domain: [
           { name: 'name', type: 'string' },

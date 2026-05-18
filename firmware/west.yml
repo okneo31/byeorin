@@ -1,4 +1,4 @@
-# West manifest for 노동자의 지갑 Cold firmware.
+# West manifest for 벼린 요세 firmware.
 #
 # Layout: this repo is the manifest repo. `west init -l firmware/` then
 # `west update` will fetch Zephyr, the nRF Connect SDK, and MCUBoot into

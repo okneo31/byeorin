@@ -1,4 +1,4 @@
-// 노동자의 지갑 — origin+method+address 별 "1시간 자동 승인" 저장소.
+// 벼린 — origin+method+address 별 "1시간 자동 승인" 저장소.
 //
 // 정책 요약:
 //  - 저장: chrome.storage.session (휘발) — 브라우저 재시작 또는 lock() 시 사라진다.

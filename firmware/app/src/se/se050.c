@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  * SECURITY-CRITICAL: changes require security review.
- * 노동자의 지갑 Cold — SE050 wrapper.
+ * 벼린 요세 — SE050 wrapper.
  *
  * NOTE: every function in this file is a stub. Real implementation will
  * delegate to NXP's EdgeLock SE05x Plug & Trust middleware, which we
@@ -18,7 +18,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/i2c.h>
 
-LOG_MODULE_REGISTER(nodong_se050, CONFIG_LOG_DEFAULT_LEVEL);
+LOG_MODULE_REGISTER(byeorin_se050, CONFIG_LOG_DEFAULT_LEVEL);
 
 /* SE object IDs — these are stable across the device's lifetime and
  * referenced by everything in keys/ and apps/. Layout convention:
@@ -69,8 +69,8 @@ int se_wipe(void)
 	return -ENOSYS;
 }
 
-int se_derive_pubkey(nodong_se_curve_t curve,
-		     const struct nodong_bip32_path *path,
+int se_derive_pubkey(byeorin_se_curve_t curve,
+		     const struct byeorin_bip32_path *path,
 		     uint8_t *out, size_t out_capacity, size_t *out_len)
 {
 	(void)curve; (void)path;
@@ -82,8 +82,8 @@ int se_derive_pubkey(nodong_se_curve_t curve,
 	return -ENOSYS;
 }
 
-int se_sign(nodong_se_curve_t curve,
-	    const struct nodong_bip32_path *path,
+int se_sign(byeorin_se_curve_t curve,
+	    const struct byeorin_bip32_path *path,
 	    const uint8_t digest[32],
 	    uint8_t *out_sig, size_t out_capacity, size_t *out_len)
 {

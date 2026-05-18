@@ -1,5 +1,5 @@
 /**
- * Button — RN mirror of `@nodong/design-system`'s HTML Button.
+ * Button — RN mirror of `@byeorin/design-system`'s HTML Button.
  *
  * API parity with the web DS Button:
  *   variant: 'primary' | 'secondary' | 'ghost' | 'danger'   (same)

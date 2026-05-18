@@ -8,14 +8,14 @@ import {
   type DiscoveredBalance,
   type TokenInfo,
   type WalletAccount,
-} from '@nodong/wallet-sdk';
+} from '@byeorin/wallet-sdk';
 import {
   AddressDisplay,
   AmountDisplay,
   Button,
   Card,
-} from '@nodong/design-system';
-import { useT } from '@nodong/i18n/react';
+} from '@byeorin/design-system';
+import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../wallet-store.js';
 
 // chainId 별 TokenRegistry — 사용자 커스텀이 즉시 반영되도록 모듈 단위 공유.
@@ -106,7 +106,7 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
     walletStore
       .getDefaultAdapter()
       .getBalance(account.address)
-      .then((b) => {
+      .then((b: bigint) => {
         if (cancelled) return;
         setBalance(b);
         setBalanceError(null);

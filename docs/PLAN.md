@@ -1,6 +1,6 @@
-# 노동자의 지갑 — 기획서 (v0.4, 2026-05-16)
+# 벼린 — 기획서 (v0.4, 2026-05-16)
 
-> **브랜드: 노동자의 지갑** (Nodong / Worker's Wallet)
+> **브랜드: 벼린** (Byeorin / Worker's Wallet)
 >
 > 한 줄: **TTL 생태계의 공식 멀티체인 월릿 (SW 4종 + 자체 HW)** 을 만든다.
 > 비유: "Ledger 디바이스 + MetaMask 확장 + Trust Wallet 모바일 + Keplr 멀티체인" 을 한 브랜드로.
@@ -68,14 +68,14 @@
 │  apps/mobile (RN 0.76 Bare) | apps/desktop (Tauri 2)             │
 │  apps/extension (WXT, MV3)  | apps/web (Vite + React)            │
 └──────────────────────────────────────────────────────────────────┘
-                          │   (uses @nodong/shell-core)
+                          │   (uses @byeorin/shell-core)
 ┌──────────────────────────────────────────────────────────────────┐
-│   @nodong/shell-core                                             │
+│   @byeorin/shell-core                                             │
 │   WalletStore + SessionStore(Web/Extension/Memory) + Keystore    │
 └──────────────────────────────────────────────────────────────────┘
-                          │   (uses @nodong/wallet-sdk)
+                          │   (uses @byeorin/wallet-sdk)
 ┌──────────────────────────────────────────────────────────────────┐
-│   @nodong/wallet-sdk                                             │
+│   @byeorin/wallet-sdk                                             │
 │   Wallet.fromMnemonic → Wallet.account(adapter) → transfer       │
 │   ┌────────────────────────────────────────────────────────┐    │
 │   │ ChainAdapter interface (signRequests[] / applySignatures[])│
@@ -91,7 +91,7 @@
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.1 `@nodong/wallet-sdk` — 실제 API 표면
+### 2.1 `@byeorin/wallet-sdk` — 실제 API 표면
 
 **책임 (단일):** 한 시드로부터 9개 체인의 계정을 파생하고, intent → unsigned tx → 서명 → 브로드캐스트를 통일된 인터페이스로 노출한다.
 
@@ -199,7 +199,7 @@ export interface ChainAdapter<TUnsigned = unknown, TSigned = unknown> {
 
 ---
 
-## 3. Hardware Wallet — 노동자의 지갑 Cold
+## 3. Hardware Wallet — 벼린 요세
 
 상세 사양·BOM·핀맵·위협모델: [`hardware/SPEC.md`](../hardware/SPEC.md), [`hardware/BOM.csv`](../hardware/BOM.csv), [`hardware/pin-map.md`](../hardware/pin-map.md), [`hardware/threat-model.md`](../hardware/threat-model.md).
 
@@ -245,8 +245,8 @@ export interface ChainAdapter<TUnsigned = unknown, TSigned = unknown> {
 
 | 셸 | 기술 | 현재 상태 | 다음 목표 |
 |---|---|---|---|
-| **Web** | Vite + React + `@nodong/design-system` | 지갑 생성/복구/잔액/송금 (live TTL RPC) 동작 | dApp 연결 데모 |
-| **Browser Extension** | **WXT** (MV3), React, `@nodong/design-system` | EIP-1193 provider 주입, per-origin consent flow, `personal_sign` + `eth_sendTransaction` confirm 팝업 (128-bit nonce binding) | 다중 계정 UI |
+| **Web** | Vite + React + `@byeorin/design-system` | 지갑 생성/복구/잔액/송금 (live TTL RPC) 동작 | dApp 연결 데모 |
+| **Browser Extension** | **WXT** (MV3), React, `@byeorin/design-system` | EIP-1193 provider 주입, per-origin consent flow, `personal_sign` + `eth_sendTransaction` confirm 팝업 (128-bit nonce binding) | 다중 계정 UI |
 | **Desktop** | **Tauri 2** + React (src-tauri scaffold) | 큰-화면 portfolio + multi-account skeleton, triple-state balance UI | USB-HID HW 연결 |
 | **Mobile** | **React Native 0.76 Bare** TS, monorepo metro config | 3 스크린 (Home/Account/Send) + DS primitives + 한글 폰트 스택 | 생체인증 + WalletConnect |
 | **HW** | 자체 펌웨어 (Zephyr) | 스캐폴드만 | EVT-1 보드 |
@@ -306,9 +306,9 @@ export interface ChainAdapter<TUnsigned = unknown, TSigned = unknown> {
 
 | 단언 | 산출물 |
 |---|---|
-| "한 시드로 9개 체인 주소를 파생할 수 있고, 각 SDK 와 byte-for-byte 일치한다" | `@nodong/wallet-sdk` α — 9 adapters, 10/10 verification pass |
-| "4종 SW 셸이 모두 빌드되고 같은 SDK 를 공유한다" | apps/{web,extension,desktop,mobile} skeleton, `@nodong/design-system` 토큰+컴포넌트 |
-| "셸별 wallet-store 중복이 제거되어 있다" | `@nodong/shell-core` (WalletStore + SessionStore + Keystore) |
+| "한 시드로 9개 체인 주소를 파생할 수 있고, 각 SDK 와 byte-for-byte 일치한다" | `@byeorin/wallet-sdk` α — 9 adapters, 10/10 verification pass |
+| "4종 SW 셸이 모두 빌드되고 같은 SDK 를 공유한다" | apps/{web,extension,desktop,mobile} skeleton, `@byeorin/design-system` 토큰+컴포넌트 |
+| "셸별 wallet-store 중복이 제거되어 있다" | `@byeorin/shell-core` (WalletStore + SessionStore + Keystore) |
 | "HW 사양과 펌웨어 스캐폴드가 외부 벤더 리뷰 가능 수준이다" | `hardware/SPEC.md`, `firmware/app/` 35 파일 |
 | "보험 설계가 한 명이 들고 결정 가능한 상태다" | `docs/INSURANCE.md` v2 standalone (849줄) |
 | "2차 보안 스윕에서 Critical/High 0 으로 떨어진다" | wave 5 — SDK 83 pass, shell-core 37 pass, audit 1 low |
@@ -410,7 +410,7 @@ export interface ChainAdapter<TUnsigned = unknown, TSigned = unknown> {
 
 ## 9.5 보험 (Insurance)
 
-상세 설계 — [`docs/INSURANCE.md`](./INSURANCE.md) (v2 standalone, 849줄, 추천안·5개 kill 조건·법무 우선 로드맵·노동자의 지갑 정체성 정렬 점검 포함).
+상세 설계 — [`docs/INSURANCE.md`](./INSURANCE.md) (v2 standalone, 849줄, 추천안·5개 kill 조건·법무 우선 로드맵·벼린 정체성 정렬 점검 포함).
 
 요약: SW 손실은 외부 커버 프로토콜(Nexus / InsurAce / Sherlock) **디스트리뷰션 헬퍼** 트랙, HW 분실/파손은 **전통 보험사(KB / 삼성화재 / 한화) 제휴** 트랙, 자체 풀(Self-pool DAO) 은 v3 백로그로 영구 보류. 결정 시점은 SW v1 GA + 12개월 실데이터.
 
@@ -433,7 +433,7 @@ export interface ChainAdapter<TUnsigned = unknown, TSigned = unknown> {
 - TTL coin_type 을 SLIP-0044 에 신청할 것인가? (현재 60 공유 중)
 - HW 1차 시판 국가 (한국 단독? 한+미+EU?)
 - 시드 백업 — 종이 + Shamir + (선택) 운영사 클라우드 보조? 클라우드 보조는 비커스토디얼 원칙과 미세 충돌
-- 디바이스 명칭: 노동자의 지갑 Cold 확정? (영문 브랜드 표기 — Nodong Cold? Worker's Cold?)
+- 디바이스 명칭: 벼린 요세 확정? (영문 브랜드 표기 — Byeorin Yose? Worker's Cold?)
 - 라이선스 — 코어 SDK MIT/Apache-2.0, 펌웨어 GPL-3.0/비공개?
 
 ---

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatUnits, hexToString, hexToBytes, hexToNumber, isHex, type Hex } from 'viem';
-import { useT } from '@nodong/i18n/react';
-import { AddressDisplay, AmountDisplay, Logo } from '@nodong/design-system';
+import { useT } from '@byeorin/i18n/react';
+import { AddressDisplay, AmountDisplay, Logo } from '@byeorin/design-system';
 import type { BackgroundMessage, ConfirmContext } from '../../src/lib/rpc.js';
 import {
   decode4Byte,
@@ -11,7 +11,7 @@ import {
   isZeroAddress,
 } from '../../src/lib/selectors.js';
 
-// 노동자의 지갑 — 서명/전송 확인 popup.
+// 벼린 — 서명/전송 확인 popup.
 //
 // background 가 chrome.windows.create('confirm.html?requestId=...') 로 띄운다.
 // 본 화면은:

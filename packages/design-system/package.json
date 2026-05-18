@@ -1,7 +1,7 @@
 {
-  "name": "@nodong/design-system",
+  "name": "@byeorin/design-system",
   "version": "0.0.1",
-  "description": "노동자의 지갑 — 공유 디자인 시스템 (토큰 + React 컴포넌트)",
+  "description": "벼린 — 공유 디자인 시스템 (토큰 + React 컴포넌트)",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

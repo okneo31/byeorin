@@ -1,7 +1,7 @@
 /**
- * Brand tokens for 노동자의 지갑 (mobile shell).
+ * Brand tokens for 벼린 (mobile shell).
  *
- * Single source of truth: `@nodong/design-system`'s TS token mirror.
+ * Single source of truth: `@byeorin/design-system`'s TS token mirror.
  * The CSS tokens (`tokens.css`) are useless in React Native; we consume the
  * JS mirror so that color/space/radius values stay aligned with the web app.
  *
@@ -19,10 +19,10 @@
  *   DS too.
  *
  * TODO(ui-primitives): RN-compatible Button/Card/Input live in `src/ui/`.
- *   They mirror the HTML component API from `@nodong/design-system` but use
+ *   They mirror the HTML component API from `@byeorin/design-system` but use
  *   RN primitives. Screens may migrate to them incrementally.
  */
-import { tokens } from '@nodong/design-system';
+import { tokens } from '@byeorin/design-system';
 
 /**
  * Flattened DS-sourced theme. Prefer this for new code.

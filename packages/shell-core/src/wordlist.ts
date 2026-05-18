@@ -16,7 +16,7 @@
  * 에러:
  *  - 한/영 혼재 입력은 `ShellError({ code: 'wordlist.mixed_characters' })` 로 throw.
  *    영어 baseline message 를 들고 있으며, 호출자는 `error.code` 로 사용자 언어
- *    메시지를 매핑한다 (apps + @nodong/i18n).
+ *    메시지를 매핑한다 (apps + @byeorin/i18n).
  */
 
 import { shellError } from './errors.js';

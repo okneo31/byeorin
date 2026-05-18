@@ -3,16 +3,16 @@ import * as React from 'react';
 export interface LogoProps {
   /** Pixel size of the mark. Wordmark variants will scale proportionally. */
   size?: number;
-  /** 'mark' = symbol only. 'mark-with-text' = symbol + 노동자의 지갑 wordmark. */
+  /** 'mark' = symbol only. 'mark-with-text' = symbol + 벼린 wordmark. */
   variant?: 'mark' | 'mark-with-text';
-  /** Optional title for accessibility (default: "노동자의 지갑"). */
+  /** Optional title for accessibility (default: "벼린"). */
   title?: string;
   /** Optional class on the outer <svg>. */
   className?: string;
 }
 
 /**
- * 노동자의 지갑 — 로고
+ * 벼린 — 로고
  *
  * 컨셉: 광부의 곡괭이 두 자루를 X 자로 교차시킨 미니어즈 길드(miners' guild) 인장.
  * 빨간 도장 위 흰 곡괭이 — 채굴(=mining 의 이중 의미)과 노동의 힘듦을, 그 위에 튀는
@@ -23,13 +23,13 @@ export interface LogoProps {
  * pick(긴 첨두) 과 chisel(짧은 끌) 의 비대칭, 자루의 나뭇결 음영, 스파크가 보인다.
  *
  * 모든 모양은 inline SVG bezier 로 그려서 사용자 환경의 폰트/그래픽 라이브러리에
- * 의존하지 않는다. 워드마크 한글("노동자의 지갑") 만 system Korean font 에 의존하는데,
+ * 의존하지 않는다. 워드마크 한글("벼린") 만 system Korean font 에 의존하는데,
  * 이는 popup/web 환경 모두 Pretendard/Malgun/Apple SD Gothic Neo 가 보장된다.
  */
 export function Logo({
   size = 48,
   variant = 'mark',
-  title = '노동자의 지갑',
+  title = '벼린',
   className,
 }: LogoProps) {
   const markId = React.useId();
@@ -161,7 +161,7 @@ export function Logo({
         fontWeight="700"
         fill="var(--nd-black, #0a0a0a)"
       >
-        노동자의 지갑
+        벼린
       </text>
     </svg>
   );

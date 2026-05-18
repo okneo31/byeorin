@@ -1,6 +1,6 @@
 import { defineContentScript } from 'wxt/sandbox';
 import {
-  NODONG_MSG_TAG,
+  BYEORIN_MSG_TAG,
   type BackgroundMessage,
   type JsonRpcRequest,
   type JsonRpcResponse,
@@ -26,19 +26,19 @@ export default defineContentScript({
       script.onload = () => script.remove();
     } catch (e) {
       // 일부 페이지(CSP strict)에서 실패할 수 있다. 본 스켈레톤에서는 무시.
-      console.warn('[nodong] inpage 주입 실패:', e);
+      console.warn('[byeorin] inpage 주입 실패:', e);
     }
 
     // 페이지에서 올라오는 RPC 요청을 background 로 포워딩.
     window.addEventListener('message', (event: MessageEvent<WindowEnvelope>) => {
       if (event.source !== window) return;
       const data = event.data;
-      if (!data || data.tag !== NODONG_MSG_TAG || data.dir !== 'page-to-cs') return;
+      if (!data || data.tag !== BYEORIN_MSG_TAG || data.dir !== 'page-to-cs') return;
       const req = data.payload as JsonRpcRequest;
       const msg: BackgroundMessage = { type: 'rpc', payload: req };
       chrome.runtime.sendMessage(msg, (res: JsonRpcResponse) => {
         const envelope: WindowEnvelope = {
-          tag: NODONG_MSG_TAG,
+          tag: BYEORIN_MSG_TAG,
           dir: 'cs-to-page',
           payload: res,
         };

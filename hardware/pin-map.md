@@ -1,4 +1,4 @@
-# nRF52840 Pin Map — 노동자의 지갑 Cold (v0)
+# nRF52840 Pin Map — 벼린 요세 (v0)
 
 MCU: **Nordic nRF52840-QIAA-R** (aQFN73). All GPIO 3.3 V CMOS unless noted.
 Pin numbering follows the nRF52840 product spec; GPIO designators follow

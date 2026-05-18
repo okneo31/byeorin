@@ -1,4 +1,4 @@
-# External Engagement Documents — Worker's Wallet (노동자의 지갑)
+# External Engagement Documents — Worker's Wallet (벼린)
 
 This folder contains the draft external-engagement documents for the Worker's Wallet project: one **security audit RFP**, one **internal audit-firms shortlist**, and one **Korean legal engagement brief**. All four documents are find-and-replace ready — search for `[PLACEHOLDER]` strings and fill them in before sending.
 

@@ -10,8 +10,8 @@
  *   키체인 도입 시 새 SessionStore 구현체(예: KeychainSessionStore) 를 추가하고
  *   autoRestoreAllowed 는 생체 인증 게이팅 정책에 맞춰 결정한다.
  */
-import { EvmAdapter, TTL_CHAIN } from '@nodong/wallet-sdk';
-import { createWalletStore, MemorySessionStore } from '@nodong/shell-core';
+import { EvmAdapter, TTL_CHAIN } from '@byeorin/wallet-sdk';
+import { createWalletStore, MemorySessionStore } from '@byeorin/shell-core';
 
 export const walletStore = createWalletStore({
   defaultAdapter: new EvmAdapter({ chain: TTL_CHAIN }),

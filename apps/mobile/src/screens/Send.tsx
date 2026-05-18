@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ShellError } from '@nodong/shell-core';
-import { useT } from '@nodong/i18n/react';
+import { ShellError } from '@byeorin/shell-core';
+import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../store';
 import { colors, radius, spacing, theme } from '../theme';
 import { parseTtl } from '../units';

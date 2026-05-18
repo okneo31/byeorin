@@ -46,8 +46,8 @@ describe('TronAdapter (offline)', () => {
 
 describe('TronAdapter signature format (offline)', () => {
   // Deterministic 32-byte private key (fixed seed, not a wallet anyone uses).
-  // sha256("nodong-tron-sig-test-seed") — chosen for reproducibility.
-  const seedLabel = 'nodong-tron-sig-test-seed';
+  // sha256("byeorin-tron-sig-test-seed") — chosen for reproducibility.
+  const seedLabel = 'byeorin-tron-sig-test-seed';
   const privateKey = sha256(new TextEncoder().encode(seedLabel));
   const privateKeyHex = bytesToHex(privateKey);
 

@@ -1,4 +1,4 @@
-# 노동자의 지갑 — Build Environment Setup
+# 벼린 — Build Environment Setup
 
 This guide installs every external tool the monorepo needs, on
 **Windows 11**, **macOS 14+**, and **Debian/Ubuntu Linux**. It is a
@@ -157,16 +157,16 @@ cargo --version    # expect: cargo 1.77 or higher
 
 ```sh
 pnpm install
-pnpm --filter @nodong/desktop tauri dev          # interactive
-pnpm --filter @nodong/desktop tauri build        # produces installer
-pnpm --filter @nodong/desktop tauri build --no-bundle   # produces only the binary, no installer
+pnpm --filter @byeorin/desktop tauri dev          # interactive
+pnpm --filter @byeorin/desktop tauri build        # produces installer
+pnpm --filter @byeorin/desktop tauri build --no-bundle   # produces only the binary, no installer
 ```
 
 The `--no-bundle` form skips MSI/DMG/AppImage creation and is the fastest
 way to validate that the Rust side compiles. The binary lands at
-`apps/desktop/src-tauri/target/release/노동자의 지갑.exe` (Windows),
-`.../target/release/노동자의 지갑.app` (macOS), or
-`.../target/release/노동자의 지갑` (Linux).
+`apps/desktop/src-tauri/target/release/벼린.exe` (Windows),
+`.../target/release/벼린.app` (macOS), or
+`.../target/release/벼린` (Linux).
 
 ### Gotchas
 
@@ -180,7 +180,7 @@ way to validate that the Rust side compiles. The binary lands at
   4.1; Ubuntu 22.04's default packages are 4.0. Either upgrade to 24.04
   or pull `webkit2gtk-4.1-dev` from the Tauri PPA.
 - **Korean app name and the `.app` bundle.** macOS keeps the UTF-8 name
-  fine, but `cargo build` output filenames will contain `노동자의 지갑`
+  fine, but `cargo build` output filenames will contain `벼린`
   literally — quote them in scripts.
 
 ---
@@ -254,25 +254,25 @@ require this toolchain to scaffold. To generate them:
 
 ```sh
 cd /tmp
-npx @react-native-community/cli@latest init NodongMobileTemplate \
+npx @react-native-community/cli@latest init ByeorinMobileTemplate \
   --version 0.76.1 --skip-install --skip-git-init
-# Copy ios/ and android/ from /tmp/NodongMobileTemplate/ into apps/mobile/
-cp -r NodongMobileTemplate/ios   /path/to/repo/apps/mobile/ios
-cp -r NodongMobileTemplate/android /path/to/repo/apps/mobile/android
+# Copy ios/ and android/ from /tmp/ByeorinMobileTemplate/ into apps/mobile/
+cp -r ByeorinMobileTemplate/ios   /path/to/repo/apps/mobile/ios
+cp -r ByeorinMobileTemplate/android /path/to/repo/apps/mobile/android
 ```
 
 Then edit:
-- `apps/mobile/android/app/src/main/res/values/strings.xml` → `app_name` = `노동자의 지갑`
+- `apps/mobile/android/app/src/main/res/values/strings.xml` → `app_name` = `벼린`
 - Android `applicationId` (in `apps/mobile/android/app/build.gradle`)
-  and iOS bundle identifier → e.g. `top.ttl1.nodong.mobile`
+  and iOS bundle identifier → e.g. `top.ttl1.byeorin.mobile`
 - Native `MainActivity` / `AppDelegate` module name must match
-  `apps/mobile/app.json`'s `name` (`NodongMobile`)
+  `apps/mobile/app.json`'s `name` (`ByeorinMobile`)
 
 ### Build & run
 
 ```sh
-pnpm --filter @nodong/mobile start          # Metro bundler
-pnpm --filter @nodong/mobile android        # device or emulator
+pnpm --filter @byeorin/mobile start          # Metro bundler
+pnpm --filter @byeorin/mobile android        # device or emulator
 ```
 
 ### Gotchas
@@ -325,7 +325,7 @@ pod --version           # expect: 1.15.x
 cd apps/mobile/ios
 pod install
 cd -
-pnpm --filter @nodong/mobile ios
+pnpm --filter @byeorin/mobile ios
 ```
 
 ### Gotchas
@@ -354,22 +354,22 @@ pnpm -r test
 pnpm -r build
 
 # Desktop (needs Rust):
-pnpm --filter @nodong/desktop tauri dev
-pnpm --filter @nodong/desktop tauri build --no-bundle
+pnpm --filter @byeorin/desktop tauri dev
+pnpm --filter @byeorin/desktop tauri build --no-bundle
 
 # Mobile JS only (no native toolchain needed):
-pnpm --filter @nodong/mobile typecheck
+pnpm --filter @byeorin/mobile typecheck
 
 # Mobile Android (needs JDK 17 + Android SDK):
-pnpm --filter @nodong/mobile start
-pnpm --filter @nodong/mobile android
+pnpm --filter @byeorin/mobile start
+pnpm --filter @byeorin/mobile android
 
 # Mobile iOS (needs macOS + Xcode):
-pnpm --filter @nodong/mobile ios
+pnpm --filter @byeorin/mobile ios
 
 # Web / extension (no native toolchain needed):
-pnpm --filter @nodong/web dev
-pnpm --filter @nodong/extension dev
+pnpm --filter @byeorin/web dev
+pnpm --filter @byeorin/extension dev
 ```
 
 ---
@@ -386,7 +386,7 @@ If a build fails, work through these in order before opening an issue:
    toolchain upgrades.
 4. **Mobile Android:** `cd apps/mobile/android && ./gradlew clean`.
 5. **Mobile iOS:** `cd apps/mobile/ios && pod deintegrate && pod install`.
-6. **Mobile Metro cache:** `pnpm --filter @nodong/mobile start --reset-cache`.
+6. **Mobile Metro cache:** `pnpm --filter @byeorin/mobile start --reset-cache`.
 
 ---
 

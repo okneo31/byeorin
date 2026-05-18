@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { createMnemonic } from '@nodong/wallet-sdk';
-import { ShellError } from '@nodong/shell-core';
-import { Button, Card, Logo } from '@nodong/design-system';
-import { useT } from '@nodong/i18n/react';
+import { createMnemonic } from '@byeorin/wallet-sdk';
+import { ShellError } from '@byeorin/shell-core';
+import { Button, Card, Logo } from '@byeorin/design-system';
+import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../wallet-store.js';
 
 type Mode = 'choose' | 'create' | 'recover';

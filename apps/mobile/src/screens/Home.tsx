@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { createMnemonic } from '@nodong/wallet-sdk';
-import { ShellError } from '@nodong/shell-core';
-import { useT } from '@nodong/i18n/react';
+import { createMnemonic } from '@byeorin/wallet-sdk';
+import { ShellError } from '@byeorin/shell-core';
+import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../store';
 import { colors, radius, spacing, theme } from '../theme';
 import { Button, Card, Input } from '../ui';

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { WalletAccount } from '@nodong/wallet-sdk';
-import { AmountDisplay, Button, Card } from '@nodong/design-system';
-import { useT } from '@nodong/i18n/react';
+import type { WalletAccount } from '@byeorin/wallet-sdk';
+import { AmountDisplay, Button, Card } from '@byeorin/design-system';
+import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../wallet-store.js';
 
 interface Props {
@@ -108,7 +108,7 @@ function LiveTtlBalance({ address, decimals }: { address: string; decimals: numb
     walletStore
       .getDefaultAdapter()
       .getBalance(address)
-      .then((b) => {
+      .then((b: bigint) => {
         if (cancelled) return;
         setBalance(b);
         setError(null);

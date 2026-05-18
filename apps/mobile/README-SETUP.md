@@ -1,7 +1,7 @@
-# 노동자의 지갑 — Mobile (React Native Bare)
+# 벼린 — Mobile (React Native Bare)
 
 This package is the React Native (bare workflow, TypeScript) shell for the
-TTL ecosystem multi-chain wallet. It depends on `@nodong/wallet-sdk` via the
+TTL ecosystem multi-chain wallet. It depends on `@byeorin/wallet-sdk` via the
 pnpm workspace.
 
 ## Status
@@ -16,8 +16,8 @@ pnpm workspace.
 
 ```sh
 cd apps/mobile
-pnpm install --filter @nodong/mobile
-pnpm --filter @nodong/mobile typecheck
+pnpm install --filter @byeorin/mobile
+pnpm --filter @byeorin/mobile typecheck
 ```
 
 `typecheck` should pass without the native projects in place — it only validates
@@ -33,14 +33,14 @@ them in:
    API 34 + NDK, and Xcode 15+ on macOS).
 2. From a fresh scratch directory, run:
    ```sh
-   npx @react-native-community/cli@latest init NodongMobileTemplate --version 0.76.1 --skip-install
+   npx @react-native-community/cli@latest init ByeorinMobileTemplate --version 0.76.1 --skip-install
    ```
 3. Copy the generated `ios/` and `android/` folders into `apps/mobile/`.
 4. Edit:
-   - `android/app/src/main/res/values/strings.xml` → `app_name` = `노동자의 지갑`.
-   - Android `applicationId` and iOS bundle identifier → e.g. `top.ttl1.nodong`.
+   - `android/app/src/main/res/values/strings.xml` → `app_name` = `벼린`.
+   - Android `applicationId` and iOS bundle identifier → e.g. `top.ttl1.byeorin`.
    - The native `MainActivity` / `AppDelegate` module name must match
-     `app.json`'s `name` (`NodongMobile`).
+     `app.json`'s `name` (`ByeorinMobile`).
 5. Link `react-native-svg` / `react-native-qrcode-svg` / `react-native-keychain`:
    - iOS: `cd ios && pod install`
    - Android: autolinking handles it; ensure `minSdkVersion >= 24` for
@@ -49,9 +49,9 @@ them in:
 ## Build & run (requires native toolchain)
 
 ```sh
-pnpm --filter @nodong/mobile start          # Metro bundler
-pnpm --filter @nodong/mobile android        # needs Android SDK + emulator/device
-pnpm --filter @nodong/mobile ios            # needs macOS + Xcode
+pnpm --filter @byeorin/mobile start          # Metro bundler
+pnpm --filter @byeorin/mobile android        # needs Android SDK + emulator/device
+pnpm --filter @byeorin/mobile ios            # needs macOS + Xcode
 ```
 
 ## What is wired in v0.1

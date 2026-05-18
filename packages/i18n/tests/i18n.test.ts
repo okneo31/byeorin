@@ -176,9 +176,9 @@ describe('i18n — bundled catalog coverage (ko/en parity)', () => {
   });
 
   it('preserves the brand name in both locales', () => {
-    expect(t('brand.name')).toBe('노동자의 지갑');
+    expect(t('brand.name')).toBe('벼린');
     setLocale('en');
-    expect(t('brand.name')).toBe('노동자의 지갑');
+    expect(t('brand.name')).toBe('벼린');
     expect(t('brand.subtitle_en')).toBe("Worker's Wallet");
   });
 

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Card, Input } from '@nodong/design-system';
+import { Button, Card, Input } from '@byeorin/design-system';
 import {
   WalletConnectSigner,
   signEvmMessage,
   type WcDelegate,
   type WcSession,
   type WcSessionProposal,
-} from '@nodong/wallet-sdk';
-import { useT } from '@nodong/i18n/react';
+} from '@byeorin/wallet-sdk';
+import { useT } from '@byeorin/i18n/react';
 import { hashTypedData, hexToBytes, bytesToHex, type Hex } from 'viem';
 import { walletStore } from '../wallet-store.js';
 
@@ -24,7 +24,7 @@ interface Props {
 // vite injects VITE_-prefixed env vars at build time (see vite.config.ts).
 const PROJECT_ID =
   (import.meta.env.VITE_WC_PROJECT_ID as string | undefined) ??
-  '__nodong_dev_placeholder__';
+  '__byeorin_dev_placeholder__';
 
 type ProposalView = {
   proposal: WcSessionProposal;
@@ -174,7 +174,7 @@ export function DApp({ unlocked, onGoWallet }: Props) {
         </p>
       </header>
 
-      {PROJECT_ID === '__nodong_dev_placeholder__' && (
+      {PROJECT_ID === '__byeorin_dev_placeholder__' && (
         <Card as="section" style={{ marginBottom: 16 }}>
           <p className="nd-warn" style={{ margin: 0 }}>
             {t('dapp.projectid_warn_pre')}<code>VITE_WC_PROJECT_ID</code>{t('dapp.projectid_warn_post')}

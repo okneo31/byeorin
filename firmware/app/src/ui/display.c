@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
- * 노동자의 지갑 Cold — e-ink display wrapper (SSD1681).
+ * 벼린 요세 — e-ink display wrapper (SSD1681).
  */
 #include "ui/display.h"
 #include "log.h"
@@ -11,7 +11,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/display.h>
 
-LOG_MODULE_REGISTER(nodong_disp, CONFIG_LOG_DEFAULT_LEVEL);
+LOG_MODULE_REGISTER(byeorin_disp, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define FB_BYTES  ((ND_DISPLAY_W * ND_DISPLAY_H) / 8)
 
@@ -64,7 +64,7 @@ int display_draw_text(uint16_t x, uint16_t y, uint8_t font_id, const char *utf8)
 	 *     bech32 HRPs, "[OK]" / "[CANCEL]" button labels.
 	 *   - Korean Hangul precomposed syllables (U+AC00..U+D7A3) for the
 	 *     localised dialog strings: "주소 확인", "금액 확인", "거부",
-	 *     "승인", "서명하시겠습니까?", "노동자의 지갑" etc.
+	 *     "승인", "서명하시겠습니까?", "벼린" etc.
 	 *
 	 * BOM cost trade-off (rough, at 12px body weight, 1bpp packed):
 	 *   - Full Hangul precomposed block: 11,172 syllables × ~24 bytes
@@ -88,7 +88,7 @@ int display_draw_qr(uint16_t x, uint16_t y, uint16_t size,
 	return -ENOSYS;
 }
 
-int display_draw_icon(uint16_t x, uint16_t y, nodong_icon_t icon)
+int display_draw_icon(uint16_t x, uint16_t y, byeorin_icon_t icon)
 {
 	(void)x; (void)y; (void)icon;
 	return -ENOSYS;

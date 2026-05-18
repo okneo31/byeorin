@@ -15,9 +15,9 @@
 // 자산 조회/이체 흐름에 진입할 수 있다 (단, v0.4 에서는 *연결 표시* 만 한다).
 
 import { useEffect, useState } from 'react';
-import type { HwAppName } from '@nodong/wallet-sdk';
-import { AddressDisplay, Button, Card } from '@nodong/design-system';
-import { useT } from '@nodong/i18n/react';
+import type { HwAppName } from '@byeorin/wallet-sdk';
+import { AddressDisplay, Button, Card } from '@byeorin/design-system';
+import { useT } from '@byeorin/i18n/react';
 import {
   connectHardware,
   disconnectHardware,

@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import {
   I18nProvider,
   createChromeSyncLocaleStorage,
-} from '@nodong/i18n/react';
+} from '@byeorin/i18n/react';
 import { App } from './App.js';
 import './styles.css';
 

@@ -1,7 +1,7 @@
 # TTL E2E 라운드트립 + 메인넷 프로브 결과
 
 테스트 일자: 2026-05-17
-SDK: `@nodong/wallet-sdk` (built from `packages/wallet-sdk/`)
+SDK: `@byeorin/wallet-sdk` (built from `packages/wallet-sdk/`)
 플랫폼: Windows 11, Node v24.15.0, pnpm 9.15.0
 
 ## 1. 환경 정보

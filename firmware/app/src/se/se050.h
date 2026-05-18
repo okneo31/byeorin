@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  * SECURITY-CRITICAL: changes require security review.
- * 노동자의 지갑 Cold — NXP SE050 wrapper.
+ * 벼린 요세 — NXP SE050 wrapper.
  *
  * This is the *only* layer that talks to the secure element. Higher
  * layers (keys/, apps/) call into this interface and never see raw
@@ -17,22 +17,22 @@
  *   - ed25519   -> Cosmos / Solana
  *   - secp256r1 -> attestation only
  */
-#ifndef NODONG_SE050_H_
-#define NODONG_SE050_H_
+#ifndef BYEORIN_SE050_H_
+#define BYEORIN_SE050_H_
 
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 
 typedef enum {
-	NODONG_SE_CURVE_SECP256K1 = 0,
-	NODONG_SE_CURVE_ED25519   = 1,
-	NODONG_SE_CURVE_SECP256R1 = 2,
-} nodong_se_curve_t;
+	BYEORIN_SE_CURVE_SECP256K1 = 0,
+	BYEORIN_SE_CURVE_ED25519   = 1,
+	BYEORIN_SE_CURVE_SECP256R1 = 2,
+} byeorin_se_curve_t;
 
 /* BIP32 path encoded as up-to-10 hardened/unhardened components.
  * Caller is responsible for setting the hardened bit (0x80000000). */
-struct nodong_bip32_path {
+struct byeorin_bip32_path {
 	uint8_t  length;       /* number of components used */
 	uint32_t components[10];
 };
@@ -56,8 +56,8 @@ int  se_wipe(void);
  *   ed25519             : 32-byte raw A
  * `out_capacity` must be large enough; on success *out_len is set.
  */
-int  se_derive_pubkey(nodong_se_curve_t curve,
-		      const struct nodong_bip32_path *path,
+int  se_derive_pubkey(byeorin_se_curve_t curve,
+		      const struct byeorin_bip32_path *path,
 		      uint8_t *out, size_t out_capacity, size_t *out_len);
 
 /*
@@ -65,8 +65,8 @@ int  se_derive_pubkey(nodong_se_curve_t curve,
  *   secp256k1/secp256r1 : 64-byte (R || S), low-S enforced by SE
  *   ed25519             : 64-byte (R || S)
  */
-int  se_sign(nodong_se_curve_t curve,
-	     const struct nodong_bip32_path *path,
+int  se_sign(byeorin_se_curve_t curve,
+	     const struct byeorin_bip32_path *path,
 	     const uint8_t digest[32],
 	     uint8_t *out_sig, size_t out_capacity, size_t *out_len);
 
@@ -96,4 +96,4 @@ int  se_attest(const uint8_t *challenge, size_t challenge_len,
  * vendor middleware's `se050_apply_keystore` once integrated. */
 int  se050_apply_keystore(void);
 
-#endif /* NODONG_SE050_H_ */
+#endif /* BYEORIN_SE050_H_ */

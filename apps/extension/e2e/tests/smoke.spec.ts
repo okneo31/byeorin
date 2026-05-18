@@ -68,7 +68,7 @@ async function teardown(context: BrowserContext, userDataDir: string): Promise<v
   await rm(userDataDir, { recursive: true, force: true }).catch(() => undefined);
 }
 
-test.describe('노동자의 지갑 extension smoke', () => {
+test.describe('벼린 extension smoke', () => {
   test('extension loads and popup renders Korean CTAs', async () => {
     const { context, userDataDir } = await launchWithExtension('popup');
     try {
@@ -80,8 +80,8 @@ test.describe('노동자의 지갑 extension smoke', () => {
       const popup = await context.newPage();
       await popup.goto(`chrome-extension://${extensionId}/popup.html`);
 
-      // 브랜드명: 어느 로케일에서도 "노동자의 지갑" 으로 표기된다.
-      await expect(popup.locator('header.brand >> text=노동자의 지갑')).toBeVisible({ timeout: 10_000 });
+      // 브랜드명: 어느 로케일에서도 "벼린" 으로 표기된다.
+      await expect(popup.locator('header.brand >> text=벼린')).toBeVisible({ timeout: 10_000 });
 
       // home 모드의 CTA — popup.create_new = "새 지갑 만들기", popup.recover_by_mnemonic = "니모닉으로 복구"
       await expect(popup.getByRole('button', { name: '새 지갑 만들기' })).toBeVisible();
@@ -91,33 +91,33 @@ test.describe('노동자의 지갑 extension smoke', () => {
     }
   });
 
-  test('inpage provider injects window.nodong on https page', async () => {
+  test('inpage provider injects window.byeorin on https page', async () => {
     const { context, userDataDir } = await launchWithExtension('inpage');
     try {
       const page = await context.newPage();
       await page.goto('https://example.com');
 
       // content script → inpage script 가 MAIN world 에 inject 될 때까지 대기.
-      await page.waitForFunction(() => 'nodong' in window, undefined, { timeout: 15_000 });
+      await page.waitForFunction(() => 'byeorin' in window, undefined, { timeout: 15_000 });
 
       // 정적 chainId 노출(부팅 직후 동기 접근 dApp 대응) 확인.
       const chainId = await page.evaluate(() => {
-        return (window as unknown as { nodong: { chainId: string } }).nodong.chainId;
+        return (window as unknown as { byeorin: { chainId: string } }).byeorin.chainId;
       });
       expect(chainId).toBe('0x1e61');
 
       // 식별 플래그.
       const flags = await page.evaluate(() => {
-        const n = (window as unknown as { nodong: { isNodong: boolean; isMetaMask: boolean } }).nodong;
-        return { isNodong: n.isNodong, isMetaMask: n.isMetaMask };
+        const n = (window as unknown as { byeorin: { isByeorin: boolean; isMetaMask: boolean } }).byeorin;
+        return { isByeorin: n.isByeorin, isMetaMask: n.isMetaMask };
       });
-      expect(flags.isNodong).toBe(true);
+      expect(flags.isByeorin).toBe(true);
       expect(flags.isMetaMask).toBe(false);
 
       // EIP-1193 호환 표면 — MetaMask test-dapp 의 Network/ChainId Status 필드가 이를 읽는다.
       const surface = await page.evaluate(() => {
         const n = (window as unknown as {
-          nodong: {
+          byeorin: {
             networkVersion: string;
             selectedAddress: string | null;
             isConnected: () => boolean;
@@ -125,7 +125,7 @@ test.describe('노동자의 지갑 extension smoke', () => {
             on: (e: string, fn: (...a: unknown[]) => void) => unknown;
             removeListener: (e: string, fn: (...a: unknown[]) => void) => unknown;
           };
-        }).nodong;
+        }).byeorin;
         return {
           networkVersion: n.networkVersion,
           selectedAddress: n.selectedAddress,
@@ -144,21 +144,21 @@ test.describe('노동자의 지갑 extension smoke', () => {
 
       // window.ethereum 슬롯도 차지하고 있어야 한다(다른 지갑이 없는 경우).
       // 단 inpage.ts 는 DOMContentLoaded 후 200ms 양보 + 즉시채움 경로가 있으므로 잠깐 기다린다.
-      await page.waitForFunction(() => 'ethereum' in window && (window as any).ethereum?.isNodong === true, undefined, { timeout: 5_000 });
+      await page.waitForFunction(() => 'ethereum' in window && (window as any).ethereum?.isByeorin === true, undefined, { timeout: 5_000 });
     } finally {
       await teardown(context, userDataDir);
     }
   });
 
-  test('EIP-6963 announce dispatches with rdns top.ttl1.nodong', async () => {
+  test('EIP-6963 announce dispatches with rdns top.ttl1.byeorin', async () => {
     const { context, userDataDir } = await launchWithExtension('eip6963');
     try {
       const page = await context.newPage();
       await page.goto('https://example.com');
 
-      // inpage 가 main world 에 들어올 때까지 대기 — nodong 가 정의되면 announce 도 이미 한 번 발사된 뒤다.
+      // inpage 가 main world 에 들어올 때까지 대기 — byeorin 가 정의되면 announce 도 이미 한 번 발사된 뒤다.
       // 하지만 우리는 *이후* 의 requestProvider 응답을 듣는다(매번 재announce).
-      await page.waitForFunction(() => 'nodong' in window, undefined, { timeout: 15_000 });
+      await page.waitForFunction(() => 'byeorin' in window, undefined, { timeout: 15_000 });
 
       const announced = await page.evaluate(() => {
         return new Promise<{ uuid: string; name: string; icon: string; rdns: string }>((resolve, reject) => {
@@ -175,7 +175,7 @@ test.describe('노동자의 지갑 extension smoke', () => {
           window.dispatchEvent(new Event('eip6963:requestProvider'));
         });
       });
-      expect(announced.rdns).toBe('top.ttl1.nodong');
+      expect(announced.rdns).toBe('top.ttl1.byeorin');
       expect(announced.name).toMatch(/노동자/);
       expect(announced.uuid).toMatch(/^[0-9a-f-]{36}$/i);
       expect(announced.icon.startsWith('data:image/svg+xml')).toBe(true);

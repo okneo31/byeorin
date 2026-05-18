@@ -2,7 +2,7 @@
 //
 // 비-React 컨텍스트(서비스 워커, SDK 어댑터, CLI 도구 등) 는 본 모듈에서 직접
 // `configureI18n` / `t` / `setLocale` 을 가져다 쓴다. React 앱은
-// `@nodong/i18n/react` 의 Provider/Hook 을 함께 쓴다.
+// `@byeorin/i18n/react` 의 Provider/Hook 을 함께 쓴다.
 
 export {
   configureI18n,

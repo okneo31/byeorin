@@ -1,4 +1,4 @@
-# 노동자의 지갑 — Architecture (v0.4, 2026-05-16)
+# 벼린 — Architecture (v0.4, 2026-05-16)
 
 > Single-file map of how the system fits together. Deep documents are linked at the bottom.
 >
@@ -23,7 +23,7 @@
                      │                  │
                      ▼                  ▼
             ┌──────────────────────────────────────────┐
-            │       @nodong/design-system              │
+            │       @byeorin/design-system              │
             │   Logo · Button · Card · Input ·         │
             │   AddressDisplay · AmountDisplay ·       │
             │   tokens.css / tokens.ts                 │
@@ -32,7 +32,7 @@
                      │  (UI primitives — pure presentation)
                      │
             ┌────────┴─────────────────────────────────┐
-            │       @nodong/shell-core                 │
+            │       @byeorin/shell-core                 │
             │  ┌────────────────────────────────────┐  │
             │  │ WalletStore (lifecycle, lock/unlock,│ │
             │  │   account cache, transfer delegate)│  │
@@ -54,7 +54,7 @@
                      │
                      ▼  (uses Wallet, ChainAdapter, TransferIntent)
             ┌──────────────────────────────────────────┐
-            │       @nodong/wallet-sdk                 │
+            │       @byeorin/wallet-sdk                 │
             │                                          │
             │  Wallet.fromMnemonic({ mnemonic, ... })  │
             │     │                                    │
@@ -113,7 +113,7 @@
 
 **Reading rule.** Arrows are *uses*, not *contains*. Every layer below is reachable only via its upper layer's public surface. Specifically:
 
-- Apps never `import` from `@nodong/wallet-sdk` directly for lifecycle — they go through `@nodong/shell-core` so the unlock / lock / session-store contract is uniform.
+- Apps never `import` from `@byeorin/wallet-sdk` directly for lifecycle — they go through `@byeorin/shell-core` so the unlock / lock / session-store contract is uniform.
 - Apps **may** import individual `ChainAdapter` classes for non-lifecycle reads (e.g., `adapter.getBalance(address)` with no signer).
 - Crypto primitives live exclusively inside `wallet-sdk`. No app or shell code should ever import `@noble/*` directly.
 
@@ -125,7 +125,7 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                  Host: apps/desktop or apps/extension               │
 │  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  @nodong/wallet-sdk Wallet + adapter (as above)              │   │
+│  │  @byeorin/wallet-sdk Wallet + adapter (as above)              │   │
 │  │     │                                                        │   │
 │  │     │  but with HwSigner instead of SoftSigner               │   │
 │  │     ▼                                                        │   │
@@ -173,9 +173,9 @@
 
 | Path | Package / module | Responsibility | What it must NOT do |
 |---|---|---|---|
-| `packages/wallet-sdk` | `@nodong/wallet-sdk` | Pure key + chain + tx data flow. `Wallet`, `ChainAdapter` interface, 9 chain implementations, `SoftSigner`, crypto primitives. | Persist anything. Know about UI, browser, mobile, dApps, popups. |
-| `packages/shell-core` | `@nodong/shell-core` | App-shell common lifecycle. `WalletStore` (unlock/lock/account-cache/transfer-delegate). `SessionStore` interface + 3 backends. `EncryptedKeystoreStore` (scrypt + AES-GCM). `detectWordlist`. | Render UI. Talk to chain RPCs directly. |
-| `packages/design-system` | `@nodong/design-system` | Brand tokens (color / space / radius / typography) and React presentation primitives (Logo / Button / Card / Input / AddressDisplay / AmountDisplay). | Hold any wallet state or talk to SDK. Pure presentation. |
+| `packages/wallet-sdk` | `@byeorin/wallet-sdk` | Pure key + chain + tx data flow. `Wallet`, `ChainAdapter` interface, 9 chain implementations, `SoftSigner`, crypto primitives. | Persist anything. Know about UI, browser, mobile, dApps, popups. |
+| `packages/shell-core` | `@byeorin/shell-core` | App-shell common lifecycle. `WalletStore` (unlock/lock/account-cache/transfer-delegate). `SessionStore` interface + 3 backends. `EncryptedKeystoreStore` (scrypt + AES-GCM). `detectWordlist`. | Render UI. Talk to chain RPCs directly. |
+| `packages/design-system` | `@byeorin/design-system` | Brand tokens (color / space / radius / typography) and React presentation primitives (Logo / Button / Card / Input / AddressDisplay / AmountDisplay). | Hold any wallet state or talk to SDK. Pure presentation. |
 | `apps/web` | (private) | Vite + React + DS. Wallet generate / recover / balance / transfer using shell-core. In-memory keystore only (autoRestoreAllowed=false). | Persist seed to localStorage in v0.1 (deliberate H1 policy). |
 | `apps/extension` | (private) | WXT (MV3). EIP-1193 provider. Per-origin consent. `connect` + `confirm` popups with 128-bit nonce binding. ChromeLocalBackend keystore. | Auto-sign anything. Accept messages without `sender.id === chrome.runtime.id` and matching nonce. |
 | `apps/desktop` | (private) | Tauri 2 + React. Multi-account, triple-state balance UI. Future: USB-HID HW transport. | Bundle Electron. Ship debug builds with `tauri dev` flags. |
@@ -248,7 +248,7 @@ The browser extension is the most exposed surface. Every arrow that crosses a `�
                                  ▼
    ┌────────────────────────────────────────────────────────────┐
    │  inpage.ts  (MAIN world script, lives in page memory)      │
-   │  - emits "nodong-rpc-request" CustomEvent on window         │
+   │  - emits "byeorin-rpc-request" CustomEvent on window         │
    │  - the page CAN tamper with this script after injection    │
    └─────────────────────────────┬──────────────────────────────┘
                                  │

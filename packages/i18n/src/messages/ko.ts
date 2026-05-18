@@ -5,17 +5,17 @@
 //   scope: app | brand | common | home | account | send | activity | tokens
 //          | settings | dapp | hardware | connect | confirm | popup | errors
 //
-// 브랜드명 "노동자의 지갑" 은 어떤 로케일에서도 번역하지 않는다 — `brand.name`.
+// 브랜드명 "벼린" 은 어떤 로케일에서도 번역하지 않는다 — `brand.name`.
 // 영어 카탈로그에서는 `brand.subtitle_en` 로 "Worker's Wallet" 부제만 노출한다.
 
 import type { Catalog } from '../i18n.js';
 
 export const ko: Catalog = {
   // ──── 브랜드/공통 ────
-  'brand.name': '노동자의 지갑',
+  'brand.name': '벼린',
   'brand.subtitle_en': 'Worker\'s Wallet',
   'brand.tagline': '노동자에게 자기 결정권을.',
-  'app.title': '노동자의 지갑',
+  'app.title': '벼린',
 
   'common.back': '뒤로',
   'common.cancel': '취소',
@@ -52,7 +52,7 @@ export const ko: Catalog = {
   'home.recover_question': '이미 복구 문구가 있나요?',
   'home.create_button': '지갑 생성',
   'home.recover_button': '복구',
-  'home.welcome_title': '노동자의 지갑에 오신 것을 환영합니다',
+  'home.welcome_title': '벼린에 오신 것을 환영합니다',
   'home.welcome_lead': '비수탁 데스크톱 지갑입니다. 새 지갑을 만들거나, 기존 복구 문구로 복원할 수 있습니다.',
   'home.start_label': '시작하기',
   'home.create_new_wallet': '새 지갑 만들기',
@@ -358,8 +358,8 @@ export const ko: Catalog = {
   'dapp.title_full': 'dApp 연결 (WalletConnect)',
   'dapp.lead': 'dApp 에서 표시되는 wc: URI 를 아래에 붙여넣고 페어링을 시작합니다.',
   'dapp.lead_mobile': 'WalletConnect v2 — dApp 에 안전하게 연결합니다.',
-  'dapp.wc_name_desktop': '노동자의 지갑 (Desktop)',
-  'dapp.wc_name_mobile': '노동자의 지갑 (Mobile)',
+  'dapp.wc_name_desktop': '벼린 (Desktop)',
+  'dapp.wc_name_mobile': '벼린 (Mobile)',
   'dapp.wc_description': 'TTL 생태계 멀티체인 월릿',
   'dapp.init_failed': '초기화 실패: {detail}',
   'dapp.signer_not_ready': '지갑이 준비되지 않았습니다. 잠금을 해제해 주세요.',
@@ -399,7 +399,7 @@ export const ko: Catalog = {
   'settings.title': '설정',
   'settings.lead': '언어, 테마, 하드웨어 월릿 연결 등을 관리합니다.',
   'settings.language.title': '언어',
-  'settings.language.help': '브랜드명 "노동자의 지갑" 은 영어 화면에서도 그대로 표시됩니다.',
+  'settings.language.help': '브랜드명 "벼린" 은 영어 화면에서도 그대로 표시됩니다.',
   'settings.theme.title': '테마',
   'settings.theme.light': '라이트',
   'settings.theme.dark': '다크',
@@ -410,6 +410,6 @@ export const ko: Catalog = {
   'settings.hw.aria_label': '하드웨어 월릿 연결 (예정)',
   'settings.hw.note': 'Ledger / Trezor USB 연결을 곧 지원합니다.',
   'settings.info.title': '정보',
-  'settings.info.app_line': '노동자의 지갑 데스크톱 · v{version}',
+  'settings.info.app_line': '벼린 데스크톱 · v{version}',
   'settings.info.chain_line': 'TTL Chain ID 7777 · https://rpc.ttl1.top',
 };

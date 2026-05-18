@@ -1,8 +1,8 @@
 {
-  "name": "nodong-wallet",
+  "name": "byeorin-wallet",
   "version": "0.0.0",
   "private": true,
-  "description": "노동자의 지갑 — TTL 생태계 멀티체인 월릿 (SW + HW)",
+  "description": "벼린 — TTL 생태계 멀티체인 월릿 (SW + HW)",
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=20.10.0"

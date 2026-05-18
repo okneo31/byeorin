@@ -1,7 +1,7 @@
-// 노동자의 지갑 — 디자인 시스템 공개 API
+// 벼린 — 디자인 시스템 공개 API
 //
-// CSS 토큰은 별도 import:  import "@nodong/design-system/tokens.css";
-// JS 토큰 미러:            import { tokens } from "@nodong/design-system";
+// CSS 토큰은 별도 import:  import "@byeorin/design-system/tokens.css";
+// JS 토큰 미러:            import { tokens } from "@byeorin/design-system";
 
 export { tokens } from './tokens.js';
 export type { Tokens } from './tokens.js';

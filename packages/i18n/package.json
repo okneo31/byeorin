@@ -1,7 +1,7 @@
 {
-  "name": "@nodong/i18n",
+  "name": "@byeorin/i18n",
   "version": "0.0.1",
-  "description": "노동자의 지갑 — 경량 i18n 코어 (ko/en)",
+  "description": "벼린 — 경량 i18n 코어 (ko/en)",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

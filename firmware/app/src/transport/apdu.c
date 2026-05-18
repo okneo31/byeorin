@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  * SECURITY-CRITICAL: changes require security review.
- * 노동자의 지갑 Cold — APDU dispatch.
+ * 벼린 요세 — APDU dispatch.
  */
 #include "transport/apdu.h"
 #include "se/se050.h"
@@ -17,29 +17,29 @@
 #include <errno.h>
 #include <string.h>
 
-LOG_MODULE_REGISTER(nodong_apdu, CONFIG_LOG_DEFAULT_LEVEL);
+LOG_MODULE_REGISTER(byeorin_apdu, CONFIG_LOG_DEFAULT_LEVEL);
 
 /* ----------------------- Handlers (stubs) ----------------------- */
 
-static int h_get_version(const struct nodong_apdu_cmd *cmd,
-			 struct nodong_apdu_resp *resp)
+static int h_get_version(const struct byeorin_apdu_cmd *cmd,
+			 struct byeorin_apdu_resp *resp)
 {
 	(void)cmd;
-	const char *ver = NODONG_FW_VERSION;
+	const char *ver = BYEORIN_FW_VERSION;
 	size_t n = strlen(ver);
 
 	if (resp->capacity < n) {
-		resp->sw = NODONG_SW_INTERNAL_ERROR;
+		resp->sw = BYEORIN_SW_INTERNAL_ERROR;
 		return -ENOMEM;
 	}
 	memcpy(resp->data, ver, n);
 	resp->len = n;
-	resp->sw  = NODONG_SW_OK;
+	resp->sw  = BYEORIN_SW_OK;
 	return 0;
 }
 
-static int h_get_pubkey(const struct nodong_apdu_cmd *cmd,
-			struct nodong_apdu_resp *resp)
+static int h_get_pubkey(const struct byeorin_apdu_cmd *cmd,
+			struct byeorin_apdu_resp *resp)
 {
 	/*
 	 * Expected TLVs in cmd->data:
@@ -53,12 +53,12 @@ static int h_get_pubkey(const struct nodong_apdu_cmd *cmd,
 	(void)cmd;
 	(void)resp;
 	/* TODO: parse TLVs, call keys_derive_pubkey, optionally confirm. */
-	resp->sw = NODONG_SW_INS_NOT_SUPPORTED;
+	resp->sw = BYEORIN_SW_INS_NOT_SUPPORTED;
 	return -ENOSYS;
 }
 
-static int h_sign_hash(const struct nodong_apdu_cmd *cmd,
-		       struct nodong_apdu_resp *resp)
+static int h_sign_hash(const struct byeorin_apdu_cmd *cmd,
+		       struct byeorin_apdu_resp *resp)
 {
 	const uint8_t *curve_v = NULL, *path_v = NULL, *digest_v = NULL;
 	const uint8_t *chain_v = NULL, *to_v = NULL, *amount_v = NULL;
@@ -66,18 +66,18 @@ static int h_sign_hash(const struct nodong_apdu_cmd *cmd,
 	size_t chain_l = 0, to_l = 0, amount_l = 0;
 	int rc;
 
-	rc = nodong_tlv_find(cmd->data, cmd->lc, NODONG_TLV_CURVE, &curve_v, &curve_l);
-	if (rc || curve_l != 1) { resp->sw = NODONG_SW_INCORRECT_DATA; return 0; }
-	rc = nodong_tlv_find(cmd->data, cmd->lc, NODONG_TLV_BIP32_PATH, &path_v, &path_l);
-	if (rc || (path_l % 4) != 0) { resp->sw = NODONG_SW_INCORRECT_DATA; return 0; }
-	rc = nodong_tlv_find(cmd->data, cmd->lc, NODONG_TLV_DIGEST, &digest_v, &digest_l);
-	if (rc || digest_l != 32) { resp->sw = NODONG_SW_INCORRECT_DATA; return 0; }
+	rc = byeorin_tlv_find(cmd->data, cmd->lc, BYEORIN_TLV_CURVE, &curve_v, &curve_l);
+	if (rc || curve_l != 1) { resp->sw = BYEORIN_SW_INCORRECT_DATA; return 0; }
+	rc = byeorin_tlv_find(cmd->data, cmd->lc, BYEORIN_TLV_BIP32_PATH, &path_v, &path_l);
+	if (rc || (path_l % 4) != 0) { resp->sw = BYEORIN_SW_INCORRECT_DATA; return 0; }
+	rc = byeorin_tlv_find(cmd->data, cmd->lc, BYEORIN_TLV_DIGEST, &digest_v, &digest_l);
+	if (rc || digest_l != 32) { resp->sw = BYEORIN_SW_INCORRECT_DATA; return 0; }
 
-	(void)nodong_tlv_find(cmd->data, cmd->lc, NODONG_TLV_CHAIN_LABEL,
+	(void)byeorin_tlv_find(cmd->data, cmd->lc, BYEORIN_TLV_CHAIN_LABEL,
 			      &chain_v, &chain_l);
-	(void)nodong_tlv_find(cmd->data, cmd->lc, NODONG_TLV_TO_ADDRESS,
+	(void)byeorin_tlv_find(cmd->data, cmd->lc, BYEORIN_TLV_TO_ADDRESS,
 			      &to_v, &to_l);
-	(void)nodong_tlv_find(cmd->data, cmd->lc, NODONG_TLV_AMOUNT_STR,
+	(void)byeorin_tlv_find(cmd->data, cmd->lc, BYEORIN_TLV_AMOUNT_STR,
 			      &amount_v, &amount_l);
 
 	/*
@@ -86,12 +86,12 @@ static int h_sign_hash(const struct nodong_apdu_cmd *cmd,
 	 *   - returning CONFIRM_OK and we call se_sign, OR
 	 *   - returning CONFIRM_CANCEL / CONFIRM_TIMEOUT.
 	 *
-	 * NOTE: nodong_tlv_find may leave chain_v == NULL when the TLV is
+	 * NOTE: byeorin_tlv_find may leave chain_v == NULL when the TLV is
 	 * absent. Always gate the memcmp() on chain_v != NULL first to
 	 * avoid feeding NULL into memcmp (undefined behaviour even if the
 	 * length check would short-circuit on most implementations).
 	 */
-	enum nodong_confirm_result conf = NODONG_CONFIRM_CANCEL;
+	enum byeorin_confirm_result conf = BYEORIN_CONFIRM_CANCEL;
 	if (chain_v && chain_l >= 3 &&
 	    (memcmp(chain_v, "ETH", 3) == 0 ||
 	     memcmp(chain_v, "TTL", 3) == 0)) {
@@ -111,50 +111,50 @@ static int h_sign_hash(const struct nodong_apdu_cmd *cmd,
 	}
 
 	switch (conf) {
-	case NODONG_CONFIRM_OK:
+	case BYEORIN_CONFIRM_OK:
 		break;
-	case NODONG_CONFIRM_CANCEL:
-		resp->sw = NODONG_SW_USER_CANCELLED;
+	case BYEORIN_CONFIRM_CANCEL:
+		resp->sw = BYEORIN_SW_USER_CANCELLED;
 		return 0;
-	case NODONG_CONFIRM_TIMEOUT:
+	case BYEORIN_CONFIRM_TIMEOUT:
 	default:
-		resp->sw = NODONG_SW_TIMEOUT;
+		resp->sw = BYEORIN_SW_TIMEOUT;
 		return 0;
 	}
 
 	/* TODO: call se_sign(curve, path, digest, resp->data). */
-	resp->sw = NODONG_SW_INTERNAL_ERROR;
+	resp->sw = BYEORIN_SW_INTERNAL_ERROR;
 	return -ENOSYS;
 }
 
-static int h_get_device_info(const struct nodong_apdu_cmd *cmd,
-			     struct nodong_apdu_resp *resp)
+static int h_get_device_info(const struct byeorin_apdu_cmd *cmd,
+			     struct byeorin_apdu_resp *resp)
 {
 	(void)cmd;
 	(void)resp;
 	/* TODO: SE050 OEF + boot counter + battery + firmware hash. */
-	resp->sw = NODONG_SW_INS_NOT_SUPPORTED;
+	resp->sw = BYEORIN_SW_INS_NOT_SUPPORTED;
 	return -ENOSYS;
 }
 
-static int h_fw_upgrade_begin(const struct nodong_apdu_cmd *cmd,
-			      struct nodong_apdu_resp *resp)
+static int h_fw_upgrade_begin(const struct byeorin_apdu_cmd *cmd,
+			      struct byeorin_apdu_resp *resp)
 {
 	(void)cmd;
 	(void)resp;
 	/* TODO: validate version > current, open slot1, request user confirm. */
-	resp->sw = NODONG_SW_INS_NOT_SUPPORTED;
+	resp->sw = BYEORIN_SW_INS_NOT_SUPPORTED;
 	return -ENOSYS;
 }
 
 /* ----------------------- Dispatch table ------------------------- */
 
-static const struct nodong_apdu_entry k_table[] = {
-	{ NODONG_INS_GET_VERSION,      false, true,  h_get_version,      "GET_VERSION"     },
-	{ NODONG_INS_GET_PUBKEY,       false, true,  h_get_pubkey,       "GET_PUBKEY"      },
-	{ NODONG_INS_SIGN_HASH,        true,  false, h_sign_hash,        "SIGN_HASH"       },
-	{ NODONG_INS_GET_DEVICE_INFO,  false, true,  h_get_device_info,  "GET_DEVICE_INFO" },
-	{ NODONG_INS_FW_UPGRADE_BEGIN, true,  false, h_fw_upgrade_begin, "FW_UPGRADE_BEGIN"},
+static const struct byeorin_apdu_entry k_table[] = {
+	{ BYEORIN_INS_GET_VERSION,      false, true,  h_get_version,      "GET_VERSION"     },
+	{ BYEORIN_INS_GET_PUBKEY,       false, true,  h_get_pubkey,       "GET_PUBKEY"      },
+	{ BYEORIN_INS_SIGN_HASH,        true,  false, h_sign_hash,        "SIGN_HASH"       },
+	{ BYEORIN_INS_GET_DEVICE_INFO,  false, true,  h_get_device_info,  "GET_DEVICE_INFO" },
+	{ BYEORIN_INS_FW_UPGRADE_BEGIN, true,  false, h_fw_upgrade_begin, "FW_UPGRADE_BEGIN"},
 };
 
 /* ----------------------- Parser & helpers ----------------------- */
@@ -200,17 +200,17 @@ static const struct nodong_apdu_entry k_table[] = {
  *
  *   (d) raw = [E0 01 00 00 00 FF FF data*65535]         (raw_len = 65542)
  *       Extended form, lc = 65535. Rejected at the top guard
- *       `raw_len > CONFIG_NODONG_MAX_APDU_LEN` (default 1024) → -EINVAL.
+ *       `raw_len > CONFIG_BYEORIN_MAX_APDU_LEN` (default 1024) → -EINVAL.
  *       No risk of a buffer-sized integer overflow inside the parser
  *       because the cap fires before the framing decode runs.
  */
-int nodong_apdu_parse(const uint8_t *raw, size_t raw_len,
-		      struct nodong_apdu_cmd *out)
+int byeorin_apdu_parse(const uint8_t *raw, size_t raw_len,
+		      struct byeorin_apdu_cmd *out)
 {
 	if (!raw || !out) {
 		return -EINVAL;
 	}
-	if (raw_len < 4u || raw_len > (size_t)CONFIG_NODONG_MAX_APDU_LEN) {
+	if (raw_len < 4u || raw_len > (size_t)CONFIG_BYEORIN_MAX_APDU_LEN) {
 		return -EINVAL;
 	}
 
@@ -292,7 +292,7 @@ int nodong_apdu_parse(const uint8_t *raw, size_t raw_len,
  *     MUST be split across multiple TLVs of the same tag, with the parser
  *     extended to concatenate.
  */
-int nodong_tlv_find(const uint8_t *buf, size_t len, uint8_t tag,
+int byeorin_tlv_find(const uint8_t *buf, size_t len, uint8_t tag,
 		    const uint8_t **out_value, size_t *out_value_len)
 {
 	if (!buf || !out_value || !out_value_len) {
@@ -315,19 +315,19 @@ int nodong_tlv_find(const uint8_t *buf, size_t len, uint8_t tag,
 	return -ENOENT;
 }
 
-int nodong_apdu_dispatch(const struct nodong_apdu_cmd *cmd,
-			 struct nodong_apdu_resp *resp)
+int byeorin_apdu_dispatch(const struct byeorin_apdu_cmd *cmd,
+			 struct byeorin_apdu_resp *resp)
 {
 	if (!cmd || !resp) {
 		return -EINVAL;
 	}
-	if (cmd->cla != NODONG_APDU_CLA) {
-		resp->sw = NODONG_SW_CLA_NOT_SUPPORTED;
+	if (cmd->cla != BYEORIN_APDU_CLA) {
+		resp->sw = BYEORIN_SW_CLA_NOT_SUPPORTED;
 		return 0;
 	}
 
 	for (size_t i = 0; i < ARRAY_SIZE(k_table); i++) {
-		const struct nodong_apdu_entry *e = &k_table[i];
+		const struct byeorin_apdu_entry *e = &k_table[i];
 		if (e->ins != cmd->ins) {
 			continue;
 		}
@@ -335,13 +335,13 @@ int nodong_apdu_dispatch(const struct nodong_apdu_cmd *cmd,
 		 * Transport-tagged gate: a SIGN_HASH (or any other
 		 * allow_over_ble=false) APDU arriving over BLE is rejected
 		 * unless the build explicitly opts in via
-		 * CONFIG_NODONG_ALLOW_BLE_SIGNING.  Production builds leave
+		 * CONFIG_BYEORIN_ALLOW_BLE_SIGNING.  Production builds leave
 		 * the symbol undefined; only an audited debug build sets it.
 		 */
-		if (cmd->origin == NODONG_TRANSPORT_BLE && !e->allow_over_ble) {
-#if !defined(CONFIG_NODONG_ALLOW_BLE_SIGNING)
+		if (cmd->origin == BYEORIN_TRANSPORT_BLE && !e->allow_over_ble) {
+#if !defined(CONFIG_BYEORIN_ALLOW_BLE_SIGNING)
 			ND_LOG_WRN("ins=0x%02x refused over BLE", cmd->ins);
-			resp->sw = NODONG_SW_UNAUTHORIZED;
+			resp->sw = BYEORIN_SW_UNAUTHORIZED;
 			return 0;
 #else
 			ND_LOG_WRN("ins=0x%02x permitted over BLE — DEBUG ONLY",
@@ -352,11 +352,11 @@ int nodong_apdu_dispatch(const struct nodong_apdu_cmd *cmd,
 		return e->fn(cmd, resp);
 	}
 
-	resp->sw = NODONG_SW_INS_NOT_SUPPORTED;
+	resp->sw = BYEORIN_SW_INS_NOT_SUPPORTED;
 	return 0;
 }
 
-int nodong_apdu_serialize(const struct nodong_apdu_resp *resp,
+int byeorin_apdu_serialize(const struct byeorin_apdu_resp *resp,
 			  uint8_t *out, size_t out_capacity)
 {
 	if (!resp || !out) {

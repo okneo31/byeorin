@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Toolchain detector for the 노동자의 지갑 monorepo.
+ * Toolchain detector for the 벼린 monorepo.
  *
  * Probes the host machine for every external dependency the apps need
  * (Node, pnpm, Rust toolchain for Tauri, JDK + Android SDK for React
@@ -242,7 +242,7 @@ function tagFor(status) {
 }
 
 function main() {
-  console.log(bold(cyan('\n노동자의 지갑 — toolchain probe')));
+  console.log(bold(cyan('\n벼린 — toolchain probe')));
   console.log(dim(`platform: ${platform}    node: ${process.version}\n`));
 
   const results = probes.map((p) => ({ probe: p, result: probeOne(p) }));

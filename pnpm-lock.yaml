@@ -28,16 +28,16 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@nodong/design-system':
+      '@byeorin/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system
-      '@nodong/i18n':
+      '@byeorin/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
-      '@nodong/shell-core':
+      '@byeorin/shell-core':
         specifier: workspace:*
         version: link:../../packages/shell-core
-      '@nodong/wallet-sdk':
+      '@byeorin/wallet-sdk':
         specifier: workspace:*
         version: link:../../packages/wallet-sdk
       '@tauri-apps/api':
@@ -74,16 +74,16 @@ importers:
 
   apps/extension:
     dependencies:
-      '@nodong/design-system':
+      '@byeorin/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system
-      '@nodong/i18n':
+      '@byeorin/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
-      '@nodong/shell-core':
+      '@byeorin/shell-core':
         specifier: workspace:*
         version: link:../../packages/shell-core
-      '@nodong/wallet-sdk':
+      '@byeorin/wallet-sdk':
         specifier: workspace:*
         version: link:../../packages/wallet-sdk
       react:
@@ -123,16 +123,16 @@ importers:
 
   apps/mobile:
     dependencies:
-      '@nodong/design-system':
+      '@byeorin/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system
-      '@nodong/i18n':
+      '@byeorin/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
-      '@nodong/shell-core':
+      '@byeorin/shell-core':
         specifier: workspace:*
         version: link:../../packages/shell-core
-      '@nodong/wallet-sdk':
+      '@byeorin/wallet-sdk':
         specifier: workspace:*
         version: link:../../packages/wallet-sdk
       react:
@@ -159,7 +159,7 @@ importers:
         version: 0.76.9(@babel/core@7.29.0)(@babel/preset-env@7.29.5(@babel/core@7.29.0))
       '@react-native/metro-config':
         specifier: ^0.76.1
-        version: 0.76.9(@babel/core@7.29.0)(@babel/preset-env@7.29.5(@babel/core@7.29.0))
+        version: 0.76.9(@babel/core@7.29.0)(@babel/preset-env@7.29.5(@babel/core@7.29.0))(bufferutil@4.1.0)
       '@react-native/typescript-config':
         specifier: ^0.76.1
         version: 0.76.9
@@ -175,16 +175,16 @@ importers:
 
   apps/web:
     dependencies:
-      '@nodong/design-system':
+      '@byeorin/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system
-      '@nodong/i18n':
+      '@byeorin/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
-      '@nodong/shell-core':
+      '@byeorin/shell-core':
         specifier: workspace:*
         version: link:../../packages/shell-core
-      '@nodong/wallet-sdk':
+      '@byeorin/wallet-sdk':
         specifier: workspace:*
         version: link:../../packages/wallet-sdk
       qrcode:
@@ -263,12 +263,12 @@ importers:
 
   packages/shell-core:
     dependencies:
+      '@byeorin/wallet-sdk':
+        specifier: workspace:*
+        version: link:../wallet-sdk
       '@noble/hashes':
         specifier: ^1.5.0
         version: 1.8.0
-      '@nodong/wallet-sdk':
-        specifier: workspace:*
-        version: link:../wallet-sdk
     devDependencies:
       rimraf:
         specifier: ^6.0.1
@@ -410,7 +410,6 @@ packages:
   '@aptos-labs/aptos-cli@3.0.0':
     resolution: {integrity: sha512-fw9Ph6pe9l/RW6LMqjpxrHiWo2T/gtYWZsRxgl4PqVroavGF13YEQWlUnjJfWgVi1wQHpQcoJ1eYbYsPFu2sVg==}
     engines: {node: '>=22'}
-    cpu: [x64, arm64]
     os: [darwin, linux, win32]
     hasBin: true
 
@@ -8151,7 +8150,7 @@ snapshots:
       - '@babel/preset-env'
       - supports-color
 
-  '@react-native/metro-config@0.76.9(@babel/core@7.29.0)(@babel/preset-env@7.29.5(@babel/core@7.29.0))':
+  '@react-native/metro-config@0.76.9(@babel/core@7.29.0)(@babel/preset-env@7.29.5(@babel/core@7.29.0))(bufferutil@4.1.0)':
     dependencies:
       '@react-native/js-polyfills': 0.76.9
       '@react-native/metro-babel-transformer': 0.76.9(@babel/core@7.29.0)(@babel/preset-env@7.29.5(@babel/core@7.29.0))
@@ -8160,7 +8159,9 @@ snapshots:
     transitivePeerDependencies:
       - '@babel/core'
       - '@babel/preset-env'
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-colors@0.76.9': {}
 

@@ -2,7 +2,7 @@
  * Minimal ether-unit helpers (18 decimals).
  *
  * Why local: we deliberately do not depend on `viem` directly from the mobile
- * app — it's a transitive of `@nodong/wallet-sdk` and we want chain primitives
+ * app — it's a transitive of `@byeorin/wallet-sdk` and we want chain primitives
  * to flow through the SDK's public API. These two helpers cover the v0.1
  * UI need (display balance, parse a TTL amount input).
  */
