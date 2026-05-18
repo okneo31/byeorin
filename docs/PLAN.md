@@ -1,11 +1,15 @@
-# 벼린 — 기획서 (v0.4, 2026-05-16)
+# 벼린 — 기획서 (v0.5, 2026-05-18)
 
-> **브랜드: 벼린** (Byeorin / Worker's Wallet)
+> **브랜드: 벼린** (Byeorin) — 포지션 슬로건: **노동자의 지갑** (Worker's Wallet)
+>
+> 「벼린」 = 단조(벼리다, 무딘 날을 불에 두드려 날카롭게) + 핵심(벼리, 일의 핵심을 쥐다) 이중의미.
 >
 > 한 줄: **TTL 생태계의 공식 멀티체인 월릿 (SW 4종 + 자체 HW)** 을 만든다.
 > 비유: "Ledger 디바이스 + MetaMask 확장 + Trust Wallet 모바일 + Keplr 멀티체인" 을 한 브랜드로.
+>
+> **HW 디바이스명: 벼린 요세 (Byeorin Yose)** — 요세=요새(要塞), 시드를 지키는 단단한 거점.
 
-## 핵심 원칙 (v0.4)
+## 핵심 원칙 (v0.5)
 
 1. **멀티체인 풀스펙트럼.** TTL + EVM 7종 + Cosmos 계열 + Bitcoin + XRP + Solana + TRON + TON + Aptos + Sui. 한 시드에서 체인별 키 파생, 한 UI에서 통합 잔액·전송.
 2. **TTL 체인은 EVM 표준 어댑터로 처리.** TTL = geth 1.13.15 포크 = viem 그대로 호환. ChainID 7777 등록 + viem 기본 동작.
@@ -393,7 +397,7 @@ export interface ChainAdapter<TUnsigned = unknown, TSigned = unknown> {
 
 ---
 
-## 9. 즉시 다음 행동 (v0.4 — Q1 진입)
+## 9. 즉시 다음 행동 (v0.5 — Q1 진입)
 
 **SW (Q1)**
 1. Web 셸의 TTL claim 페이지를 외부 사용자 테스트로 (피드백 루프)
@@ -430,10 +434,14 @@ export interface ChainAdapter<TUnsigned = unknown, TSigned = unknown> {
 
 ## 10. 결정해주실 미정 사항
 
+### 닫힌 결정 (v0.5)
+- ~~디바이스 명칭~~ → **벼린 요세 (Byeorin Yose)** 확정 (2026-05-18). 음역 일관성 유지. 의미: 요새(要塞)=시드를 지키는 거점.
+- ~~브랜드 시각 자산~~ → **확정** (`logo0.{png,svg,_dark.png}`, lockup 가로/세로, 워드마크 한/영, `icons/dist/` 64 파일 전 플랫폼 일괄). 컬러 팔레트 = 잉걸 오렌지/모루 차콜/강철 실버/땀 블루/종이 화이트/밤 모루.
+
+### 열린 결정
 - TTL coin_type 을 SLIP-0044 에 신청할 것인가? (현재 60 공유 중)
 - HW 1차 시판 국가 (한국 단독? 한+미+EU?)
 - 시드 백업 — 종이 + Shamir + (선택) 운영사 클라우드 보조? 클라우드 보조는 비커스토디얼 원칙과 미세 충돌
-- 디바이스 명칭: 벼린 요세 확정? (영문 브랜드 표기 — Byeorin Yose? Worker's Cold?)
 - 라이선스 — 코어 SDK MIT/Apache-2.0, 펌웨어 GPL-3.0/비공개?
 
 ---

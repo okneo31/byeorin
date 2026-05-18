@@ -6,6 +6,45 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Unt
 
 ---
 
+## [v0.5] brand: 노동자의 지갑 → 벼린 (Byeorin) 전면 마이그레이션 + 디자인 시스템 v2 — 2026-05-18
+
+### Brand
+- 마스터 브랜드 확정: **벼린** (단조+핵심 이중의미). 포지션 슬로건 "노동자의 지갑" 유지.
+- HW 디바이스명: **벼린 요세 (Byeorin Yose)**. 요세=요새, 시드를 지키는 거점.
+
+### Changed (마이그레이션, 185 파일 / 958 replacement, `scripts/migrate_brand.py`)
+- 패키지 scope: `@nodong/*` → `@byeorin/*` (5 packages)
+- 영문/한글 정식명: `Nodong`/`NODONG_*`/"노동자의 지갑" → `Byeorin`/`BYEORIN_*`/"벼린"
+- 펌웨어 보드: `nrf52840_nodong_cold.overlay` → `nrf52840_byeorin_yose.overlay`
+- 슬로건 "노동자의 지갑이 세상을 자유롭게"는 placeholder 보호로 그대로 유지
+
+### Added (브랜드 디자인 자산)
+- 마스터 심볼: `logo0.{png,svg,_dark.png}` — 모루+불꽃 컨셉 (단조의 순간)
+- Lockup 가로/세로 + 워드마크 한/영 (산세리프 Pretendard Black 계열)
+- `icons/dist/` — iOS/Android/Web/PWA/Win/macOS/Social 64 파일 일괄
+  + favicon.ico, manifest.webmanifest, head-snippet.html 메타파일
+- 컬러 팔레트: 잉걸 오렌지 `#E84D1A` / 모루 차콜 `#1A1A1A` / 강철 실버 `#9CA3AF` / 땀 블루 `#2E78D2` / 종이 화이트 `#FAFAF7` / 밤 모루 `#0B0B0D`
+- 신규 스크립트: `make_dark_mode.py` (HLS 명도 반전), `downsample_test.py`, `generate_all_icons.py`, `deploy_icons.py`
+
+### Changed (design-system)
+- `tokens.css`/`tokens.ts` 컬러 값 새 브랜드 팔레트로 교체 (`--nd-*` prefix는 코드 호환성 위해 유지)
+- 시멘틱 aliases 추가: `--nd-ember`(=red), `--nd-anvil`, `--nd-night`, `--nd-steel`, `--nd-sweat`
+- `Logo.tsx` 새 모루+불꽃 SVG로 완전 재작성 (옛 곡괭이 컨셉 폐기)
+
+### Distributed (앱별 자산 배포, `scripts/deploy_icons.py`)
+- `apps/web/public/` — favicon, apple-touch, og, manifest 6 파일
+- `apps/extension/public/icon/` — 16/32/48/128 4 파일
+- `apps/desktop/src-tauri/icons/` — Tauri 빌드용 5 파일 + `icon.iconset/` 폴더 (macOS .icns 입력)
+- `apps/mobile/assets/AppIcon.appiconset/` + `android-icons/` — RN bare workflow용
+
+### Fixed
+- `apps/desktop` Portfolio.tsx:111, Wallet.tsx:109 — implicit any 보완 (`b: bigint`)
+
+### Verified
+- `pnpm typecheck` 8/8 워크스페이스 통과 (design-system 갱신 후 재검증 통과)
+
+---
+
 ## [c04a852] harden: review wave 5 — 2nd-pass vulnerability hardening — 2026-05-16
 
 ### Added

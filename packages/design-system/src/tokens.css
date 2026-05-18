@@ -1,18 +1,29 @@
 /*
  * 벼린 — 디자인 토큰
- * 따뜻하고 단단한 노동운동 미감. 사이버펑크/엔터프라이즈/카지노 X.
+ * 모루(차콜) + 불꽃(잉걸 오렌지) + 땀(블루) + 강철(실버) + 종이(웜 화이트).
+ * 단조의 정체성. 화려함이 아니라 도구의 절제.
+ *
  * 모든 색·간격·라운드·그림자는 CSS 커스텀 속성으로 노출된다.
+ * 변수 prefix `--nd-`는 코드 호환성 위해 유지. 의미는 "노동(노동자의 지갑)의 디자인".
  */
 :root {
-  /* ── Brand colors ─────────────────────────────────────── */
-  --nd-red: #c41e1e;          /* 활동가 빨강 — primary action */
-  --nd-red-hover: #a31616;
-  --nd-red-active: #861010;
-  --nd-black: #0a0a0a;
-  --nd-yellow: #f4c430;       /* 따뜻한 강조 */
+  /* ── Brand colors (벼린 v2) ───────────────────────────── */
+  --nd-red: #e84d1a;          /* 잉걸 오렌지 — primary action (옛 활동가 빨강 #c41e1e 대체) */
+  --nd-red-hover: #c73e14;
+  --nd-red-active: #a53312;
+  --nd-black: #0b0b0d;        /* 밤 모루 (옛 #0a0a0a) */
+  --nd-yellow: #f4c430;       /* 따뜻한 강조 (유지) */
   --nd-yellow-hover: #d9ac1f;
-  --nd-paper: #fffaf0;        /* 따뜻한 오프화이트 배경 */
-  --nd-ink: #1a1a1a;
+  --nd-paper: #fafaf7;        /* 종이 화이트 (옛 #fffaf0) */
+  --nd-ink: #1a1a1a;          /* 모루 차콜 (값 유지) */
+
+  /* ── Semantic brand aliases (벼린 정체성) ─────────────── */
+  --nd-ember:       var(--nd-red);     /* 잉걸 — primary action 의미명 */
+  --nd-ember-hover: var(--nd-red-hover);
+  --nd-anvil:       var(--nd-ink);     /* 모루 — 본문/로고 */
+  --nd-night:       var(--nd-black);   /* 밤 모루 — 다크 배경 */
+  --nd-steel:       #9ca3af;           /* 강철 실버 — 보더/비활성 */
+  --nd-sweat:       #2e78d2;           /* 땀 블루 — 정보/링크 */
 
   /* ── Neutrals ─────────────────────────────────────────── */
   --nd-gray-700: #3d3d3d;

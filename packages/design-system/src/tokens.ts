@@ -7,14 +7,14 @@
  */
 export const tokens = {
   color: {
-    red: '#c41e1e',
-    redHover: '#a31616',
-    redActive: '#861010',
-    black: '#0a0a0a',
+    red: '#e84d1a',         // 잉걸 오렌지 — primary action (옛 #c41e1e 대체)
+    redHover: '#c73e14',
+    redActive: '#a53312',
+    black: '#0b0b0d',       // 밤 모루
     yellow: '#f4c430',
     yellowHover: '#d9ac1f',
-    paper: '#fffaf0',
-    ink: '#1a1a1a',
+    paper: '#fafaf7',       // 종이 화이트
+    ink: '#1a1a1a',         // 모루 차콜
     gray700: '#3d3d3d',
     gray500: '#7a7a7a',
     gray300: '#c0c0c0',
@@ -22,7 +22,14 @@ export const tokens = {
     gray50: '#f6f5f1',
     success: '#2d6a4f',
     warning: '#e07a00',
-    error: '#a31616',
+    error: '#a53312',
+    // Semantic brand aliases (벼린 v2)
+    ember: '#e84d1a',
+    emberHover: '#c73e14',
+    anvil: '#1a1a1a',
+    night: '#0b0b0d',
+    steel: '#9ca3af',
+    sweat: '#2e78d2',
   },
   space: {
     1: 4,
