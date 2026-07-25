@@ -210,6 +210,10 @@ body {
 /* ── 버튼 베이스 ───────────────────────────────────────── */
 button {
   font: inherit;
+  /* 한글은 라틴 같은 크기여도 시각적으로 작게 인식된다 — `font: inherit`(=16px)
+   * 받은 버튼이 실제로는 14~15px 처럼 보여 행동 가능성이 낮아진다. CTA 가
+   * 분명히 읽히도록 15.5px 로 명시. .btn-sm 은 자체 font-size 로 11.5px. */
+  font-size: 15.5px;
   border-radius: 8px;
   padding: 10px 14px;
   cursor: pointer;
@@ -238,6 +242,8 @@ button:disabled {
   background: linear-gradient(180deg, #c41e1e 0%, #a01818 100%);
   color: #ffffff;
   font-weight: 700;
+  /* CTA 는 베이스보다 한 단계 더 크게 (16px) — 첫 화면에서 우선 행동 명확화. */
+  font-size: 16px;
   min-height: 44px;
   border-color: #8e1414;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
@@ -250,13 +256,18 @@ button:disabled {
   box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.2);
 }
 
-/* Ghost — 종이 위 빈 자리. 외곽선만 가지며 hover 시 텍스트가 밝아진다. */
+/* Ghost — 종이 위 빈 자리. 외곽선만 가지며 hover 시 텍스트가 밝아진다.
+ *
+ * CTA 가 아닌 secondary 버튼이지만 첫 화면에서 "니모닉 복구 / HW 연결" 같은
+ * 중요 분기 진입을 담당하므로 한글 가독성을 위해 폰트는 .btn-primary 와
+ * 동급(16px) 으로, 무게만 한 단계 가볍게(600) — 행동 가능성을 확보한다. */
 .btn-ghost {
   background: transparent;
   color: var(--popup-muted);
   border-color: var(--popup-border);
-  min-height: 36px;
-  font-weight: 500;
+  min-height: 40px;
+  font-size: 16px;
+  font-weight: 600;
 }
 .btn-ghost:hover:not(:disabled) {
   color: var(--popup-text);
@@ -301,7 +312,8 @@ footer {
   margin-top: auto;
   padding-top: 6px;
   text-align: center;
-  font-size: 11px;
+  /* 11px 은 한글에서 거의 안 읽힘 — 비수탁 안내는 작아도 읽혀야 한다. */
+  font-size: 12.5px;
   line-height: 1.55;
   color: var(--popup-muted);
 }
@@ -368,11 +380,454 @@ footer {
 }
 
 /* ── 잠금된 상태(생성/복구 home) CTA 영역 ──────────────── */
+/* ── ZION 4종 자산 list (활성 카드 안) ────────────────────
+ * native 히어로 아래에 BTC/USDT/ETH 추가 표시. 인쇄 영수증 결처럼 단조롭게
+ * 정렬 — 단위는 우측 정렬 (등폭 숫자 + tabular-nums) 로 자릿수 비교 용이.
+ */
+.zion-assets {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--popup-border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.zion-assets__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13.5px;
+  padding: 2px 0;
+}
+.zion-assets__symbol {
+  color: var(--popup-muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.zion-assets__amount {
+  color: var(--popup-text);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.zion-assets__usd {
+  color: var(--popup-muted);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+.zion-assets__toggle {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: var(--popup-muted);
+  font-size: 12px;
+  padding: 4px 0 0;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.zion-assets__toggle:hover {
+  color: var(--popup-text);
+}
+.zion-assets__actions {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.add-token-form {
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: var(--popup-surface-2);
+  border: 1px solid var(--popup-border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.add-token-form__actions {
+  display: flex;
+  gap: 8px;
+}
+
 /* "지갑이 없습니다." 안내 위에 살짝 강한 폰트로 무게감 */
 .lead {
-  font-size: 14px;
+  /* 첫 화면 안내문은 버튼 위에서 의도를 잡아야 한다 — 16px 로 키워 한글
+   * 무게감 보강. 버튼 .btn-primary(16px) 와 톤 균형. */
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--popup-text);
   margin: 0;
+}
+
+/* ── 지갑 생성 3단계 흐름 ──────────────────────────────── */
+/* 언어 선택 → 니모닉 표시 → 4개 단어 재확인 → unlock.
+ * 각 step 은 .card 안에 들어가고, 본 블록은 step 공용 보조 클래스만 정의한다.
+ */
+.create-step__title {
+  margin: 0 0 6px 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--popup-text);
+}
+
+.create-step__lead {
+  margin: 0 0 4px 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--popup-muted);
+}
+
+/* 언어 선택 — 두 칸짜리 큰 라디오 버튼. radio 입력은 sr-only, label 이 시각 표면. */
+.lang-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 2px 0 6px;
+}
+
+.lang-toggle__opt {
+  /* label 자체가 클릭 표면. 내부에 sr-only input[type=radio]. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  border: 1px solid var(--popup-border);
+  border-radius: 10px;
+  background: var(--popup-surface-2);
+  color: var(--popup-text);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.lang-toggle__opt:hover {
+  border-color: var(--popup-muted);
+}
+
+.lang-toggle__opt--active {
+  border-color: var(--popup-red);
+  background: rgba(196, 30, 30, 0.10);
+  color: var(--popup-text);
+  box-shadow: inset 0 0 0 1px var(--popup-red);
+}
+
+/* sr-only — 시각적으로 숨기지만 키보드 포커스와 SR 노출은 유지. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 4×3 니모닉 그리드 — 팝업 폭 420 에서 한국어 단어 길이를 안정적으로 담을 수 있도록
+ * 셀 폰트는 13px, 인덱스는 좌상단 9px 작게. web 셸과 시각적으로 유사하나 폭/폰트가 다르다.
+ */
+.popup-mnemonic-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin: 4px 0 8px;
+  list-style: none;
+  padding: 0;
+}
+
+.popup-mnemonic-cell {
+  position: relative;
+  background: var(--popup-surface-2);
+  border: 1px solid var(--popup-border);
+  border-radius: 7px;
+  padding: 12px 8px 8px;
+  text-align: center;
+  font-family: var(--nd-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--popup-text);
+  user-select: text;
+  /* 위쪽 1px hairline — 종이 결 */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.popup-mnemonic-cell__index {
+  position: absolute;
+  top: 3px;
+  left: 6px;
+  font-family: var(--nd-font-sans, inherit);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--popup-red-soft);
+  letter-spacing: 0;
+}
+
+.popup-mnemonic-cell__word {
+  display: block;
+  margin-top: 2px;
+  word-break: keep-all;
+}
+
+/* 안전 보관 체크박스 — 텍스트와 자연스럽게 정렬 */
+.safe-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 6px 0 4px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--popup-text);
+  cursor: pointer;
+}
+
+.safe-check input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--popup-red);
+  flex: 0 0 auto;
+}
+
+/* 검증 입력 4개 — 세로 stack. 각 행은 라벨(2번) + 입력. */
+.verify-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 4px;
+}
+
+.verify-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.verify-row__label {
+  flex: 0 0 auto;
+  min-width: 56px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--popup-red-soft);
+  font-family: var(--nd-font-mono, ui-monospace, monospace);
+}
+
+.verify-row__input {
+  flex: 1 1 auto;
+  background: var(--popup-surface-2);
+  color: var(--popup-text);
+  border: 1px solid var(--popup-border);
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-family: var(--nd-font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.verify-row__input:focus {
+  border-color: var(--popup-yellow-soft);
+  box-shadow: 0 0 0 2px rgba(255, 213, 79, 0.18);
+}
+
+.verify-row__input--mismatch {
+  border-color: var(--popup-red-soft);
+  box-shadow: 0 0 0 2px rgba(232, 80, 80, 0.18);
+}
+
+/* ── 다중 계정 표시 ──────────────────────────────────────
+ * 활성 계정 카드 안 보조 메타. 작은 베이지 톤으로 카드 본문(주소)과 위계 구분.
+ */
+.account-kind-badge {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--popup-muted);
+  margin: 0 0 -2px 0;
+}
+
+/* 활성 계정 카드의 액션 한 줄 — 키 보기 / 잠금 등이 같은 행에 흐른다. */
+.account-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+/* 비활성 계정 row — origin-row 의 grid 형태를 그대로 쓰되 가로 액션 2개를 둔다. */
+.account-row .btn-ghost {
+  flex: 0 0 auto;
+}
+
+/* Export 화면의 raw private key 한 줄. 주소 hex 처럼 monospace + 줄바꿈 허용. */
+.export-key {
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--popup-text);
+  background: var(--popup-surface-2);
+  border: 1px solid var(--popup-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 4px 0 0 0;
+  /* 활성 계정 주소와 달리 노란색 강조는 빼고 본문 톤으로 — 노출에 대한 시각적 절제. */
+}
+
+/* PK import 화면의 라벨 입력 — verify-row__input 스타일 재활용 시 padding 일관. */
+input.verify-row__input {
+  width: 100%;
+}
+
+/* 체인 셀렉터 — 활성 계정 카드 상단의 16 체인 드롭다운 */
+.chain-select {
+  width: 100%;
+  background: var(--popup-surface-2);
+  color: var(--popup-text);
+  border: 1px solid var(--popup-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+  cursor: pointer;
+}
+.chain-select:focus {
+  outline: none;
+  border-color: var(--popup-yellow-soft);
+  box-shadow: 0 0 0 2px rgba(255, 213, 79, 0.18);
+}
+.chain-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ── 잔액 히어로 / 주소 + QR / 송금 ──────────────────── */
+
+.balance-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin: 4px 0 2px 0;
+  min-height: 32px;
+}
+
+.balance-hero__value {
+  margin: 0;
+  font-family: var(--nd-font-mono, ui-monospace, monospace);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--popup-text);
+  /* 큰 숫자는 잔액 라인에서 가장 강한 위계. tabular nums 로 자릿수 정렬. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* 잔액 hero 보조 — native 잔액 아래 BTC/USD 환산. 클릭으로 단위 전환. */
+.balance-hero__toggle {
+  margin: 0;
+  padding: 2px 6px;
+  margin-inline: -6px;
+  background: transparent;
+  border: none;
+  color: var(--popup-muted);
+  font-family: var(--nd-font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  user-select: text;
+  border-radius: 6px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.balance-hero__toggle:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--popup-text);
+}
+.balance-hero__toggle:focus-visible {
+  outline: none;
+  background: rgba(255, 213, 79, 0.10);
+  color: var(--popup-text);
+  box-shadow: 0 0 0 2px rgba(255, 213, 79, 0.18);
+}
+
+/* 주소 한 줄 + 복사 / QR 버튼 — 같은 행에 wrap 허용 */
+.address-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.address-row__text {
+  /* .addr 기본 white-space:nowrap 유지하되 flex 안에서 늘어나지 않도록 */
+  flex: 0 0 auto;
+}
+
+/* QR 인라인 패널 — 받기 안내가 위협적이지 않으므로 모달 X */
+.qr-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 2px 0;
+  padding: 10px;
+  background: var(--popup-surface-2);
+  border: 1px solid var(--popup-border);
+  border-radius: 10px;
+}
+
+.qr-inline img {
+  width: 200px;
+  height: 200px;
+  display: block;
+  border-radius: 6px;
+  background: #fafaf7;
+  padding: 6px;
+}
+
+/* 송금 리뷰 화면 — 라벨/값 한 줄 */
+.send-review__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--popup-border-soft);
+}
+
+.send-sent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 213, 79, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 213, 79, 0.06);
+}
+
+.send-hash {
+  /* 긴 hash 가 줄을 깨지 않도록 */
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--popup-yellow-soft);
+}
+
+.send-sent a {
+  color: var(--popup-sweat, #2e78d2);
+  text-decoration: none;
+}
+.send-sent a:hover {
+  text-decoration: underline;
 }

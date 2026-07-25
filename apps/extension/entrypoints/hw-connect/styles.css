@@ -1,0 +1,204 @@
+/* hw-connect — Ledger 연결 전용 페이지 스타일.
+ * popup 의 다크 테마 톤을 따라가되 폭이 더 넓고 (520px) 콘텐츠가 중앙.
+ */
+:root {
+  --hw-bg: #0d0a08;
+  --hw-surface-1: #1a1612;
+  --hw-border: #322a22;
+  --hw-text: #f5ede2;
+  --hw-muted: #a89986;
+  --hw-red: #c41e1e;
+  --hw-red-soft: #e85050;
+  --hw-yellow-soft: #ffd54f;
+  --hw-green-soft: #6fcf97;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--hw-bg);
+  color: var(--hw-text);
+  font-family: var(--nd-font-sans, 'Pretendard Variable', Pretendard, -apple-system,
+    BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+}
+
+body {
+  width: 520px;
+  min-height: 600px;
+}
+
+.hw-root {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px 28px 28px;
+  min-height: 100vh;
+}
+
+.hw-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--hw-border);
+}
+
+.hw-header__mark {
+  width: 32px;
+  height: 32px;
+}
+
+.hw-header__title {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.hw-card {
+  background: var(--hw-surface-1);
+  border: 1px solid var(--hw-border);
+  border-radius: 10px;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hw-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.hw-lead {
+  font-size: 14.5px;
+  color: var(--hw-muted);
+  margin: 0;
+  line-height: 1.55;
+}
+
+.hw-app-select {
+  display: flex;
+  gap: 10px;
+}
+
+.hw-app-option {
+  flex: 1;
+  padding: 14px 12px;
+  background: transparent;
+  border: 1px solid var(--hw-border);
+  border-radius: 8px;
+  color: var(--hw-text);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.hw-app-option:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--hw-muted);
+}
+
+.hw-app-option--active {
+  border-color: var(--hw-red-soft);
+  background: rgba(232, 80, 80, 0.08);
+}
+
+.hw-btn-primary {
+  background: linear-gradient(180deg, #c41e1e 0%, #a01818 100%);
+  color: #fff;
+  border: 1px solid #8e1414;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 46px;
+}
+
+.hw-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.hw-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.hw-btn-ghost {
+  background: transparent;
+  color: var(--hw-muted);
+  border: 1px solid var(--hw-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.hw-btn-ghost:hover:not(:disabled) {
+  color: var(--hw-text);
+  border-color: var(--hw-muted);
+}
+
+.hw-status {
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.hw-status--info {
+  background: rgba(255, 213, 79, 0.08);
+  border: 1px solid rgba(255, 213, 79, 0.25);
+  color: var(--hw-yellow-soft);
+}
+
+.hw-status--error {
+  background: rgba(232, 80, 80, 0.08);
+  border: 1px solid rgba(232, 80, 80, 0.3);
+  color: var(--hw-red-soft);
+}
+
+.hw-status--ok {
+  background: rgba(111, 207, 151, 0.08);
+  border: 1px solid rgba(111, 207, 151, 0.3);
+  color: var(--hw-green-soft);
+}
+
+.hw-addr {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 13px;
+  word-break: break-all;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--hw-border);
+  color: var(--hw-text);
+}
+
+.hw-meta {
+  font-size: 12.5px;
+  color: var(--hw-muted);
+  line-height: 1.55;
+}
+
+.hw-checklist {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13.5px;
+  color: var(--hw-muted);
+  line-height: 1.7;
+}
+.hw-checklist li {
+  margin-bottom: 4px;
+}

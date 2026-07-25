@@ -9,13 +9,28 @@
 // 메인 barrel 을 그대로 import 하면 cosmos/ton/xrp/solana/sui/tron/aptos 어댑터가
 // 따라 들어와 bundle 이 6MB+ 로 부풀고 (Buffer / WASM 미허용으로) popup 마운트가
 // 실패한다. core (Wallet/타입/HW 트랜스포트) + evm (EvmAdapter/TTL_CHAIN) 만 가져온다.
+//
+// **WebHidTransport / HwSigner 는 값으로 정적 import**. 이전엔 type-only +
+// 동적 import 였는데 vite/rollup 이 wallet-sdk/core 의 결과물을 popup chunk
+// 가 아닌 다른 chunk (origins, background) 로 옮기면서 sideEffects:false 와
+// 결합해 namespace member 들을 tree-shake — 런타임에 sdk.WebHidTransport 가
+// undefined 가 됐다. core entry 는 cosmos/ton 같은 무거운 deps 가 없어 popup
+// chunk 에 포함돼도 부담이 없다.
 import {
+  HwSigner,
+  WebHidTransport,
   type HwAppName,
-  type HwSigner,
   type WalletAccount,
-  type WebHidTransport,
 } from '@byeorin/wallet-sdk/core';
-import { EvmAdapter, TTL_CHAIN } from '@byeorin/wallet-sdk/evm';
+import {
+  EvmAdapter,
+  Erc20,
+  TTL_CHAIN,
+  TokenRegistry,
+  discoverTokens,
+  type DiscoveredBalance,
+  type TokenInfo,
+} from '@byeorin/wallet-sdk/evm';
 import { createWalletStore, ExtensionSessionStore } from '@byeorin/shell-core';
 import { clearAllGrants } from './grants.js';
 
@@ -45,6 +60,103 @@ export const walletStore = innerStore;
 /** TTL 어댑터 (기존 코드 호환용). */
 export function getTtlAdapter(): EvmAdapter {
   return walletStore.getDefaultAdapter() as EvmAdapter;
+}
+
+// ERC-20 토큰 레지스트리 — popup 마운트마다 새로 만들지 않고 한 번만.
+// 사용자 커스텀 토큰을 누적해야 하므로 singleton 이 자연스럽다.
+// chrome.storage.local 의 'nd:custom-tokens' 키로 영속화 — popup 부팅 시
+// loadCustomTokensFromStorage() 가 storage → registry 로 복원한다.
+const tokenRegistry = new TokenRegistry();
+
+const CUSTOM_TOKENS_KEY = 'nd:custom-tokens';
+
+// 영속화 형식: { [chainId]: TokenInfo[] }
+type CustomTokensStored = Record<string, TokenInfo[]>;
+
+let _customTokensLoaded = false;
+
+/** chrome.storage.local 에서 사용자 커스텀 토큰을 registry 로 복원. 멱등. */
+export async function loadCustomTokensFromStorage(): Promise<void> {
+  if (_customTokensLoaded) return;
+  _customTokensLoaded = true;
+  try {
+    const data = (await chrome.storage.local.get(CUSTOM_TOKENS_KEY)) as Record<
+      string,
+      CustomTokensStored | undefined
+    >;
+    const stored = data[CUSTOM_TOKENS_KEY];
+    if (!stored) return;
+    for (const [chainIdStr, tokens] of Object.entries(stored)) {
+      const chainId = Number(chainIdStr);
+      if (!Number.isFinite(chainId)) continue;
+      for (const t of tokens) tokenRegistry.addCustomToken(chainId, t);
+    }
+  } catch {
+    // storage 비가용 — 다음 popup mount 에서 다시 시도.
+    _customTokensLoaded = false;
+  }
+}
+
+/** 새 커스텀 토큰을 registry + storage 양쪽에 등록. 중복 주소는 silently no-op. */
+async function persistCustomToken(chainId: number, info: TokenInfo): Promise<void> {
+  tokenRegistry.addCustomToken(chainId, info);
+  try {
+    const data = (await chrome.storage.local.get(CUSTOM_TOKENS_KEY)) as Record<
+      string,
+      CustomTokensStored | undefined
+    >;
+    const map: CustomTokensStored = data[CUSTOM_TOKENS_KEY] ?? {};
+    const key = String(chainId);
+    const list = map[key] ?? [];
+    if (!list.some((t) => t.address.toLowerCase() === info.address.toLowerCase())) {
+      list.push(info);
+      map[key] = list;
+      await chrome.storage.local.set({ [CUSTOM_TOKENS_KEY]: map });
+    }
+  } catch {
+    // storage 실패해도 메모리 registry 는 갱신된 상태. 다음 mount 때 복원 안 됨.
+  }
+}
+
+/**
+ * 컨트랙트 주소 → ERC-20 metadata (symbol/name/decimals) 자동 fetch 후
+ * registry 와 storage 에 등록. 잘못된 주소면 throw.
+ */
+export async function addCustomErc20(
+  adapter: EvmAdapter,
+  chainId: number,
+  contractAddress: string,
+): Promise<TokenInfo> {
+  const erc20 = new Erc20(adapter);
+  const addr = contractAddress.trim() as `0x${string}`;
+  const [symbol, name, decimals] = await Promise.all([
+    erc20.symbol(addr),
+    erc20.name(addr),
+    erc20.decimals(addr),
+  ]);
+  const info: TokenInfo = {
+    address: addr,
+    symbol,
+    name,
+    decimals,
+    custom: true,
+  };
+  await persistCustomToken(chainId, info);
+  return info;
+}
+
+/**
+ * EVM 체인의 보유 토큰 자동 탐색. 기본은 양수 잔액만 (첫 인상 깔끔).
+ * `includeZero: true` 면 잔액 0 토큰도 포함 ("전체 보기" 토글용).
+ */
+export async function discoverEvmTokens(
+  adapter: EvmAdapter,
+  ownerAddress: string,
+  opts: { includeZero?: boolean } = {},
+): Promise<DiscoveredBalance[]> {
+  return discoverTokens(adapter, tokenRegistry, ownerAddress as `0x${string}`, {
+    includeZero: opts.includeZero,
+  });
 }
 
 // ── HW(하드웨어) 계정 ─────────────────────────────────────────────────────
@@ -112,14 +224,61 @@ export async function connectHardware(
   appName: HwAppName,
   derivationPath?: string,
 ): Promise<HwAccountState> {
-  // /core subpath 로 dynamic import — 전체 barrel 을 가져오면 popup 이 마운트되는
-  // 순간 cosmos/ton/xrp 등이 따라 들어와 bundle 시 chunk 가 통째로 비대해진다.
-  const sdk = await import('@byeorin/wallet-sdk/core');
-  const transport = await sdk.WebHidTransport.open({ forceRequest: false });
+  // top-level 정적 import 로 받은 값 사용 — dynamic import 시도는 tree-shake
+  // 에 의해 namespace 가 비어버리는 위험이 있었다 (직전 인시던트).
+  //
+  // 명시 진단: 어떤 식별자가 undefined 인지 정확히 알려줘 후속 디버깅을 단축.
+  // 정적 import 가 성공한 정상 빌드라면 두 식별자 모두 함수/클래스로 도달한다.
+  // 사용자 console 에 명확한 메시지가 나오면 (a) chrome 캐시 / (b) tree-shake /
+  // (c) ESM-CJS interop 중 어느 쪽인지 즉시 판별 가능.
+  if (typeof WebHidTransport === 'undefined' || typeof WebHidTransport.open !== 'function') {
+    throw new Error(
+      `wallet-service: WebHidTransport unavailable (got ${typeof WebHidTransport}). ` +
+        `Try removing the unpacked extension at chrome://extensions/ and re-loading ` +
+        `apps/extension/.output/chrome-mv3. If this persists, the bundle is corrupt — ` +
+        `report this with the full popup console log.`,
+    );
+  }
+  if (typeof HwSigner !== 'function') {
+    throw new Error(
+      `wallet-service: HwSigner unavailable (got ${typeof HwSigner}). ` +
+        `Same remedy as WebHidTransport unavailable.`,
+    );
+  }
+  // `WebHidTransport.open` 안에서 ledger 가 `device.open()` 호출 시 device 가
+  // undefined 인 케이스를 친절하게 풀어 설명한다. 흔한 원인:
+  //   1) Ledger 가 USB 에 안 꽂혀 있음 — chooser 가 빈 채 뜸
+  //   2) 사용자가 chooser 에서 'Cancel'
+  //   3) Chrome MV3 popup blur 로 chooser 가 강제 닫힘 (popup 클릭 후 다른
+  //      창을 만지면 popup 이 사라지고 chooser 도 같이 닫힘 — 알려진 함정)
+  //   4) Ledger 가 다른 앱에 점유 중 (Ledger Live 가 켜져있는 등)
+  // 위 모두 ledger 내부에서는 `undefined.open` 형태의 raw TypeError 로 표면화된다.
+  let transport;
+  try {
+    transport = await WebHidTransport.open({ forceRequest: false });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (
+      msg.includes("reading 'open'") ||
+      msg.toLowerCase().includes('no device') ||
+      msg.toLowerCase().includes('cancel')
+    ) {
+      throw new Error(
+        'Ledger 디바이스를 찾지 못했거나 선택이 취소되었습니다. ' +
+          '확인사항: ① Ledger 를 USB 에 연결 ② 디바이스 잠금 해제(PIN 입력) ' +
+          '③ Ledger Live 가 켜져있다면 종료 (앱 점유 충돌) ' +
+          '④ 디바이스에서 해당 앱(Solana/Cosmos)을 연 뒤 다시 시도. ' +
+          '※ MV3 popup 의 chooser 가 다른 창 클릭으로 닫히는 함정도 있으니, ' +
+          '버튼 클릭 후 chooser 가 뜨면 popup 영역에서 마우스를 떼지 않은 채로 ' +
+          '선택해 주세요.',
+      );
+    }
+    throw e;
+  }
   const path =
     derivationPath ??
     (appName === 'solana' ? "m/44'/501'/0'/0'" : "m/44'/118'/0'/0/0");
-  const signer = new sdk.HwSigner({ transport, appName, derivationPath: path });
+  const signer = new HwSigner({ transport, appName, derivationPath: path });
   const publicKey = await signer.publicKey();
   // v0.4: HW 계정의 "주소" 는 chain-adapter 에 의해 후속 단계에서 계산된다.
   // 현재는 pubkey 헥스 prefix 를 디스플레이용으로 사용한다 (실제 체인 주소는

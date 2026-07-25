@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",
+    "build:icons": "node scripts/build-icons.mjs",
     "zip": "wxt zip",
     "typecheck": "wxt prepare && tsc --noEmit",
     "test": "vitest run",
@@ -17,6 +18,8 @@
     "@byeorin/i18n": "workspace:*",
     "@byeorin/shell-core": "workspace:*",
     "@byeorin/wallet-sdk": "workspace:*",
+    "buffer": "^6.0.3",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "viem": "^2.21.40"
@@ -24,6 +27,7 @@
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "@types/chrome": "^0.0.279",
+    "@types/qrcode": "^1.5.5",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@wxt-dev/module-react": "^1.1.0",
