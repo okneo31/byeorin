@@ -12,7 +12,13 @@
 // 사용: node scripts/gradle.mjs assembleDebug [assembleRelease ...]
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  statSync,
+  copyFileSync,
+} from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -60,9 +66,10 @@ const res = spawnSync(wrapper, [...tasks, '--no-daemon'], {
 if (res.status !== 0) process.exit(res.status ?? 1);
 
 // ── 4. 산출물 보고 ────────────────────────────────────────────────────────
+const releaseApk = join(androidDir, 'app/build/outputs/apk/release/app-release.apk');
 const outputs = [
   ['debug  ', join(androidDir, 'app/build/outputs/apk/debug/app-debug.apk')],
-  ['release', join(androidDir, 'app/build/outputs/apk/release/app-release.apk')],
+  ['release', releaseApk],
   ['release(unsigned)', join(androidDir, 'app/build/outputs/apk/release/app-release-unsigned.apk')],
 ];
 console.log('\n[byeorin] APK:');
@@ -74,6 +81,19 @@ for (const [label, p] of outputs) {
   console.log(`  ${label}  ${mb} MB  ${p}`);
 }
 if (!found) console.log('  (산출된 APK 없음)');
+
+// ── 5. 실기기용 고정 경로로 복사 ──────────────────────────────────────────
+//
+// Gradle 산출 경로는 깊어서 매번 찾아 들어가기 번거롭다. 서명된 release APK 를
+// 저장소 루트의 `벼린.apk` 로 항상 덮어써, 폰에 옮길 파일 위치를 하나로 고정한다.
+// 같은 키로 서명되므로 이 파일을 덮어 설치하면 기존 지갑(금고)이 그대로 유지된다.
+if (existsSync(releaseApk)) {
+  const repoRoot = resolve(appRoot, '..', '..');
+  const dest = join(repoRoot, '벼린.apk');
+  copyFileSync(releaseApk, dest);
+  const mb = (statSync(dest).size / 1024 / 1024).toFixed(1);
+  console.log(`\n[byeorin] 실기기용 복사본 갱신: ${dest}  (${mb} MB)`);
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────
 

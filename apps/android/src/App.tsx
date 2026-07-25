@@ -34,6 +34,7 @@ import {
 import { installAutoLock } from './autolock.js';
 import { installBackButton } from './back-button.js';
 import { nativeFetch } from './native-http.js';
+import { getAppVersion } from './app-version.js';
 
 // 벼린 — 안드로이드 셸 (WebView).
 //
@@ -141,6 +142,8 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   // 금고 상태 — 디스크에 암호화 blob 이 있는지. 첫 화면 분기의 기준.
   const [hasVault, setHasVault] = useState<boolean>(() => keystoreSession.hasVault());
+  // 지금 깔린 빌드 표시 — 산출물 파일명이 항상 같아 앱이 스스로 답해야 한다.
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   // 'set-pass' 단계로 넘어갈 때 임시로 붙들고 있는 시드. 비밀번호가 정해지는
   // 즉시 금고에 봉인되고 여기서 비워진다.
   const pendingMnemonic = useRef<string | null>(null);
@@ -161,6 +164,10 @@ export function App() {
   // 사용자 커스텀 ERC-20 토큰을 storage 에서 registry 로 복원. 한 번만.
   useEffect(() => {
     void loadCustomTokensFromStorage();
+  }, []);
+
+  useEffect(() => {
+    void getAppVersion().then(setAppVersion);
   }, []);
 
   // 암호화 저장 실패(스토리지 가득참 등)는 조용히 넘기면 다음 실행에서 계정이
@@ -534,7 +541,10 @@ export function App() {
       )}
 
       {error ? <p className="error">{error}</p> : null}
-      <footer>{t('footer.skeleton')}</footer>
+      <footer>
+        {t('footer.skeleton')}
+        {appVersion ? <span className="footer-version"> · {appVersion}</span> : null}
+      </footer>
     </main>
   );
 }

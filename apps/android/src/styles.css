@@ -966,3 +966,10 @@ textarea,
   opacity: 0.4;
   cursor: default;
 }
+
+/* 빌드 식별용 버전 — 푸터 끝에 조용히 붙는다. 눈에 띌 필요는 없지만
+ * 실기기에서 "이거 새 빌드 맞나?" 를 확인할 수 있어야 한다. */
+.footer-version {
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}

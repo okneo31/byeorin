@@ -94,7 +94,33 @@ pnpm apk:release    # 릴리스만
 ```
 android/app/build/outputs/apk/debug/app-debug.apk       (~6.4 MB)
 android/app/build/outputs/apk/release/app-release.apk   (~5.0 MB, 서명됨)
+D:\TTLCOINWalet\벼린.apk                                 ← release 복사본 (실기기용)
 ```
+
+release 빌드는 저장소 루트의 **`벼린.apk`** 로 항상 복사된다. 폰에 옮길 파일 위치를
+하나로 고정해 깊은 Gradle 경로를 매번 찾지 않게 하려는 것. gitignore 대상.
+
+### 업데이트인가, 지우고 새로 까는 것인가
+
+**업데이트다.** release APK 는 언제나 같은 키(`byeorin-release.jks`)로 서명되고
+applicationId 도 같으므로, 새 `벼린.apk` 를 덮어 설치하면 안드로이드가 이를 앱
+업데이트로 처리한다. 앱 데이터(= 암호화 금고)는 그대로 남고 기존 비밀번호로 열린다.
+
+실측 (2026-07-25, 에뮬레이터):
+  v0.5.0(code 1) 설치 → 지갑 복구·금고 생성 → v0.5.1(code 2) 를 `install -r`
+  → 잠금 화면으로 부팅(금고 보존) → 기존 비밀번호로 해제 → 같은 계정
+  `0xf39F…2266` 복원 확인.
+
+예외 — **지우고 새로 깔아야 하는 경우**:
+  - debug ↔ release 를 바꿔 설치할 때. 서명 키가 달라 덮어쓰기가 거부된다
+    (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). 이때는 앱 데이터도 함께 사라진다.
+  - `versionCode` 를 낮추는 다운그레이드. 안드로이드가 막는다.
+  - 금고 저장 포맷을 바꾸는 변경이 들어갈 때. 지금은 해당 없지만, 포맷을 바꾼다면
+    마이그레이션을 넣거나 사용자에게 복구 문구로 재설정하도록 안내해야 한다.
+
+그래서 **배포마다 `versionCode` 를 +1** 해야 한다 (같은 값이어도 사이드로드는
+되지만, 폰에 깔린 게 새 빌드인지 구분이 안 된다). 앱 푸터에 `v0.5.1 (2)` 형태로
+versionName/versionCode 를 띄워 두었으므로 화면에서 바로 확인할 수 있다.
 
 `pnpm apk*` 는 내부적으로 `vite build` → `cap sync android` → Gradle 순으로 돈다.
 웹 코드만 고쳤다면 `pnpm sync` 후 Gradle 만 다시 돌려도 된다.

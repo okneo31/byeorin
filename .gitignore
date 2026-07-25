@@ -48,3 +48,7 @@ Thumbs.db
 !.vscode/extensions.json
 !.vscode/settings.shared.json
 .idea/
+
+# 실기기 설치용 고정 경로 복사본 (scripts/gradle.mjs 가 매 릴리스 빌드마다 덮어씀).
+# 산출물이라 저장소에 넣지 않는다.
+/벼린.apk
