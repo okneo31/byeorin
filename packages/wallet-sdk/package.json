@@ -22,6 +22,11 @@
       "types": "./dist/evm.d.ts",
       "import": "./dist/evm.js",
       "require": "./dist/evm.cjs"
+    },
+    "./multichain": {
+      "types": "./dist/multichain.d.ts",
+      "import": "./dist/multichain.js",
+      "require": "./dist/multichain.cjs"
     }
   },
   "files": ["dist", "src"],

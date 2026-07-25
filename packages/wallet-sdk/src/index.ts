@@ -1,5 +1,12 @@
 export * from './types.js';
-export { Wallet, type WalletAccount, type WalletOptions } from './wallet.js';
+export {
+  Wallet,
+  accountFromPrivateKey,
+  transferAccount,
+  privateKeyToHex,
+  type WalletAccount,
+  type WalletOptions,
+} from './wallet.js';
 export { SoftSigner, type SoftSignerOptions } from './signers/soft.js';
 export {
   HwSigner,
@@ -13,6 +20,7 @@ export {
   createMnemonic,
   isValidMnemonic,
   mnemonicToSeed,
+  getWordlist,
   type WordlistName,
   type MnemonicStrength,
 } from './crypto/seed.js';
@@ -36,6 +44,20 @@ export { BtcAdapter } from './chains/btc.js';
 export { XrpAdapter } from './chains/xrp.js';
 export { isValidClassicAddress } from 'xrpl';
 export { CosmosAdapter, type CosmosAdapterOptions } from './chains/cosmos.js';
+export {
+  ZionAmmClient,
+  ZION_API_BASE,
+  ZION_AMM_DEFAULT_SLIPPAGE_BPS,
+  type ZionPool,
+  type ZionSwapQuote,
+  type ZionAmmClientOptions,
+} from './chains/zion-amm.js';
+export {
+  ZION_AMM_MSG_SWAP_TYPE_URL,
+  ZION_AMM_TYPES,
+  encodeMsgSwap,
+  type MsgSwapValue,
+} from './chains/zion-amm-codec.js';
 export { SolanaAdapter, type SolanaAdapterOptions } from './chains/solana.js';
 export { TronAdapter, type TronAdapterOptions } from './chains/tron.js';
 export { TonAdapter, type TonAdapterOptions } from './chains/ton.js';

@@ -250,6 +250,79 @@ describe('CosmosAdapter — Injective (Ethermint, evmAddressing)', () => {
   });
 });
 
+describe('CosmosAdapter — customMsgTypes & buildTx', () => {
+  // A minimal GeneratedType: encodes/decodes a single proto-bytes field.
+  // Used only to prove the Registry is layered correctly — we do not need a
+  // real ZION message here (M2 covers that).
+  const FAKE_TYPE_URL = '/zion.test.v1.MsgPing';
+  const fakeGenerated = {
+    encode(value: { payload: Uint8Array }) {
+      // Pretend wire-format: just return the payload. Registry only needs
+      // an object with `.encode(value).finish()`.
+      return {
+        finish: () => value.payload,
+      };
+    },
+    decode(_bytes: Uint8Array) {
+      return { payload: new Uint8Array() };
+    },
+    fromPartial(p: { payload: Uint8Array }) {
+      return { payload: p.payload };
+    },
+  } as unknown as Parameters<
+    InstanceType<typeof CosmosAdapter>['registry']['register']
+  >[1];
+
+  it('customMsgTypes registers extra types in the registry', () => {
+    const adapter = new CosmosAdapter({
+      chainId: 'zion',
+      bech32Prefix: 'zion',
+      rpcUrl: 'http://localhost',
+      denom: 'utrg',
+      customMsgTypes: [[FAKE_TYPE_URL, fakeGenerated]],
+    });
+    // Registry.lookupType returns undefined for unknown type URLs.
+    expect(adapter.registry.lookupType(FAKE_TYPE_URL)).toBe(fakeGenerated);
+    // defaultRegistryTypes still present.
+    expect(
+      adapter.registry.lookupType('/cosmos.bank.v1beta1.MsgSend'),
+    ).toBeDefined();
+  });
+
+  it('omitting customMsgTypes leaves the registry at defaults only', () => {
+    const adapter = new CosmosAdapter({
+      chainId: 'cosmoshub-4',
+      bech32Prefix: 'cosmos',
+      rpcUrl: 'http://localhost',
+      denom: 'uatom',
+    });
+    expect(adapter.registry.lookupType(FAKE_TYPE_URL)).toBeUndefined();
+    expect(
+      adapter.registry.lookupType('/cosmos.bank.v1beta1.MsgSend'),
+    ).toBeDefined();
+  });
+
+  it('buildTx rejects empty message arrays (no degenerate tx)', async () => {
+    const adapter = new CosmosAdapter({
+      chainId: 'cosmoshub-4',
+      bech32Prefix: 'cosmos',
+      rpcUrl: 'http://localhost',
+      denom: 'uatom',
+    });
+    // We don't need a working signer here — the empty-message guard fires
+    // before any account lookup or signer call.
+    const stubCtx = {
+      sender: 'cosmos1...',
+      signer: {
+        publicKey: async () => new Uint8Array(33),
+      },
+    } as unknown as Parameters<typeof adapter.buildTx>[1];
+    await expect(adapter.buildTx([], stubCtx)).rejects.toThrow(
+      /requires at least one message/,
+    );
+  });
+});
+
 describe.skipIf(!RUN_LIVE)('CosmosAdapter — live RPC', () => {
   it('fetches a balance from a live Cosmos Hub RPC', async () => {
     const adapter = new CosmosAdapter({

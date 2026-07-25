@@ -32,6 +32,12 @@ export interface DiscoverOpts {
   maxRpcCalls?: number;
   /** chainId. 미지정 시 adapter.chain.id 를 쓴다. */
   chainId?: number;
+  /**
+   * 잔액 0 인 토큰도 결과에 포함. 기본 `false` — UI 첫 인상이 깔끔해진다.
+   * "전체 보기" 토글에서 true 로 호출해 사용자가 어떤 토큰들이 watch
+   * 가능한지 확인할 수 있게 한다.
+   */
+  includeZero?: boolean;
 }
 
 /**
@@ -76,7 +82,6 @@ export async function discoverTokens(
     }),
   );
 
-  return results
-    .filter((r): r is DiscoveredBalance => r !== null)
-    .filter((r) => r.balance > 0n);
+  const nonNull = results.filter((r): r is DiscoveredBalance => r !== null);
+  return opts.includeZero ? nonNull : nonNull.filter((r) => r.balance > 0n);
 }

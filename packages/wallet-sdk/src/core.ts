@@ -13,7 +13,14 @@
 // 체인 별 구현은 `./evm`, `./btc`, ... 등의 subpath 에서 가져온다.
 
 export * from './types.js';
-export { Wallet, type WalletAccount, type WalletOptions } from './wallet.js';
+export {
+  Wallet,
+  accountFromPrivateKey,
+  transferAccount,
+  privateKeyToHex,
+  type WalletAccount,
+  type WalletOptions,
+} from './wallet.js';
 export { SoftSigner, type SoftSignerOptions } from './signers/soft.js';
 export {
   HwSigner,
@@ -27,6 +34,7 @@ export {
   createMnemonic,
   isValidMnemonic,
   mnemonicToSeed,
+  getWordlist,
   type WordlistName,
   type MnemonicStrength,
 } from './crypto/seed.js';

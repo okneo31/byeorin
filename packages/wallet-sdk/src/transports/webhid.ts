@@ -93,6 +93,42 @@ interface WebHidModule {
   };
 }
 
+// ── Ledger 모듈 prefetch (Chrome MV3 popup user-gesture 함정 회피) ───────────
+//
+// 문제: popup 의 click → connectHardware → WebHidTransport.open → loadWebHid 의
+// `await import('@ledgerhq/hw-transport-webhid')` 가 *첫* await 라면 Chrome 이
+// "user gesture 만료" 판정해 navigator.hid.requestDevice() 의 chooser 가
+// 안 뜬다 (조용히 실패).
+//
+// 해결: webhid.ts 가 import 되는 시점(=popup mount)에 ledger 모듈을 한 번
+// 미리 import 해 캐시에 올려둔다. 사용자 click 시점의 `await import(...)` 는
+// 모듈 캐시 hit 으로 *동기적으로* resolve → gesture chain 이 끊기지 않는다.
+//
+// sideEffects:false 패키지에서도 top-level 함수 호출은 side effect 로 보존된다.
+let _webhidPrefetch: Promise<unknown> | null = null;
+function prefetchWebHidModule(): void {
+  if (_webhidPrefetch !== null) return;
+  // 브라우저 환경에서만 prefetch (node 테스트/SSR 에서 모듈이 없을 수 있음).
+  const nav = (globalThis as { navigator?: unknown }).navigator;
+  if (!nav) return;
+  _webhidPrefetch = import(
+    /* @vite-ignore */ '@ledgerhq/hw-transport-webhid'
+  ).catch(() => null);
+}
+prefetchWebHidModule();
+
+/**
+ * Ledger WebHID transport 모듈을 명시적으로 prefetch 한다.
+ *
+ * webhid.ts 가 import 되는 시점에도 자동 prefetch 가 동작하지만, 컨슈머
+ * (예: extension popup) 가 별도 mount lifecycle 에서 한 번 더 부르고 싶을
+ * 때 사용. 이미 시작된 prefetch 는 재호출해도 같은 promise 를 공유.
+ */
+export function prefetchWebHidTransport(): Promise<unknown> | null {
+  prefetchWebHidModule();
+  return _webhidPrefetch;
+}
+
 function assertWebHidAvailable(): void {
   const nav = (globalThis as { navigator?: { hid?: unknown } }).navigator;
   if (!nav || !nav.hid) {
@@ -105,15 +141,42 @@ function assertWebHidAvailable(): void {
 }
 
 async function loadWebHid(): Promise<WebHidModule['default']> {
+  let mod: unknown;
   try {
-    const mod = (await import(
-      /* @vite-ignore */ '@ledgerhq/hw-transport-webhid'
-    )) as WebHidModule;
-    return mod.default;
+    mod = await import(/* @vite-ignore */ '@ledgerhq/hw-transport-webhid');
   } catch (e) {
     throw new Error(
       'WebHidTransport: @ledgerhq/hw-transport-webhid is not installed. ' +
         `(${e instanceof Error ? e.message : String(e)})`,
     );
   }
+  // hw-transport-webhid 의 default export 는 `class TransportWebHID` 자체이고
+  // 정적 메서드 `request()` / `openConnected()` 를 갖는다. ESM/CJS interop
+  // 에 따라 module shape 이 다음 중 하나가 될 수 있다:
+  //   - `mod`               (순수 ESM, default 없음)
+  //   - `mod.default`       (CJS → ESM 일반 변환)
+  //   - `mod.default.default` (CJS `module.exports = { default: X }` 이중 wrap)
+  // 각 후보를 순서대로 본 뒤 `.request` 가 함수인 첫 객체를 채택한다.
+  // `class` 의 typeof 는 'function' 이므로 type-narrowing 없이 그대로 검사.
+  type HidShape = { request?: unknown; openConnected?: unknown; default?: unknown };
+  const candidates: HidShape[] = [
+    mod as HidShape,
+    (mod as HidShape).default as HidShape,
+    ((mod as HidShape).default as HidShape | undefined)?.default as HidShape,
+  ];
+  for (const c of candidates) {
+    if (c && typeof c.request === 'function') {
+      return c as unknown as WebHidModule['default'];
+    }
+  }
+  // 그래도 못 찾으면 어디서 막힌 건지 keys 를 모두 노출해 후속 unwrap 규칙 작성에 활용.
+  const topKeys = mod && typeof mod === 'object' ? Object.keys(mod) : [];
+  const defObj = (mod as HidShape | null)?.default;
+  const defKeys = defObj && typeof defObj === 'object' ? Object.keys(defObj) : [];
+  throw new Error(
+    `WebHidTransport: hw-transport-webhid module shape unexpected — ` +
+      `top-level keys=[${topKeys.join(',')}] (typeof default=${typeof defObj}), ` +
+      `default keys=[${defKeys.length ? defKeys.join(',') : '<none>'}]. ` +
+      `Expected .request() on one of mod / mod.default / mod.default.default.`,
+  );
 }

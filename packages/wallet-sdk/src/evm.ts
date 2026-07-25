@@ -18,3 +18,17 @@ export {
   type EvmUnsignedTx,
   type EvmSignedTx,
 } from './chains/evm.js';
+
+// ERC-20 토큰 시스템 — popup 의 EVM 자산 list 가 활용. tokens 는 viem/EVM 전용
+// 이라 본 subpath 에 묶어도 부담 없다 (cosmos/ton/xrp 안 끌려옴).
+export {
+  Erc20,
+  ERC20_ABI,
+  decodeBalanceOf,
+  TokenRegistry,
+  BUILTIN_CHAIN_IDS,
+  discoverTokens,
+  type TokenInfo,
+  type DiscoverOpts,
+  type DiscoveredBalance,
+} from './tokens/index.js';

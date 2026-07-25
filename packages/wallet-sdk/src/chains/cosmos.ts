@@ -9,6 +9,7 @@ import {
   makeSignBytes,
   makeSignDoc,
   Registry,
+  type GeneratedType,
 } from '@cosmjs/proto-signing';
 import { defaultRegistryTypes, StargateClient } from '@cosmjs/stargate';
 import {
@@ -35,6 +36,17 @@ export interface CosmosAdapterOptions {
   defaultGas?: number;
   /** Optional override of default fee amount in `denom` (default 5000). */
   defaultFee?: bigint;
+  /**
+   * Extra proto message types to register on the adapter's `Registry` beyond
+   * `defaultRegistryTypes` (which already covers MsgSend / staking / gov /
+   * ibc). Pass this to enable chain-specific custom messages — e.g. ZION's
+   * `/zion.amm.v1.MsgSwap`, `/zion.job.v1.MsgClaimJob`, `/zion.bankext.v1.MsgClaimSeed`.
+   *
+   * Each entry is `[typeUrl, GeneratedType]` — the same pair you'd pass to
+   * `registry.register(...)`. Order matters only if two entries share a
+   * typeUrl (last one wins).
+   */
+  customMsgTypes?: ReadonlyArray<readonly [string, GeneratedType]>;
   /**
    * Use EVM-style (Ethermint) address derivation instead of the classic
    * Cosmos `ripemd160(sha256(pubkey))`. When `true`:
@@ -103,7 +115,13 @@ export class CosmosAdapter
   readonly defaultFee: bigint;
   readonly evmAddressing: boolean;
 
-  private readonly registry: Registry;
+  /**
+   * Proto `Registry` for tx-body encoding. Read-only by convention — pass
+   * `customMsgTypes` at construction time instead of mutating at runtime, so
+   * the adapter's message vocabulary stays a deterministic part of its
+   * identity. Exposed for `registry.lookupType(...)` and similar introspection.
+   */
+  readonly registry: Registry;
 
   constructor(opts: CosmosAdapterOptions) {
     this.chainId = opts.chainId;
@@ -118,7 +136,14 @@ export class CosmosAdapter
     this.id = `cosmos:${opts.chainId}`;
     this.displayName = opts.chainId;
     // defaultRegistryTypes contains MsgSend, MsgMultiSend, staking, gov, ibc, etc.
+    // customMsgTypes are layered on top so chain-specific messages
+    // (ZION's MsgSwap / MsgClaimJob / MsgClaimSeed, etc.) become first-class.
     this.registry = new Registry(defaultRegistryTypes);
+    if (opts.customMsgTypes) {
+      for (const [typeUrl, type] of opts.customMsgTypes) {
+        this.registry.register(typeUrl, type);
+      }
+    }
   }
 
   derivationPath(account = 0, index = 0): string {
@@ -156,10 +181,70 @@ export class CosmosAdapter
     }
   }
 
+  /**
+   * 주소의 *모든 denom* 잔액을 한 번에 가져온다. ZION 처럼 한 계정이 여러
+   * 자산(utrg/ubtc/uusdt/ueth) 을 보유하는 경우에 사용.
+   *
+   * 결과는 chain 에 *존재하는* 잔액만 포함 — 0 인 자산은 빠질 수 있다.
+   * UI 가 "정의된 자산 목록 × 잔액 맵" 으로 매핑하는 게 안전하다.
+   *
+   * RPC 1 회 호출 (`/cosmos/bank/v1beta1/balances/{address}` 의 RPC ABCI 등가).
+   */
+  async getAllBalances(
+    address: Address,
+  ): Promise<Array<{ denom: string; amount: bigint }>> {
+    const client = await StargateClient.connect(this.rpcUrl);
+    try {
+      const coins = await client.getAllBalances(address);
+      return coins.map((c) => ({ denom: c.denom, amount: BigInt(c.amount) }));
+    } finally {
+      client.disconnect();
+    }
+  }
+
   async buildTransfer(
     intent: TransferIntent,
     ctx: TxContext,
   ): Promise<CosmosUnsignedTx> {
+    // Standard kWR/uatom/etc. send → one MsgSend. All Cosmos chains accept
+    // this; ZION's bankext SendRestriction mirrors it to the Available bucket
+    // automatically (see ZionWallet.MD §7).
+    return this.buildTx(
+      [
+        {
+          typeUrl: MSG_SEND_TYPE_URL,
+          value: {
+            fromAddress: ctx.sender,
+            toAddress: intent.to,
+            amount: [{ denom: this.denom, amount: intent.amount.toString() }],
+          },
+        },
+      ],
+      ctx,
+      intent.memo !== undefined ? { memo: intent.memo } : undefined,
+    );
+  }
+
+  /**
+   * Build an unsigned Cosmos tx from arbitrary registered messages.
+   *
+   * This is the general path that `buildTransfer` reuses for plain MsgSend.
+   * Pass `customMsgTypes` to the constructor first to register your chain's
+   * proto types (e.g. ZION AMM/job/bankext) — then `messages[*].typeUrl`
+   * must match a registered entry and `value` must match its proto shape.
+   *
+   * Returns a `CosmosUnsignedTx` ready for `signRequests` → Signer →
+   * `applySignatures` → `broadcast`. The signing pipeline is identical to
+   * MsgSend's — only the message contents differ.
+   */
+  async buildTx(
+    messages: ReadonlyArray<{ typeUrl: string; value: unknown }>,
+    ctx: TxContext,
+    opts?: { memo?: string },
+  ): Promise<CosmosUnsignedTx> {
+    if (messages.length === 0) {
+      throw new Error('cosmos: buildTx requires at least one message');
+    }
     const senderPubkeyRaw = await ctx.signer.publicKey();
     const pubKey = toCompressedSecp256k1(senderPubkeyRaw);
     const sender = ctx.sender;
@@ -182,19 +267,11 @@ export class CosmosAdapter
       client.disconnect();
     }
 
-    // 2. Build TxBody with MsgSend, via Registry so we don't import cosmjs-types directly.
+    // 2. Build TxBody via Registry — handles MsgSend out of the box and any
+    // customMsgTypes registered at construction.
     const bodyBytes = this.registry.encodeTxBody({
-      messages: [
-        {
-          typeUrl: MSG_SEND_TYPE_URL,
-          value: {
-            fromAddress: sender,
-            toAddress: intent.to,
-            amount: [{ denom: this.denom, amount: intent.amount.toString() }],
-          },
-        },
-      ],
-      memo: intent.memo ?? '',
+      messages: messages.map((m) => ({ typeUrl: m.typeUrl, value: m.value })),
+      memo: opts?.memo ?? '',
     });
 
     // 3. Encode the pubkey as Any and build AuthInfo (default SIGN_MODE_DIRECT).
@@ -360,7 +437,7 @@ function encodeTxRaw(
   return concat(chunks);
 }
 
-function varint(n: number): Uint8Array {
+export function varint(n: number): Uint8Array {
   if (n < 0) throw new Error('cosmos: varint must be non-negative');
   const out: number[] = [];
   let v = n;
@@ -372,7 +449,7 @@ function varint(n: number): Uint8Array {
   return new Uint8Array(out);
 }
 
-function concat(parts: readonly Uint8Array[]): Uint8Array {
+export function concat(parts: readonly Uint8Array[]): Uint8Array {
   let total = 0;
   for (const p of parts) total += p.length;
   const out = new Uint8Array(total);

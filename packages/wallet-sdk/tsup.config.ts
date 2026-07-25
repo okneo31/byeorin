@@ -7,7 +7,7 @@ export default defineConfig({
   //   - evm   : EVM 전용 (TTL 등) — viem 만 의존.
   // popup/background 처럼 EVM 만 쓰는 컨슈머는 core+evm 만 import 해 cosmos/ton/xrp/...
   // 라이브러리가 bundle 에 끌려오지 않도록 한다.
-  entry: ['src/index.ts', 'src/core.ts', 'src/evm.ts'],
+  entry: ['src/index.ts', 'src/core.ts', 'src/evm.ts', 'src/multichain.ts'],
   format: ['esm', 'cjs'],
   dts: true,
   sourcemap: true,
