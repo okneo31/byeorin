@@ -3,6 +3,12 @@ apply plugin: 'com.android.application'
 android {
     namespace = "top.ttl1.byeorin"
     compileSdk = rootProject.ext.compileSdkVersion
+
+    // AGP 8 부터 BuildConfig 생성이 기본 off 다. MainActivity 가 릴리스 빌드에서
+    // WebView 원격 디버깅을 끄기 위해 BuildConfig.DEBUG 를 읽으므로 켜 둔다.
+    buildFeatures {
+        buildConfig = true
+    }
     defaultConfig {
         applicationId "top.ttl1.byeorin"
         minSdkVersion rootProject.ext.minSdkVersion

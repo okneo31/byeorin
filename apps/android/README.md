@@ -136,6 +136,14 @@ release APK 를 설치해 실제로 확인한 것:
 - [x] **틀린 비밀번호에도 금고가 지워지지 않음**
 - [x] 앱 재설치 후에도 금고 유지
 
+시드구문 24 단어 (2026-07-25 추가):
+- [x] 영어 24 단어 생성 → 6 단어 되묻기 → 금고 저장 → 계정 생성
+- [x] **한국어 24 단어 전 흐름** — `adb shell input text` 는 ASCII 만 되지만,
+      WebView 원격 디버깅(CDP)의 `Input.insertText` 로 한글 입력을 자동화했다.
+      DOM 에서 단어를 직접 읽으므로 스크린샷 판독도 불필요.
+      (스크립트 예시는 커밋 메시지 참조 — 디버그 빌드에서만 붙는다.)
+- [x] 한글 24 단어 3 열 그리드 — 잘림 0, 가로 스크롤 0 (최장 "아스팔트")
+
 미검증 (실기기에서 확인 필요):
 - 실제 송금/스왑 브로드캐스트 (테스트 계정에 잔액 0)
 - 저사양 단말에서의 scrypt 체감 속도
@@ -148,6 +156,9 @@ release APK 를 설치해 실제로 확인한 것:
 - [ ] **`FLAG_SECURE`** — 시드 표시/키 노출 화면에서 스크린샷·화면녹화 차단.
       지금은 테스트 편의를 위해 끄고 있다 (사용자가 화면을 찍어 피드백해야 하므로).
       `MainActivity` 에서 `getWindow().setFlags(LayoutParams.FLAG_SECURE, …)`.
+- [x] ~~WebView 원격 디버깅이 release 에서도 열려 있던 문제~~ — `MainActivity` 가
+      `BuildConfig.DEBUG` 일 때만 켜도록 수정 (2026-07-25). release/debug 양쪽에서
+      devtools 소켓 유무로 검증함.
 - [ ] `versionCode` 증가 규칙 — 배포마다 +1 (지금 1).
 - [ ] Play 배포 시 AAB (`bundleRelease`) + Play App Signing 등록.
 - [ ] 생체 인증 잠금 해제 (androidx.biometric) — 비밀번호 대체가 아니라 보조 수단.

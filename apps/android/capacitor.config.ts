@@ -24,8 +24,11 @@ const config: CapacitorConfig = {
   android: {
     // 평문 HTTP 로의 다운그레이드를 막는다 — 모든 RPC 가 https 다.
     allowMixedContent: false,
-    // WebView 디버깅은 debug 빌드에서만 켠다 (release 는 Capacitor 가 자동으로 끔).
-    webContentsDebuggingEnabled: true,
+    // ⚠ 이 플래그는 빌드 타입을 구분하지 않는다. true 로 두면 **release APK 에서도**
+    // devtools 소켓이 열린다 (실측 확인). 지갑에서는 잠금 해제 중인 평문 시드가
+    // JS 힙에 있으므로 그대로 두면 안 된다. 여기서는 끄고, MainActivity 가
+    // BuildConfig.DEBUG 일 때만 다시 켠다 — 디버그 APK 의 진단 능력은 유지된다.
+    webContentsDebuggingEnabled: false,
   },
   plugins: {
     CapacitorHttp: { enabled: false },
