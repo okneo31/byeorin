@@ -3,7 +3,7 @@
 > 이 문서의 역할: **새 세션에서 5분 안에 풀 컨텍스트 잡기.**
 > 단일 진실원은 [`PLAN.md`](./PLAN.md)지만, "방금 무엇이 어디까지 됐는가"는 이 문서에서 본다.
 >
-> 마지막 갱신: **2026-05-18** (v0.5 리베이스라인 직후)
+> 마지막 갱신: **2026-07-25** (Android APK 셸 완성 — apps/android 신설)
 > GitHub: <https://github.com/okneo31/byeorin> (private)
 
 ---
@@ -11,8 +11,56 @@
 ## 0. 30초 요약
 
 - **브랜드 마이그레이션 완료** (노동자의 지갑 → 벼린/Byeorin). 디자인 시스템 v2.
-- **Q0 완료, Q1 진입 직전.** SDK + 4종 SW 셸 + HW 사양/펌웨어 스캐폴드 + 보험 v2 + 보안 감사 모두 끝남.
-- **다음 행동: Q1 본격 실행** ([PLAN.md §9](./PLAN.md) 참조).
+- **Q0 완료, Q1 진입.** SDK + 4종 SW 셸 + HW 사양/펌웨어 스캐폴드 + 보험 v2 + 보안 감사 모두 끝남.
+- **2026-05-25 라운드: Extension popup 풀스코프.** 멀티체인 16 슬롯 + 다중 계정 + import/export + ZION 통합. Stage E1(셀렉터·잔액·송금) 완료, E2(주소록·매트릭스 복사)/E3(활동·토큰) 대기.
+- **2026-07-25 라운드: 안드로이드 APK 완성.** `apps/android` 신설 — Capacitor 8 + Vite WebView 셸에 Extension popup UI 를 이식. **9 체인 전부 실기기 경로에서 동작 검증** (Pixel 7 Pro 에뮬레이터, release APK). 확장에 없던 계층 추가: 비밀번호 금고 · 자동 잠금 · 뒤로가기.
+- **다음 행동: 실기기 테스트 피드백 반영** → 송금/스왑 브로드캐스트 확인 → 릴리스 전 항목([apps/android/README.md](../apps/android/README.md) 하단).
+
+### 2026-07-25 라운드 — 안드로이드
+
+| 항목 | 내용 |
+|---|---|
+| 셸 방식 | **Capacitor 8 + Vite WebView.** RN 0.76 Bare 는 Hermes 에 WASM 이 없어 BTC/SOL/TRON 어댑터가 원천 불가 — 9 체인 요구를 만족하는 유일한 경로가 WebView 였다. `apps/mobile` (RN 스캐폴드) 은 그대로 보존. |
+| 코드 재사용 | 확장 popup `App.tsx` 2543 줄을 거의 그대로 이식. HW(WebHID)/연결된 사이트(EIP-1193) 만 제거 — 플랫폼에 해당 기능 자체가 없음. |
+| 신규 모듈 | `keystore-session.ts` (비밀번호 금고: 오입력 보호 · 디바운스 저장 · clear=잠금/wipe=폐기), `native-http.ts` (ZION AMM 만 CORS 우회), `autolock.ts` (백그라운드 2분), `back-button.ts` |
+| CORS 실측 | 9 체인 RPC 중 `api.zion1.top` 만 ACAO 없음 → 그 하나만 네이티브 HTTP. 전역 `CapacitorHttp` 패치는 viem 과 충돌 우려로 배제. |
+| 산출물 | `top.ttl1.byeorin` v0.5.0 · release APK 5.0MB (RSA-4096 서명) · debug 6.4MB |
+| 잡은 버그 | 런치 테마 `android:background` 가 모든 View 기본 배경으로 상속 → `<select>` 드롭다운 16 행에 스플래시 이미지가 깔림. `android:windowBackground` + core-splashscreen 속성으로 교체. |
+| i18n | `vault.*` 24 키 신규 (ko/en). `footer.skeleton` 의 "v0.1 skeleton" 문구 제거. |
+
+### 2026-05-25 라운드 변경 요약 (v0.5 → 작업분)
+
+### 본 라운드 변경 요약 (v0.5 → 작업분)
+
+| 영역 | 변경 |
+|---|---|
+| `wallet-sdk` | `accountFromPrivateKey` · `transferAccount` 자유함수 · `privateKeyToHex` · `getWordlist`. **새 subpath `@byeorin/wallet-sdk/multichain`** — `ChainSpec` + `DEFAULT_CHAINS` 16종 (EVM 8 + BTC/XRP/SOL/TRON/TON/Aptos/Sui + **ZION**). `ZION_CHAIN_SPEC` + `cosmosChainSpec()` factory. ChainSpec 에 `nativeSymbol`·`nativeDecimals` 메타. ZION 어댑터 호환성 검증 8 tests (defaultFee=0n). private-key 12 tests. |
+| `shell-core` | `WalletStore` 다중 계정 매니저 — `addMnemonicAccount/importPrivateKey/selectAccount/listAccounts/removeAccount/exportMnemonic/exportPrivateKey/getActiveIndex/getAccountAt(idx, adapter)`. 세션 직렬화 v2 (JSON), v1 mnemonic-only 자동 마이그레이션. 옛 `unlock(mnemonic)` 시그니처 보존 → Web/Desktop/Mobile 셸 영향 0. 새 `Addressbook` 모듈 (self 자동 sync + external CRUD). 다중계정 15 tests 신규. |
+| `apps/extension` | popup 풀 재작성: 16 체인 셀렉터, 다중 계정 셀렉터, 활성 계정 카드(잔액 hero + BTC/USD 토글 + 주소 복사 + QR), 송금 화면, import PK pane, export secret pane, 시드 생성 3단계(언어→표시→검증) + NFKD 정규화 + datalist 자동완성. `qrcode` 의존성. **Buffer polyfill** (`popup/main.tsx`) — cosmos/solana 등 라이브러리 호환. **MV3 CSP `'wasm-unsafe-eval'`** — @solana/web3.js WASM. Binance ticker 시세 1회 fetch. |
+| `apps/{web,desktop,mobile}` | **변경 없음.** 옛 단일 계정 흐름 그대로. Stage W/D/M 에서 Extension reference 복제 예정. |
+| docs/memory | ZION 메모리 신규 (`project_zion_chain` + `reference_zion_wallet_doc`). 본 문서 갱신. |
+
+### 본 라운드 미완 / 대기
+
+| Task | 상태 | 내용 |
+|---|---|---|
+| #20 Stage E2 | 다음 | 계정 카드의 9 체인 주소 row + 원클릭 복사, 주소록 화면(자동 sync + 외부 추가), 송금 시 주소록 추천 |
+| #20 Stage E3 | 그 다음 | 활동 내역(Activity) + ERC-20 토큰 목록 + 토큰 송금 분기 |
+| #26 | 후속 | SolanaAdapter — 멀티 RPC fallback (read-only): publicnode → OnFinality → dRPC. 송금은 단일 (`recent_blockhash` 일관성) |
+| #13/14/15 Stage W/D/M | Extension 완성 후 | Web/Desktop/Mobile 셸을 Extension reference 패턴으로. Mobile 만 RN 재작성, Web/Desktop 은 거의 복붙 |
+| #16 | Stage B 묶음 | extension e2e smoke 확장, 위협모델 갱신, CONTEXT/PLAN closed 처리 |
+| #23/24/25 Z2/Z3/Z4 | 별도 트랙 | ZION 커스텀 메시지(job/amm/pop/bankext/poms) + 기능 UI(잡마켓·AMM·PoP·BTC브릿지) + zion-api 연동 |
+| #27 TTL 가치표시 | 완료 | 1 TTL = 1/300,000 BTC 페그 (Binance 미상장 → 페그 사용) |
+
+### 본 라운드 외부 결정 (사용자 확정)
+
+- **멀티체인 = 9 어댑터 풀스코프** (PLAN §2.4 전체). Cosmos 슬롯 = **ZION 단독** (외부 Cosmos Hub/Osmosis 등은 후속 추가).
+- **풀 ZION 기능** 목표 (job/amm/pop/BTC브릿지) — 별도 트랙 Z2~Z4.
+- **원클릭 주소 복사** = 각 체인 row 옆에 (체인당 1개씩) — Stage E2 에서 구현.
+- **주소록** = self 자동 sync — `shell-core/Addressbook` 모듈 완성. UI 는 E2.
+- **가치 표시** = native 잔액 메인 + BTC 환산 보조 (클릭하면 USD 토글). 천 단위 쉼표. 시세 = Binance ticker. TTL 페그 = 1/300,000 BTC.
+- **MV3 popup 멀티체인 인프라** = WASM CSP `'wasm-unsafe-eval'` 허용 + Buffer polyfill 필수. multichain 청크는 dynamic import 로 분리 (popup 초기 78kB, multichain 5.76MB lazy).
+- **RPC override** = `ethereum`/`solana` 만 publicnode 로 override (viem default 와 mainnet-beta 가 extension origin 거부 또는 hang). 나머지 EVM/비-EVM 은 라이브러리 기본 RPC.
 
 ---
 
@@ -96,7 +144,8 @@
 ```
 D:\TTLCOINWalet\
 ├── apps/
-│   ├── mobile/      RN 0.76 Bare TS
+│   ├── android/     ★ Capacitor 8 + Vite WebView → APK. 9 체인 전부 동작 (실사용 셸)
+│   ├── mobile/      RN 0.76 Bare TS — 네이티브 프로젝트 없음. android/ 로 대체됨(보존)
 │   ├── web/         Vite + React
 │   ├── desktop/     Tauri 2 (src-tauri 포함)
 │   └── extension/   WXT (MV3)
@@ -128,7 +177,10 @@ D:\TTLCOINWalet\
 - 컬러 팔레트 = 잉걸 오렌지/모루 차콜/강철 실버/땀 블루/종이 화이트/밤 모루
 - 패키지 scope = `@byeorin/*`
 - design-system CSS 변수 prefix = `--nd-` 유지 (의미: 노동의 디자인)
-- Expo Managed 거부 → RN 0.76 Bare
+- Expo Managed 거부 → RN 0.76 Bare (2026-05, 스캐폴드만)
+- **모바일 셸 = Capacitor 8 + WebView** (2026-07-25). RN 유지 시 Hermes 에 WASM 이 없어
+  BTC/SOL/TRON 어댑터가 원천 불가 → "9 체인 전부" 요구와 양립하지 않는다. `apps/mobile`
+  RN 스캐폴드는 지우지 않고 보존 (USB-OTG HW 서명 등 네이티브 요구가 생기면 재사용).
 - Electron 거부 → Tauri 2
 - 확장 raw MV3 거부 → WXT
 
