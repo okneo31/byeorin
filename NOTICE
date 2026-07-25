@@ -1,0 +1,43 @@
+벼린 (Byeorin) — 노동자의 지갑
+Copyright (c) 2026 okneo31
+
+이 저작물의 창작재산권은 okneo31 에게 있습니다.
+The creative property rights in this work belong to okneo31.
+
+본 소프트웨어는 Apache License, Version 2.0 으로 배포됩니다 (LICENSE 파일 참조).
+누구나 복제·개작·재배포·상용 이용할 수 있으며, 상위 버전으로 올리든 하위 버전으로
+되돌리든 자유입니다. 단 **창작재산권 표기(본 NOTICE)를 유지해야 합니다** —
+Apache-2.0 §4(d) 에 따라 파생 저작물에도 이 표기가 함께 가야 합니다.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this file except in compliance with the License. You may obtain a copy of the
+License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+---
+
+상표 (Trademarks)
+
+"벼린", "Byeorin", "벼린 요세", "Byeorin Yose" 및 관련 로고·워드마크는 okneo31 의
+상표이며, Apache-2.0 §6 에 따라 본 라이선스는 상표 사용 권한을 부여하지 않습니다.
+포크나 파생 배포판은 반드시 다른 이름을 사용해야 합니다.
+
+"벼린", "Byeorin", "벼린 요세", "Byeorin Yose", and the associated logos and
+wordmarks are trademarks of okneo31. Per Apache-2.0 §6, this License does not
+grant permission to use these marks. Forks and derivative distributions must use
+a different name.
+
+---
+
+제3자 구성요소 (Third-party components)
+
+본 저장소는 각자의 라이선스를 따르는 제3자 라이브러리를 사용합니다 —
+viem, @scure/*, @noble/*, @cosmjs/*, @solana/web3.js, xrpl, tronweb, @ton/*,
+@aptos-labs/*, @mysten/sui, React, Capacitor 등. 각 패키지의 라이선스는 해당
+패키지에 포함되어 있습니다.
