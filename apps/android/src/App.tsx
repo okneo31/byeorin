@@ -87,11 +87,27 @@ const ZION_ASSETS: readonly ZionAsset[] = [
 // 각 코인의 BTC pair (예: ETHBTC, SOLBTC) 와 BTCUSDT 만 사용한다.
 //
 // 미상장 토큰의 페그 — Binance 에 없는 토큰은 BTC 페그로 내재 가치를 둔다.
-//   TTL  : 1/300,000 BTC (사용자 정의)
-//   kWR  : 1/300,000 BTC (ZION, 미상장 — 후속 확인. TTL 과 동일 가정)
+//
+// TTL 은 **노동가치 기준** 으로 잡는다 (2026-07-25 결정):
+//   기준 연봉 1000 BTC 를 365 일로 나눈 하루치 노동 = 100 TTL
+//   → 1 TTL = 1000 / 365 / 100 = 10/365 ≈ 0.02739726 BTC
+//
+// 최종 비율 하나로 적지 않고 상수 셋으로 쪼갠 이유: 나중에 바뀌는 값은 "기준
+// 연봉" 이나 "하루치 TTL" 이지 비율이 아니다. 근거가 코드에 남아 있어야 다음에
+// 조정할 때 무엇을 건드려야 하는지 바로 보인다.
+const TTL_ANNUAL_WAGE_BTC = 1000; // 기준 연봉 (BTC)
+const TTL_DAYS_PER_YEAR = 365; // 연봉을 나누는 일수
+const TTL_PER_WORK_DAY = 100; // 하루치 노동에 해당하는 TTL 수량
+const TTL_PEG_BTC = TTL_ANNUAL_WAGE_BTC / TTL_DAYS_PER_YEAR / TTL_PER_WORK_DAY;
+
+// kWR(ZION) 은 **TTL 을 따라가지 않는다.** 예전에 1/300,000 으로 같이 뒀던 건
+// "미상장이니 일단 TTL 과 동일하게" 라는 임시 가정이었고, 위 노동가치 근거는
+// TTL 전용이다. ZION 쪽 별도 결정이 나올 때까지 옛 값을 유지한다.
+const KWR_PEG_BTC = 1 / 300_000;
+
 const PRICE_PEG_TO_BTC: Record<string, number> = {
-  TTL: 1 / 300_000,
-  kWR: 1 / 300_000,
+  TTL: TTL_PEG_BTC,
+  kWR: KWR_PEG_BTC,
 };
 
 /** shell-core 도메인 에러를 i18n 키로 변환. 그 외 Error 는 메시지 그대로. */

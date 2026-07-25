@@ -50,7 +50,7 @@
 | #13/14/15 Stage W/D/M | Extension 완성 후 | Web/Desktop/Mobile 셸을 Extension reference 패턴으로. Mobile 만 RN 재작성, Web/Desktop 은 거의 복붙 |
 | #16 | Stage B 묶음 | extension e2e smoke 확장, 위협모델 갱신, CONTEXT/PLAN closed 처리 |
 | #23/24/25 Z2/Z3/Z4 | 별도 트랙 | ZION 커스텀 메시지(job/amm/pop/bankext/poms) + 기능 UI(잡마켓·AMM·PoP·BTC브릿지) + zion-api 연동 |
-| #27 TTL 가치표시 | 완료 | 1 TTL = 1/300,000 BTC 페그 (Binance 미상장 → 페그 사용) |
+| #27 TTL 가치표시 | 완료 | 노동가치 페그 — 기준 연봉 1000 BTC ÷ 365일 = 하루치 = 100 TTL → 1 TTL = 10/365 ≈ 0.02739726 BTC (2026-07-25 개정, 이전 1/300,000). kWR 은 따라가지 않고 1/300,000 유지 |
 
 ### 본 라운드 외부 결정 (사용자 확정)
 
@@ -58,7 +58,7 @@
 - **풀 ZION 기능** 목표 (job/amm/pop/BTC브릿지) — 별도 트랙 Z2~Z4.
 - **원클릭 주소 복사** = 각 체인 row 옆에 (체인당 1개씩) — Stage E2 에서 구현.
 - **주소록** = self 자동 sync — `shell-core/Addressbook` 모듈 완성. UI 는 E2.
-- **가치 표시** = native 잔액 메인 + BTC 환산 보조 (클릭하면 USD 토글). 천 단위 쉼표. 시세 = Binance ticker. TTL 페그 = 1/300,000 BTC.
+- **가치 표시** = native 잔액 메인 + BTC 환산 보조 (클릭하면 USD 토글). 천 단위 쉼표. 시세 = Binance ticker. TTL 페그 = 10/365 BTC (노동가치 기준).
 - **MV3 popup 멀티체인 인프라** = WASM CSP `'wasm-unsafe-eval'` 허용 + Buffer polyfill 필수. multichain 청크는 dynamic import 로 분리 (popup 초기 78kB, multichain 5.76MB lazy).
 - **RPC override** = `ethereum`/`solana` 만 publicnode 로 override (viem default 와 mainnet-beta 가 extension origin 거부 또는 hang). 나머지 EVM/비-EVM 은 라이브러리 기본 RPC.
 
