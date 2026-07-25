@@ -170,6 +170,11 @@ D:\TTLCOINWalet\
 
 ## 5. 닫힌 결정 (재논의 X)
 
+- **검증 가능한 보안** (2026-07-25) — "규칙은 누구나 검증 가능하게, 권한은 아무나가
+  아니게". 목표는 "최고의 보안"이 아니라 확인 가능한 보안. 규칙을 이해 못 하게 만드는
+  방향(난독화)은 채택하지 않는다 — 감사 불가능한 규칙은 중앙 권위를 재발명한다.
+  절차와 로드맵은 [`docs/VERIFIABILITY.md`](./VERIFIABILITY.md), 요세 요구사항은
+  SPEC F-11~F-14.
 - 마스터 브랜드 = 벼린 (2026-05-17)
 - HW 디바이스명 = 벼린 요세 (2026-05-18)
 - 워드마크 폰트 = 굵은 산세리프 (Pretendard Black 계열). 명조 X
@@ -255,6 +260,7 @@ git push                                    # 추가 변경 후
 | 문서 | 역할 |
 |---|---|
 | [`docs/PLAN.md`](./PLAN.md) | **단일 진실원** — 제품·아키텍처·로드맵 (v0.5) |
+| [`docs/VERIFIABILITY.md`](./VERIFIABILITY.md) | **검증 가능한 보안** — 원칙·현재 검증 가능한 것·아직 못 하는 것·로드맵 |
 | [`docs/CONTEXT.md`](./CONTEXT.md) | **본 문서** — 현재 상태 스냅샷, 세션 인수인계 |
 | [`docs/ARCHITECTURE.md`](./ARCHITECTURE.md) | 시스템 다이어그램 + 모듈 책임 + 위협 경계 + 키 invariant |
 | [`docs/CHANGELOG.md`](./CHANGELOG.md) | 커밋 단위 변경 기록 (v0.5 entry 포함) |

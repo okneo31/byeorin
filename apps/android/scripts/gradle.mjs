@@ -93,6 +93,18 @@ if (existsSync(releaseApk)) {
   copyFileSync(releaseApk, dest);
   const mb = (statSync(dest).size / 1024 / 1024).toFixed(1);
   console.log(`\n[byeorin] 실기기용 복사본 갱신: ${dest}  (${mb} MB)`);
+
+  // ── 6. 검증 매니페스트 ────────────────────────────────────────────────
+  //
+  // 원칙: 누구나 검증 가능한 보안. 배포하는 파일과 함께 "이게 어디서 나왔는지"
+  // 를 항상 같이 낸다. 매니페스트 없이 나간 APK 는 받는 사람이 우리를 믿는 것
+  // 말고는 확인할 방법이 없다 — 그러면 원칙이 구호로 끝난다.
+  const gen = spawnSync(process.execPath, [join(appRoot, 'scripts/release-manifest.mjs'), dest], {
+    stdio: 'inherit',
+  });
+  if (gen.status !== 0) {
+    console.error('[byeorin] ⚠ 매니페스트 생성 실패 — 이 APK 는 검증 정보 없이 나갑니다.');
+  }
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────

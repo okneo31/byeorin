@@ -51,6 +51,24 @@ hashes to sign and never the parsed transaction**.
 | F-09 | Display "this is a genuine device" attestation flow on first boot using SE-bound X.509 attestation cert. |
 | F-10 | Support cold-boot under USB power even with empty battery (BLE disabled until battery > 15 %). |
 
+### Verifiability requirements (2026-07-25)
+
+Governing principle — **rules verifiable by anyone; authority not granted to just
+anyone**. The goal is not "the most secure wallet" (an unverifiable claim) but a
+wallet whose security claims a non-expert can check. See
+[`docs/VERIFIABILITY.md`](../docs/VERIFIABILITY.md).
+
+| ID | Requirement |
+|---|---|
+| F-11 | Publish firmware source and make builds **reproducible**: a third party building the published source must obtain the same binary hash we publish. Signing is verified separately from the build so signature timestamps do not break reproducibility. Rationale: Ledger Recover (2023) showed "the seed cannot leave the device" was a *policy*, not physics — a vendor that controls signing can change the rules. Reproducible + open firmware converts "trust us" into "check it". |
+| F-12 | Anchor each firmware release hash on the TTL chain (ChainID 7777). The device's genuineness attestation (F-09) is verified against the on-chain record, **not against a vendor server**, so that neither we nor a compromised PKI can silently rewrite release history. |
+| F-13 | Allow **user-supplied entropy** to be mixed into seed generation (dice rolls entered on-device, XORed with the SE TRNG output). Rationale: F-01 alone requires the user to trust NXP's TRNG. Mixing user entropy removes one trust assumption without weakening the result — the output is at least as strong as the stronger of the two sources. |
+| F-14 | Support being **one signer of a multi-vendor quorum** (PSBT / output descriptors where the chain allows). Rationale: no single device — ours included — should be presented as sufficient for large holdings. 2-of-3 across independent vendors converts "trust one vendor" into "trust that N vendors are not simultaneously compromised". |
+
+> F-11 and F-12 are policy decisions as much as engineering ones, and they are
+> cheapest to honour if designed in from the start — retrofitting anchored
+> attestation means reworking the bootloader (§ Secure boot).
+
 ---
 
 ## 3. Non-Functional Requirements

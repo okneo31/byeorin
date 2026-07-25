@@ -1,0 +1,165 @@
+#!/usr/bin/env node
+// release-manifest.mjs — 배포한 APK 가 "어느 소스에서 나왔는지" 를 남긴다.
+//
+// 원칙: 누구나 검증 가능한 보안.
+//   사용자가 받은 파일이 우리가 만들었다고 말하는 그 파일인지, **우리를 믿지 않고**
+//   확인할 수 있어야 한다. 그러려면 최소한 다음 셋이 공개돼야 한다:
+//     1. 산출물의 해시        — 파일이 중간에 바뀌지 않았는가
+//     2. 서명 인증서 지문      — 우리 키로 서명됐는가 (남이 만든 가짜가 아닌가)
+//     3. 출처 커밋 + 도구 버전 — 어떤 소스로 만들었는가
+//
+// 지금 이 매니페스트가 보장하는 것은 **무결성**이다. "같은 소스로 남이 빌드하면
+// 같은 바이트가 나온다"(재현 빌드)는 아직 아니다 — 그건 별도 작업이고,
+// docs/VERIFIABILITY.md 에 남은 과제로 적어 두었다. 할 수 있는 것만 정확히 주장한다.
+
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { join, dirname, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = resolve(appRoot, '..', '..');
+
+export function buildManifest(apkPath) {
+  const bytes = readFileSync(apkPath);
+  return {
+    artifact: '벼린.apk',
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    sizeBytes: bytes.length,
+    ...readVersion(),
+    signer: readSignerFingerprint(apkPath),
+    source: readGitProvenance(),
+    toolchain: readToolchain(),
+    // 이 매니페스트가 무엇을 주장하고 무엇을 주장하지 않는지 파일 안에 박아 둔다.
+    claims: {
+      integrity: '이 해시와 일치하는 파일은 우리가 배포한 그 파일이다.',
+      authenticity: '이 인증서 지문으로 서명된 APK 만 벼린이 만든 것이다.',
+      notClaimed:
+        '재현 빌드는 아직 보장하지 않는다 — 같은 커밋으로 빌드해도 바이트가 다를 수 있다.',
+    },
+  };
+}
+
+function readVersion() {
+  const gradle = readFileSync(join(appRoot, 'android/app/build.gradle'), 'utf8');
+  const code = /versionCode\s+(\d+)/.exec(gradle);
+  const name = /versionName\s+"([^"]+)"/.exec(gradle);
+  return {
+    versionName: name ? name[1] : null,
+    versionCode: code ? Number(code[1]) : null,
+  };
+}
+
+/** 서명 인증서 SHA-256. 사용자가 받은 APK 가 우리 키로 서명됐는지 대조하는 값. */
+function readSignerFingerprint(apkPath) {
+  const apksigner = findApksigner();
+  if (!apksigner) return { certSha256: null, note: 'apksigner 미발견 — 지문 생략' };
+  try {
+    const out = execFileSync(apksigner, ['verify', '--print-certs', apkPath], {
+      encoding: 'utf8',
+      shell: process.platform === 'win32',
+    });
+    const m = /certificate SHA-256 digest:\s*([0-9a-f]+)/i.exec(out);
+    return { certSha256: m ? m[1] : null };
+  } catch (e) {
+    return { certSha256: null, note: `apksigner 실패: ${e.message}` };
+  }
+}
+
+function findApksigner() {
+  const sdk =
+    process.env.ANDROID_HOME ??
+    process.env.ANDROID_SDK_ROOT ??
+    (process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, 'Android', 'Sdk') : null);
+  if (!sdk) return null;
+  const dir = join(sdk, 'build-tools');
+  if (!existsSync(dir)) return null;
+  const exe = process.platform === 'win32' ? 'apksigner.bat' : 'apksigner';
+  // 가장 최신 build-tools 를 쓴다.
+  const versions = readdirSync(dir).sort().reverse();
+  for (const v of versions) {
+    const p = join(dir, v, exe);
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
+/**
+ * 출처 커밋. **작업 트리가 더러우면 그대로 기록한다** — 커밋되지 않은 변경이
+ * 섞인 빌드는 애초에 검증 대상이 될 수 없고, 그 사실을 숨기면 매니페스트가
+ * 거짓말을 하게 된다.
+ */
+function readGitProvenance() {
+  const git = (args) =>
+    execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }).trim();
+  try {
+    const dirty = git(['status', '--porcelain']).length > 0;
+    return {
+      commit: git(['rev-parse', 'HEAD']),
+      commitShort: git(['rev-parse', '--short', 'HEAD']),
+      branch: git(['rev-parse', '--abbrev-ref', 'HEAD']),
+      workingTreeClean: !dirty,
+      ...(dirty
+        ? { warning: '커밋되지 않은 변경이 섞인 빌드다. 이 산출물은 소스로 추적할 수 없다.' }
+        : {}),
+    };
+  } catch {
+    return { commit: null, warning: 'git 정보를 읽지 못했다.' };
+  }
+}
+
+function readToolchain() {
+  const vars = readFileSync(join(appRoot, 'android/variables.gradle'), 'utf8');
+  const pick = (k) => {
+    const m = new RegExp(`${k}\\s*=\\s*['"]?([\\w.]+)`).exec(vars);
+    return m ? m[1] : null;
+  };
+  let agp = null;
+  try {
+    const root = readFileSync(join(appRoot, 'android/build.gradle'), 'utf8');
+    const m = /com\.android\.tools\.build:gradle:([\d.]+)/.exec(root);
+    agp = m ? m[1] : null;
+  } catch {
+    /* 무시 */
+  }
+  let gradle = null;
+  try {
+    const wrap = readFileSync(
+      join(appRoot, 'android/gradle/wrapper/gradle-wrapper.properties'),
+      'utf8',
+    );
+    const m = /gradle-([\d.]+)-/.exec(wrap);
+    gradle = m ? m[1] : null;
+  } catch {
+    /* 무시 */
+  }
+  return {
+    node: process.version,
+    gradle,
+    androidGradlePlugin: agp,
+    compileSdk: pick('compileSdkVersion'),
+    minSdk: pick('minSdkVersion'),
+    targetSdk: pick('targetSdkVersion'),
+  };
+}
+
+// 직접 실행 시: 매니페스트를 만들어 저장소 루트에 쓴다.
+//
+// 직접 실행 판별에 문자열 조립을 쓰면 안 된다 — Windows 는 `file:///D:/...` 처럼
+// 슬래시가 셋이라 `file://` + 경로 로는 영영 어긋난다 (실제로 조용히 아무것도
+// 안 하고 끝나는 것을 확인했다). pathToFileURL 로 정규화해서 비교한다.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const apk = process.argv[2] ?? join(repoRoot, '벼린.apk');
+  if (!existsSync(apk)) {
+    console.error(`[byeorin] APK 가 없습니다: ${apk}`);
+    process.exit(1);
+  }
+  const manifest = buildManifest(apk);
+  const dest = join(repoRoot, '벼린.apk.manifest.json');
+  writeFileSync(dest, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+  console.log(`[byeorin] 릴리스 매니페스트: ${dest}`);
+  console.log(`  sha256  ${manifest.sha256}`);
+  console.log(`  commit  ${manifest.source.commitShort ?? '?'}${manifest.source.workingTreeClean === false ? ' (작업 트리 더러움 ⚠)' : ''}`);
+  console.log(`  signer  ${manifest.signer.certSha256 ?? '(미확인)'}`);
+}
