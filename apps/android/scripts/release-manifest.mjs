@@ -91,10 +91,32 @@ function findApksigner() {
  * 거짓말을 하게 된다.
  */
 function readGitProvenance() {
+  // core.quotepath=false — 이걸 끄지 않으면 git 이 한글 경로를 "ë²¼..."
+  // 같은 8진 이스케이프로 내보내 경로 비교가 영영 안 맞는다.
   const git = (args) =>
-    execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }).trim();
+    execFileSync('git', ['-c', 'core.quotepath=false', ...args], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    }).trim();
   try {
-    const dirty = git(['status', '--porcelain']).length > 0;
+    // 산출물 자신은 더러움 판정에서 뺀다.
+    //
+    // 매니페스트는 **의도적으로 추적**된다 — 공개된 검증 근거라 저장소에 있어야
+    // 한다. 그런데 빌드가 그 파일을 다시 쓰므로, 빼지 않으면 "매니페스트를 쓰는
+    // 행위 자체가 트리를 더럽혀 다음 매니페스트가 더럽다고 말하는" 자기참조에
+    // 빠진다. 여기서 보고 싶은 것은 **소스**가 커밋된 상태인가이다.
+    const artifacts = new Set(['벼린.apk', '벼린.apk.manifest.json']);
+    const dirty = git(['status', '--porcelain'])
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      // porcelain 형식: "XY path" — 상태 두 글자를 떼고 경로만 본다.
+      // 한글 경로는 git 이 따옴표로 감싸므로 벗겨서 비교한다.
+      .filter((l) => {
+        const path = l.slice(2).trim().replace(/^"(.*)"$/, '$1');
+        return !artifacts.has(path);
+      })
+      .length > 0;
     return {
       commit: git(['rev-parse', 'HEAD']),
       commitShort: git(['rev-parse', '--short', 'HEAD']),
