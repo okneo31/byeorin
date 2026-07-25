@@ -36,6 +36,7 @@ import {
   ShellError,
   type SessionStore,
 } from '@byeorin/shell-core';
+import { HardwareWrappedBackend, type HardwareStatus } from './vault-hw.js';
 
 /** localStorage 키 — 암호화된 v2 계정 blob 이 여기 들어간다. */
 const VAULT_KEY = 'byeorin:vault';
@@ -48,6 +49,7 @@ export const MIN_PASSPHRASE_LENGTH = 8;
 
 export class MobileKeystoreSession implements SessionStore {
   private readonly inner: EncryptedKeystoreStore;
+  private readonly hw: HardwareWrappedBackend;
   /** 복호화된 평문(WalletStore 의 v2 JSON blob). null 이면 잠금 상태. */
   private cache: string | null = null;
   /** 마지막으로 디스크에 확정 기록된 평문 — 불필요한 재암호화를 건너뛴다. */
@@ -57,8 +59,12 @@ export class MobileKeystoreSession implements SessionStore {
   private onPersistError: ((e: unknown) => void) | null = null;
 
   constructor() {
+    // localStorage 를 하드웨어 래핑 계층으로 감싼다. 저장되는 바이트는
+    // AndroidKeyStore 키로 한 번 더 봉인되므로, 파일만 떠가서는 그 폰 밖에서
+    // 비밀번호 대입을 시작할 수 없다 (vault-hw.ts 주석 참고).
+    this.hw = new HardwareWrappedBackend(new LocalStorageBackend());
     this.inner = new EncryptedKeystoreStore({
-      backend: new LocalStorageBackend(),
+      backend: this.hw,
       storageKey: VAULT_KEY,
       // 모바일 CPU 기준 N=2^17(256MB) 은 저가형 단말에서 OOM/수 초 지연 위험이
       // 있다. BIP-38 권장값과 동일한 N=2^16(128MB) 을 쓴다.
@@ -147,6 +153,15 @@ export class MobileKeystoreSession implements SessionStore {
     }
     this.cache = plain;
     this.persisted = plain;
+
+    // 하드웨어 래핑 이전에 만들어진 금고를 열었다면 즉시 승급시킨다.
+    // persisted 를 비워 두지 않으면 runPersist 의 "내용 동일 → 건너뛰기" 에
+    // 걸려 옛 형태로 영영 남는다 (실제로 그렇게 남는 것을 확인하고 고쳤다).
+    const hwStatus = await this.hw.probe();
+    if (hwStatus.active && this.hw.lastReadWasWrapped === false) {
+      this.persisted = null;
+      this.schedulePersist();
+    }
   }
 
   /**
@@ -179,6 +194,11 @@ export class MobileKeystoreSession implements SessionStore {
       this.runPersist();
     }
     await this.inFlight;
+  }
+
+  /** 금고가 이 기기의 보안 하드웨어에 묶여 있는지. UI 표시용. */
+  async hardwareStatus(): Promise<HardwareStatus> {
+    return this.hw.probe();
   }
 
   /** 저장 실패(스토리지 가득참 등)를 UI 로 올리기 위한 훅. */
