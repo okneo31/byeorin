@@ -35,6 +35,8 @@ export {
   isValidMnemonic,
   mnemonicToSeed,
   getWordlist,
+  NEW_MNEMONIC_WORD_COUNT,
+  NEW_MNEMONIC_STRENGTH,
   type WordlistName,
   type MnemonicStrength,
 } from './crypto/seed.js';

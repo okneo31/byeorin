@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { createMnemonic } from '@byeorin/wallet-sdk';
+import {
+  createMnemonic,
+  NEW_MNEMONIC_STRENGTH,
+  NEW_MNEMONIC_WORD_COUNT,
+} from '@byeorin/wallet-sdk';
 import { ShellError } from '@byeorin/shell-core';
 import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../store';
@@ -55,7 +59,7 @@ export function Home({ onReady }: Props) {
 
 function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
   const t = useT();
-  const [mnemonic] = useState(() => createMnemonic(128, 'korean'));
+  const [mnemonic] = useState(() => createMnemonic(NEW_MNEMONIC_STRENGTH, 'korean'));
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -77,7 +81,7 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.h1}>{t('create.title')}</Text>
-      <Text style={styles.lead}>{t('create.lead')}</Text>
+      <Text style={styles.lead}>{t('create.lead', { n: NEW_MNEMONIC_WORD_COUNT })}</Text>
 
       <View style={styles.warn}>
         <Text style={styles.warnText}>{t('create.warn')}</Text>
@@ -98,7 +102,7 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
         <View style={[styles.checkbox, confirmed && styles.checkboxOn]}>
           {confirmed && <Text style={styles.checkboxMark}>✓</Text>}
         </View>
-        <Text style={styles.checkText}>{t('create.checkbox_safe')}</Text>
+        <Text style={styles.checkText}>{t('create.checkbox_safe', { n: NEW_MNEMONIC_WORD_COUNT })}</Text>
       </Pressable>
 
       {error && <Text style={styles.error}>{error}</Text>}

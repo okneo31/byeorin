@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react';
-import { createMnemonic } from '@byeorin/wallet-sdk';
+import {
+  createMnemonic,
+  NEW_MNEMONIC_STRENGTH,
+  NEW_MNEMONIC_WORD_COUNT,
+} from '@byeorin/wallet-sdk';
 import { ShellError } from '@byeorin/shell-core';
 import { Button, Card, Logo } from '@byeorin/design-system';
 import { useT } from '@byeorin/i18n/react';
@@ -72,7 +76,7 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
   const t = useT();
   // i18n: 한국어 wordlist 로 새 니모닉 생성 — 사용자가 선택한 언어와 무관.
   // 니모닉 자체는 BIP39 표준이므로 ko/en 어느 wordlist 로 만들든 안전.
-  const [mnemonic] = useState(() => createMnemonic(128, 'korean'));
+  const [mnemonic] = useState(() => createMnemonic(NEW_MNEMONIC_STRENGTH, 'korean'));
   const [copied, setCopied] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,19 +108,19 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
   return (
     <div>
       <h1 className="nd-h1">{t('create.title')}</h1>
-      <p className="nd-lead">{t('create.lead')}</p>
+      <p className="nd-lead">{t('create.lead', { n: NEW_MNEMONIC_WORD_COUNT })}</p>
 
       <div className="nd-warn">{t('create.warn')}</div>
 
       <Card>
         <p className="nd-muted" style={{ margin: '0 0 0.5rem' }}>
-          {t('create.mnemonic_grid_label')}
+          {t('create.mnemonic_grid_label', { n: NEW_MNEMONIC_WORD_COUNT })}
         </p>
         {/*
           4×3 그리드 — 각 셀에 인덱스 번호 + 단어. 디자인 시스템 토큰을 쓰되
           웹 셸 전용 스타일(.web-mnemonic-*)로 폴리시. 인장 종이 느낌의 1px 보더.
         */}
-        <ul className="web-mnemonic-grid" aria-label={t('create.mnemonic_grid_label')}>
+        <ul className="web-mnemonic-grid" aria-label={t('create.mnemonic_grid_label', { n: NEW_MNEMONIC_WORD_COUNT })}>
           {words.map((w, i) => (
             <li
               key={`${i}-${w}`}
@@ -151,7 +155,7 @@ function CreateFlow({ onDone, onBack }: { onDone: () => void; onBack: () => void
           onChange={(e) => setConfirmed(e.target.checked)}
           style={{ width: 18, height: 18 }}
         />
-        <span>{t('create.checkbox_safe')}</span>
+        <span>{t('create.checkbox_safe', { n: NEW_MNEMONIC_WORD_COUNT })}</span>
       </label>
 
       {error && <div className="nd-error">{error}</div>}

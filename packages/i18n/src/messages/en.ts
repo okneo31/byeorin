@@ -58,19 +58,19 @@ export const en: Catalog = {
 
   // ── Create flow ──
   'create.title': 'Remember your recovery phrase',
-  'create.lead': 'The 12 words below ARE your wallet. Write them down or store them somewhere safe. Never share them with anyone.',
+  'create.lead': 'The {n} words below ARE your wallet. Write them down or store them somewhere safe. Never share them with anyone.',
   'create.warn': 'If you lose this phrase, your wallet cannot be recovered. Screenshots are not recommended.',
-  'create.checkbox_safe': 'I have stored the 12 words safely.',
+  'create.checkbox_safe': 'I have stored the {n} words safely.',
   'create.confirm_done': 'I\'ve memorized it, continue',
   'create.copy_failed': 'Could not access the clipboard. Please copy the words by hand.',
   'create.failed': 'Failed to create wallet.',
-  'create.mnemonic_label': 'Recovery phrase (12 words)',
-  'create.warn_desktop': 'Write down these 12 words and store them somewhere safe. The recovery phrase IS your wallet — if you lose it, your assets cannot be recovered.',
+  'create.mnemonic_label': 'Recovery phrase ({n} words)',
+  'create.warn_desktop': 'Write down these {n} words and store them somewhere safe. The recovery phrase IS your wallet — if you lose it, your assets cannot be recovered.',
   'create.save_and_start': 'Save and start',
-  'create.mnemonic_grid_label': 'Your 12 recovery words',
+  'create.mnemonic_grid_label': 'Your {n} recovery words',
   'create.word_index_label': 'Word #{n}',
   'recover.paste_button': 'Paste',
-  'recover.word_count': '{n} / 12 words',
+  'recover.word_count': '{n} words entered',
 
   // ── Recover flow ──
   'recover.title': 'Recover wallet',
@@ -226,7 +226,7 @@ export const en: Catalog = {
   'popup.has_no_wallet': 'No wallet yet.',
   'popup.create_new': 'Create new wallet',
   'popup.recover_by_mnemonic': 'Recover with mnemonic',
-  'popup.create_explain': 'A fresh 12-word mnemonic will be generated.',
+  'popup.create_explain': 'A fresh {n}-word mnemonic will be generated.',
   'popup.create_v02_note': 'You will be shown the recovery phrase, asked to confirm 4 words, then your wallet is created.',
 
   // ── Multichain ──
@@ -261,7 +261,7 @@ export const en: Catalog = {
   'export.checkbox': 'I understand the warning and accept the risk of revealing.',
   'export.reveal_button': 'Reveal',
   'export.hide_button': 'Hide',
-  'export.kind_mnemonic': 'This account is seed-phrase based — shown as 12 words.',
+  'export.kind_mnemonic': 'This account is seed-phrase based — the full phrase is shown.',
   'export.kind_private_key': 'This account was imported as a private key.',
   'export.copy': 'Copy',
   'export.copied': 'Copied',
@@ -269,7 +269,7 @@ export const en: Catalog = {
 
   // ── Extension wallet-create three-step flow (language → show → verify) ──
   'create.language.title': 'Recovery phrase language',
-  'create.language.lead': 'Pick which wordlist your 12 words will be generated from. Korean and English are equally safe.',
+  'create.language.lead': 'Pick which wordlist your {n} words will be generated from. Korean and English are equally safe.',
   'create.language.next': 'Next',
   'create.verify.title': 'Confirm your words',
   'create.verify.lead': 'Confirm you actually stored the phrase. Re-type the words at the indices below.',

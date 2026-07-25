@@ -4,6 +4,8 @@ import { parseUnits } from 'viem';
 import {
   createMnemonic,
   getWordlist,
+  NEW_MNEMONIC_STRENGTH,
+  NEW_MNEMONIC_WORD_COUNT,
   type ChainAdapter,
   type TransferIntent,
   type WordlistName,
@@ -70,6 +72,12 @@ type Mode =
 
 // 송금 금액 검증 — 10진수, 소수점 18자리 이하 (체인별 decimals 는 parseUnits 가 처리).
 const AMOUNT_RE = /^\d+(\.\d{1,18})?$/;
+
+// 시드를 보여준 뒤 되묻는 단어 수. 24 단어 중 6 개.
+// 12 단어 시절엔 4 개였다. 단어 수가 두 배가 됐는데 되묻는 수를 그대로 두면
+// 확인 강도가 떨어져 6 으로 올렸다 (Ledger/Trezor 가 24 중 2~4 개를 묻는 것보다
+// 여전히 엄격하다). 더 올릴 수도 있지만 모바일 입력 부담과의 절충점이다.
+const VERIFY_WORD_COUNT = 6;
 
 // ZION Phase 1 의 4종 자산 — ActiveAccountCard 와 SwapPane 양쪽이 공유.
 // ZionWallet.MD §3 표 그대로. ueth 가 표준 ETH 18 이 아닌 6 decimals 인 점 주의.
@@ -1929,7 +1937,7 @@ function ImportPrivateKeyPane({
 
 // ────────── 비밀 키 노출 ──────────
 //
-// 활성 계정의 시드구문(12 단어) 또는 raw private key 를 표시한다.
+// 활성 계정의 시드구문(생성은 24, 외부 복구분은 12 일 수 있다) 또는 raw private key 를 표시한다.
 // 보안 게이트: 경고 + 체크박스 → 표시 버튼. 표시 후에는 숨기기 토글.
 //
 // 클립보드 복사는 noopener — 다른 페이지로 새는 경로 없음.
@@ -1989,7 +1997,7 @@ function ExportSecretPane({
     }
   }
 
-  // mnemonic 은 12 단어를 4×3 그리드로, raw key 는 한 줄(긴 hex)로.
+  // mnemonic 은 3 열 그리드로(단어 수에 따라 행이 늘어난다), raw key 는 한 줄(긴 hex)로.
   return (
     <section className="card">
       <h2 className="create-step__title">{t('export.title')}</h2>
@@ -2027,7 +2035,7 @@ function ExportSecretPane({
           {account.kind === 'mnemonic' && secret ? (
             <ul
               className="popup-mnemonic-grid"
-              aria-label={t('create.mnemonic_grid_label')}
+              aria-label={t('create.mnemonic_grid_label', { n: NEW_MNEMONIC_WORD_COUNT })}
             >
               {secret
                 .split(/\s+/)
@@ -2146,8 +2154,16 @@ function CreateFlow({
   const [wordlist, setWordlist] = useState<WordlistName>('korean');
   const [mnemonic, setMnemonic] = useState<string | null>(null);
   const [verifyIndices, setVerifyIndices] = useState<number[]>([]);
-  const [verifyInputs, setVerifyInputs] = useState<string[]>(['', '', '', '']);
-  const [mismatch, setMismatch] = useState<boolean[]>([false, false, false, false]);
+  // 배열 길이는 반드시 VERIFY_WORD_COUNT 에서 파생시킨다. 예전엔 ['','','','']
+  // 처럼 리터럴로 박아 뒀는데, 검증 단어 수를 4 → 6 으로 올리자 5·6 번째 입력이
+  // 상태에 저장되지 않아(map 이 기존 4 칸만 순회) 항상 빈 값으로 비교됐다.
+  // 정답을 넣어도 "단어가 일치하지 않습니다" 가 뜨는, 지갑 생성 자체가 막히는 버그.
+  const [verifyInputs, setVerifyInputs] = useState<string[]>(() =>
+    Array<string>(VERIFY_WORD_COUNT).fill(''),
+  );
+  const [mismatch, setMismatch] = useState<boolean[]>(() =>
+    Array<boolean>(VERIFY_WORD_COUNT).fill(false),
+  );
   const [copied, setCopied] = useState(false);
   const [safeAck, setSafeAck] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2162,11 +2178,11 @@ function CreateFlow({
     setError(null);
     // BIP39 한국어 wordlist 는 NFKD 자모분리. 표시/복사/split 일관성을 위해 NFC 통일.
     // mnemonicToSeed 는 PBKDF2 시점에 자체 NFKD 정규화하므로 키 derivation 동일.
-    const m = createMnemonic(128, wordlist).normalize('NFC');
+    const m = createMnemonic(NEW_MNEMONIC_STRENGTH, wordlist).normalize('NFC');
     setMnemonic(m);
-    setVerifyIndices(pickIndices(4, 12));
-    setVerifyInputs(['', '', '', '']);
-    setMismatch([false, false, false, false]);
+    setVerifyIndices(pickIndices(VERIFY_WORD_COUNT, NEW_MNEMONIC_WORD_COUNT));
+    setVerifyInputs(Array<string>(VERIFY_WORD_COUNT).fill(''));
+    setMismatch(Array<boolean>(VERIFY_WORD_COUNT).fill(false));
     setSafeAck(false);
     setCopied(false);
     setStep('show');
@@ -2221,7 +2237,7 @@ function CreateFlow({
     return (
       <section className="card">
         <h2 className="create-step__title">{t('create.language.title')}</h2>
-        <p className="create-step__lead">{t('create.language.lead')}</p>
+        <p className="create-step__lead">{t('create.language.lead', { n: NEW_MNEMONIC_WORD_COUNT })}</p>
         <div className="lang-toggle" role="radiogroup" aria-label={t('common.language')}>
           <LanguageOption
             current={wordlist}
@@ -2251,13 +2267,13 @@ function CreateFlow({
     return (
       <section className="card">
         <h2 className="create-step__title">{t('create.title')}</h2>
-        <p className="create-step__lead">{t('create.lead')}</p>
+        <p className="create-step__lead">{t('create.lead', { n: NEW_MNEMONIC_WORD_COUNT })}</p>
         <p className="warn small" style={{ margin: 0 }}>
           {t('create.warn')}
         </p>
         <ul
           className="popup-mnemonic-grid"
-          aria-label={t('create.mnemonic_grid_label')}
+          aria-label={t('create.mnemonic_grid_label', { n: NEW_MNEMONIC_WORD_COUNT })}
         >
           {words.map((w, i) => (
             <li
@@ -2281,7 +2297,7 @@ function CreateFlow({
             checked={safeAck}
             onChange={(e) => setSafeAck(e.target.checked)}
           />
-          <span>{t('create.checkbox_safe')}</span>
+          <span>{t('create.checkbox_safe', { n: NEW_MNEMONIC_WORD_COUNT })}</span>
         </label>
         <button className="btn-primary" disabled={!safeAck} onClick={goVerify}>
           {t('create.confirm_done')}
@@ -2313,7 +2329,7 @@ function CreateFlow({
                   ? 'verify-row__input verify-row__input--mismatch'
                   : 'verify-row__input'
               }
-              value={verifyInputs[row]}
+              value={verifyInputs[row] ?? ''}
               onChange={(e) => setVerifyInputAt(row, e.target.value)}
               placeholder={t('create.verify.input_placeholder')}
               aria-label={t('create.verify.input_label', { n: wordIndex + 1 })}
@@ -2333,7 +2349,11 @@ function CreateFlow({
         onClick={() => {
           void submitVerify();
         }}
-        disabled={busy || verifyInputs.some((v) => v.trim() === '')}
+        disabled={
+          busy ||
+          verifyIndices.length === 0 ||
+          verifyIndices.some((_, row) => (verifyInputs[row] ?? '').trim() === '')
+        }
       >
         {busy ? t('common.loading_ellipsis') : t('create.verify.confirm')}
       </button>
@@ -2396,7 +2416,7 @@ function WordlistDatalist({ id, wordlist }: { id: string; wordlist: WordlistName
   );
 }
 
-// 12 중 4 개 비복원 추출. 정렬해서 사용자가 위→아래 순서로 자연스럽게 입력하도록 한다.
+// 전체 단어 중 일부를 비복원 추출. 정렬해서 사용자가 위→아래 순서로 자연스럽게 입력하도록 한다.
 // 비-암호적 Math.random 으로 충분: 게이트가 아니라 학습 보조이고, 인덱스 예측은 무의미.
 function pickIndices(count: number, max: number): number[] {
   const pool = Array.from({ length: max }, (_, i) => i);

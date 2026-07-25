@@ -63,19 +63,19 @@ export const ko: Catalog = {
 
   // ── 지갑 생성 흐름 ──
   'create.title': '복구 문구를 기억하세요',
-  'create.lead': '아래 12개 단어는 당신의 지갑 그 자체입니다. 종이에 적거나 안전한 곳에 보관하세요. 절대 다른 사람과 공유하지 마세요.',
+  'create.lead': '아래 {n}개 단어는 당신의 지갑 그 자체입니다. 종이에 적거나 안전한 곳에 보관하세요. 절대 다른 사람과 공유하지 마세요.',
   'create.warn': '이 문구를 잃어버리면 지갑을 복구할 수 없습니다. 화면 캡처는 권하지 않습니다.',
-  'create.checkbox_safe': '위 12개 단어를 안전하게 보관했습니다.',
+  'create.checkbox_safe': '위 {n}개 단어를 안전하게 보관했습니다.',
   'create.confirm_done': '외웠습니다, 다음',
   'create.copy_failed': '클립보드 접근에 실패했습니다. 직접 적어주세요.',
   'create.failed': '지갑 생성에 실패했습니다.',
-  'create.mnemonic_label': '복구 문구 (12 단어)',
-  'create.warn_desktop': '이 12단어를 안전한 곳에 옮겨 적어 두세요. 복구 문구는 지갑 자체이며, 잃어버리면 자산을 되찾을 수 없습니다.',
+  'create.mnemonic_label': '복구 문구 ({n} 단어)',
+  'create.warn_desktop': '이 {n}단어를 안전한 곳에 옮겨 적어 두세요. 복구 문구는 지갑 자체이며, 잃어버리면 자산을 되찾을 수 없습니다.',
   'create.save_and_start': '저장하고 시작',
-  'create.mnemonic_grid_label': '12개의 복구 단어',
+  'create.mnemonic_grid_label': '{n}개의 복구 단어',
   'create.word_index_label': '{n}번 단어',
   'recover.paste_button': '붙여넣기',
-  'recover.word_count': '{n} / 12 단어',
+  'recover.word_count': '{n} 단어 입력됨',
 
   // ── 복구 흐름 ──
   'recover.title': '지갑 복구',
@@ -231,7 +231,7 @@ export const ko: Catalog = {
   'popup.has_no_wallet': '지갑이 없습니다.',
   'popup.create_new': '새 지갑 만들기',
   'popup.recover_by_mnemonic': '니모닉으로 복구',
-  'popup.create_explain': '새 12단어 니모닉이 생성됩니다.',
+  'popup.create_explain': '새 {n}단어 니모닉이 생성됩니다.',
   'popup.create_v02_note': '시드구문 표시 → 4개 단어 재확인 → 지갑 생성 순으로 진행됩니다.',
   'popup.create_action': '생성',
 
@@ -239,7 +239,7 @@ export const ko: Catalog = {
   // 같은 흐름의 web 셸 키(create.title 등) 와 의도적으로 분리한다 — 팝업은 좁고
   // 단계 사이 정보 위계가 다르다.
   'create.language.title': '복구 문구 언어',
-  'create.language.lead': '어떤 언어 단어 목록으로 12단어를 만들지 선택하세요. 한국어/영어 어느 쪽으로 만들어도 안전성은 동일합니다.',
+  'create.language.lead': '어떤 언어 단어 목록으로 {n}단어를 만들지 선택하세요. 한국어/영어 어느 쪽으로 만들어도 안전성은 동일합니다.',
   'create.language.next': '다음',
   'create.verify.title': '단어를 다시 확인해 주세요',
   'create.verify.lead': '복구 문구를 정말 보관하셨는지 확인합니다. 아래 인덱스의 단어를 다시 입력해 주세요.',
@@ -356,7 +356,7 @@ export const ko: Catalog = {
   'export.checkbox': '경고를 이해했으며 본인 책임으로 표시합니다.',
   'export.reveal_button': '표시',
   'export.hide_button': '숨기기',
-  'export.kind_mnemonic': '이 계정은 시드구문 기반입니다 — 12 단어로 표시됩니다.',
+  'export.kind_mnemonic': '이 계정은 시드구문 기반입니다 — 시드구문 전체가 표시됩니다.',
   'export.kind_private_key': '이 계정은 import 된 private key 입니다.',
   'export.copy': '복사',
   'export.copied': '복사됨',

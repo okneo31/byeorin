@@ -3,6 +3,8 @@ import {
   Erc20,
   TokenRegistry,
   createMnemonic,
+  NEW_MNEMONIC_STRENGTH,
+  NEW_MNEMONIC_WORD_COUNT,
   discoverTokens,
   getPrice,
   type DiscoveredBalance,
@@ -133,7 +135,7 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
 
   const startCreate = () => {
     setError(null);
-    setDraft(createMnemonic(128, 'english'));
+    setDraft(createMnemonic(NEW_MNEMONIC_STRENGTH, 'english'));
     setMode('create');
   };
 
@@ -308,9 +310,9 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
 
       {mode === 'create' && (
         <Card as="section">
-          <div className="nd-label">{t('create.mnemonic_label')}</div>
+          <div className="nd-label">{t('create.mnemonic_label', { n: NEW_MNEMONIC_WORD_COUNT })}</div>
           <div className="nd-warn">
-            {t('create.warn_desktop')}
+            {t('create.warn_desktop', { n: NEW_MNEMONIC_WORD_COUNT })}
           </div>
           <div className="nd-mnemonic">{draft}</div>
           {error && <div className="nd-error">{error}</div>}
