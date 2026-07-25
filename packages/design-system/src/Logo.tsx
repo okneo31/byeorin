@@ -3,8 +3,14 @@ import * as React from 'react';
 export interface LogoProps {
   /** Pixel size of the mark. Wordmark variants will scale proportionally. */
   size?: number;
-  /** 'mark' = symbol only. 'mark-with-text' = symbol + 벼린 wordmark. */
-  variant?: 'mark' | 'mark-with-text';
+  /**
+   * 'mark'           = symbol with circular frame (default, for app surfaces).
+   * 'mark-bare'      = symbol only, fills the canvas — for extension toolbar
+   *                    icons / favicon / OS dock where 16–32 px makes the
+   *                    frame eat visual area. Same anvil+flame as 'mark'.
+   * 'mark-with-text' = symbol + "벼린" wordmark.
+   */
+  variant?: 'mark' | 'mark-bare' | 'mark-with-text';
   /** Optional title for accessibility (default: "벼린"). */
   title?: string;
   /** Optional class on the outer <svg>. */
@@ -125,6 +131,69 @@ export function Logo({
       >
         <title id={titleId}>{title}</title>
         {mark}
+      </svg>
+    );
+  }
+
+  if (variant === 'mark-bare') {
+    // Same anvil + flame as `mark`, no circular frame. viewBox is centered on
+    // the anvil+flame combined bounding box (anvil 46–186 × 158–212, flame
+    // 100–156 × 62–150 → combined 46–186 × 62–212) with ~5% padding so the
+    // mark fills ~95% of the rendered canvas. Useful at 16–32 px where the
+    // outer ring of `mark` swallows visual area.
+    return (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="31 52 170 170"
+        width={size}
+        height={size}
+        role="img"
+        aria-labelledby={titleId}
+        className={className}
+      >
+        <title id={titleId}>{title}</title>
+        {/* Skip the circle in the shared `mark` group — render anvil+flame
+            directly so the bare variant truly has zero frame. */}
+        <defs>
+          <linearGradient id={flameGrad} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#FFE082" />
+            <stop offset="35%" stopColor="#FF8F00" />
+            <stop offset="75%" stopColor="#E84D1A" />
+            <stop offset="100%" stopColor="#A53312" />
+          </linearGradient>
+          <radialGradient id={flameCore} cx="0.5" cy="0.7" r="0.5">
+            <stop offset="0%" stopColor="#FFF8D6" />
+            <stop offset="100%" stopColor="#FFE082" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <g fill="#1A1A1A">
+          <path d="M 70 158 L 186 158 L 186 172 L 70 172 Z" />
+          <path d="M 46 162 L 70 158 L 70 172 L 46 168 Z" />
+          <path d="M 96 172 L 160 172 L 152 196 L 104 196 Z" />
+          <path d="M 76 196 L 180 196 L 174 212 L 82 212 Z" />
+        </g>
+        <path
+          d="M 128 62
+             C 114 76 112 96 122 112
+             C 128 122 130 130 128 142
+             C 124 130 122 124 116 116
+             C 108 124 106 134 110 144
+             C 100 138 96 124 100 110
+             C 94 122 94 138 102 150
+             L 154 150
+             C 162 138 162 122 156 110
+             C 160 124 156 138 146 144
+             C 150 134 148 124 140 116
+             C 134 124 132 130 128 142
+             C 126 130 128 122 134 112
+             C 144 96 142 76 128 62 Z"
+          fill={`url(#${flameGrad})`}
+        />
+        <ellipse cx="128" cy="124" rx="10" ry="22" fill={`url(#${flameCore})`} />
+        <circle cx="100" cy="86" r="1.6" fill="#FFE082" opacity="0.8" />
+        <circle cx="156" cy="92" r="1.4" fill="#FFE082" opacity="0.75" />
+        <circle cx="112" cy="68" r="1.2" fill="#FFE082" opacity="0.6" />
+        <circle cx="146" cy="74" r="1.2" fill="#FFE082" opacity="0.65" />
       </svg>
     );
   }
