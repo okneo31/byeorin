@@ -85,17 +85,23 @@ const ZION_ASSETS: readonly ZionAsset[] = [
 //
 // 미상장 토큰의 페그 — Binance 에 없는 토큰은 BTC 페그로 내재 가치를 둔다.
 //
-// TTL 은 **노동가치 기준** 으로 잡는다 (2026-07-25 결정):
-//   기준 연봉 1000 BTC 를 365 일로 나눈 하루치 노동 = 100 TTL
+// TTL 은 **노동가치 기준** 으로 잡는다 (2026-07-25 결정).
+//
+// 단위의 뜻: **1 TTL = 일반 노동자의 하루 품삯** — 마태복음 20장 포도원 일꾼의
+// "데나리온" 과 같은 단위다. 하루 일한 사람은 하루치를 받는다.
+//
+// 그 하루치의 BTC 환산은 설계자 한 사람의 몫을 나누는 데서 나온다:
+//   설계자 기준 연봉 1000 BTC ÷ 365 일 = 설계자의 하루
+//   설계자의 하루 = 100 TTL (= 노동자 100 명의 하루 품삯)
 //   → 1 TTL = 1000 / 365 / 100 = 10/365 ≈ 0.02739726 BTC
 //
 // 최종 비율 하나로 적지 않고 상수 셋으로 쪼갠 이유: 나중에 바뀌는 값은 "기준
-// 연봉" 이나 "하루치 TTL" 이지 비율이 아니다. 근거가 코드에 남아 있어야 다음에
-// 조정할 때 무엇을 건드려야 하는지 바로 보인다.
-const TTL_ANNUAL_WAGE_BTC = 1000; // 기준 연봉 (BTC)
-const TTL_DAYS_PER_YEAR = 365; // 연봉을 나누는 일수
-const TTL_PER_WORK_DAY = 100; // 하루치 노동에 해당하는 TTL 수량
-const TTL_PEG_BTC = TTL_ANNUAL_WAGE_BTC / TTL_DAYS_PER_YEAR / TTL_PER_WORK_DAY;
+// 연봉" 이나 "설계자 하루당 TTL" 이지 비율이 아니다. 근거가 코드에 남아 있어야
+// 다음에 조정할 때 무엇을 건드려야 하는지 바로 보인다.
+const PEG_ANNUAL_BTC = 1000; // 설계자 기준 연봉 (BTC)
+const PEG_DAYS_PER_YEAR = 365; // 연봉을 나누는 일수
+const PEG_TTL_PER_DAY = 100; // 설계자의 하루를 나눈 몫 = 노동자 100 명의 하루 품삯
+const TTL_PEG_BTC = PEG_ANNUAL_BTC / PEG_DAYS_PER_YEAR / PEG_TTL_PER_DAY;
 
 // kWR(ZION) 은 **TTL 을 따라가지 않는다.** 예전에 1/300,000 으로 같이 뒀던 건
 // "미상장이니 일단 TTL 과 동일하게" 라는 임시 가정이었고, 위 노동가치 근거는

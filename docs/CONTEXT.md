@@ -50,7 +50,7 @@
 | #13/14/15 Stage W/D/M | Extension 완성 후 | Web/Desktop/Mobile 셸을 Extension reference 패턴으로. Mobile 만 RN 재작성, Web/Desktop 은 거의 복붙 |
 | #16 | Stage B 묶음 | extension e2e smoke 확장, 위협모델 갱신, CONTEXT/PLAN closed 처리 |
 | #23/24/25 Z2/Z3/Z4 | 별도 트랙 | ZION 커스텀 메시지(job/amm/pop/bankext/poms) + 기능 UI(잡마켓·AMM·PoP·BTC브릿지) + zion-api 연동 |
-| #27 TTL 가치표시 | 완료 | 노동가치 페그 — 기준 연봉 1000 BTC ÷ 365일 = 하루치 = 100 TTL → 1 TTL = 10/365 ≈ 0.02739726 BTC (2026-07-25 개정, 이전 1/300,000). kWR 은 따라가지 않고 1/300,000 유지 |
+| #27 TTL 가치표시 | 완료 | **1 TTL = 노동자 하루 품삯(데나리온)**. 환산은 설계자 연봉 1000 BTC ÷ 365일 = 설계자의 하루 = 100 TTL → 1 TTL = 10/365 ≈ 0.02739726 BTC (2026-07-25 개정, 이전 1/300,000). kWR 은 따라가지 않고 1/300,000 별도 트랙 |
 
 ### 본 라운드 외부 결정 (사용자 확정)
 
