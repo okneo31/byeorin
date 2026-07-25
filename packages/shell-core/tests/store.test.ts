@@ -341,3 +341,181 @@ describe('WalletStore — transfer + lock race policy (concern #1)', () => {
     expect(hash).toBe('0xslowtxhash');
   });
 });
+
+// 다중 계정 시나리오 — mnemonic + privateKey 공존, select/remove/export, 직렬화 v2.
+const PRIVATE_KEY_HARDHAT_1 =
+  '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
+
+describe('WalletStore — multi-account', () => {
+  it('addMnemonicAccount stores a second account, listAccounts shows both', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    const idx = await store.addMnemonicAccount(SECOND_MNEMONIC, 'secondary');
+    expect(idx).toBe(1);
+    const list = store.listAccounts();
+    expect(list).toHaveLength(2);
+    expect(list[0]!.active).toBe(true);
+    expect(list[0]!.kind).toBe('mnemonic');
+    expect(list[1]!.active).toBe(false);
+    expect(list[1]!.label).toBe('secondary');
+  });
+
+  it('importPrivateKey adds a privateKey-kind account with a valid address', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    const idx = await store.importPrivateKey(PRIVATE_KEY_HARDHAT_1, 'imported');
+    const list = store.listAccounts();
+    expect(idx).toBe(1);
+    expect(list[1]!.kind).toBe('privateKey');
+    expect(list[1]!.address.startsWith('0xfake')).toBe(true);
+  });
+
+  it('selectAccount switches the active idx and getAccount follows', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    const idx2 = await store.addMnemonicAccount(SECOND_MNEMONIC);
+    const a1 = await store.getAccount();
+    await store.selectAccount(idx2);
+    expect(store.getActiveIndex()).toBe(idx2);
+    const a2 = await store.getAccount();
+    expect(a2.address).not.toBe(a1.address);
+  });
+
+  it('removeAccount of the active idx shifts active to the survivor', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    await store.addMnemonicAccount(SECOND_MNEMONIC);
+    // active = 0. 그것을 제거 → active 가 새로운 0(이전 1) 으로 이동.
+    await store.removeAccount(0);
+    expect(store.getActiveIndex()).toBe(0);
+    expect(store.listAccounts()).toHaveLength(1);
+  });
+
+  it('removeAccount of the last remaining account throws', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    await expect(store.removeAccount(0)).rejects.toMatchObject({
+      code: 'account.last_cannot_remove',
+    });
+  });
+
+  it('addMnemonicAccount of duplicate mnemonic throws account.duplicate', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    await expect(store.addMnemonicAccount(MNEMONIC)).rejects.toMatchObject({
+      code: 'account.duplicate',
+    });
+  });
+
+  it('importPrivateKey of duplicate key throws account.duplicate', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    await store.importPrivateKey(PRIVATE_KEY_HARDHAT_1);
+    await expect(
+      store.importPrivateKey(PRIVATE_KEY_HARDHAT_1),
+    ).rejects.toMatchObject({ code: 'account.duplicate' });
+  });
+
+  it('importPrivateKey rejects malformed hex with privateKey.invalid', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    await expect(store.importPrivateKey('0xdeadbeef')).rejects.toMatchObject({
+      code: 'privateKey.invalid',
+    });
+  });
+
+  it('exportMnemonic returns the mnemonic for mnemonic-kind accounts', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    const m = await store.exportMnemonic(0);
+    expect(m).toBe(MNEMONIC);
+  });
+
+  it('exportMnemonic on a privateKey account throws account.kind_mismatch', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    const idx = await store.importPrivateKey(PRIVATE_KEY_HARDHAT_1);
+    await expect(store.exportMnemonic(idx)).rejects.toMatchObject({
+      code: 'account.kind_mismatch',
+    });
+  });
+
+  it('exportPrivateKey returns the raw key for privateKey-kind accounts', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    const idx = await store.importPrivateKey(PRIVATE_KEY_HARDHAT_1);
+    const hex = await store.exportPrivateKey(idx);
+    expect(hex).toBe(PRIVATE_KEY_HARDHAT_1.toLowerCase());
+  });
+});
+
+describe('WalletStore — session serialization v2', () => {
+  it('persists multi-account state to session as v2 JSON blob', async () => {
+    const session = new AutoRestoreMemorySession();
+    const { store } = makeStore({ session });
+    await store.unlock(MNEMONIC);
+    await store.addMnemonicAccount(SECOND_MNEMONIC, 'secondary');
+    await store.importPrivateKey(PRIVATE_KEY_HARDHAT_1, 'imported');
+
+    const raw = await session.read();
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw!) as {
+      v: number;
+      active: number;
+      accounts: Array<{ kind: string; label?: string }>;
+    };
+    expect(parsed.v).toBe(2);
+    expect(parsed.accounts).toHaveLength(3);
+    expect(parsed.accounts[0]!.kind).toBe('mnemonic');
+    expect(parsed.accounts[2]!.kind).toBe('privateKey');
+  });
+
+  it('round-trip via tryAutoRestore preserves all accounts and active idx', async () => {
+    const session = new AutoRestoreMemorySession();
+    const { store } = makeStore({ session });
+    await store.unlock(MNEMONIC);
+    await store.addMnemonicAccount(SECOND_MNEMONIC);
+    await store.importPrivateKey(PRIVATE_KEY_HARDHAT_1);
+    await store.selectAccount(2);
+
+    // 새 store 인스턴스에서 같은 session 으로 복원.
+    const adapter2 = new FakeAdapter();
+    const store2 = new WalletStore({ defaultAdapter: adapter2, session });
+    const restored = await store2.tryAutoRestore();
+    expect(restored).toBe(true);
+    const list = store2.listAccounts();
+    expect(list).toHaveLength(3);
+    expect(store2.getActiveIndex()).toBe(2);
+    expect(list[2]!.kind).toBe('privateKey');
+  });
+
+  it('reads legacy v1 plain-mnemonic session and migrates to v2 single account', async () => {
+    const session = new AutoRestoreMemorySession();
+    // v1 = 그냥 mnemonic 평문.
+    await session.write(MNEMONIC);
+    const { store } = makeStore({ session });
+    const restored = await store.tryAutoRestore();
+    expect(restored).toBe(true);
+    const list = store.listAccounts();
+    expect(list).toHaveLength(1);
+    expect(list[0]!.kind).toBe('mnemonic');
+    // 마이그레이션 후엔 v2 JSON 으로 재기록되어 있어야 한다.
+    const raw = await session.read();
+    expect(raw!.startsWith('{')).toBe(true);
+  });
+
+  it('korean mnemonic also persists and round-trips in v2 blob', async () => {
+    // 즉석 생성한 valid 한국어 BIP39 — 상수로 둔 한국어 시드는 BIP39 wordlist 와
+    // 어긋날 수 있으므로 wallet-sdk 의 createMnemonic 로 생성한다.
+    const { createMnemonic } = await import('@byeorin/wallet-sdk');
+    const koreanMnemonic = createMnemonic(128, 'korean').normalize('NFC');
+    const session = new AutoRestoreMemorySession();
+    const { store } = makeStore({ session });
+    await store.unlock(koreanMnemonic);
+    const adapter2 = new FakeAdapter();
+    const store2 = new WalletStore({ defaultAdapter: adapter2, session });
+    await store2.tryAutoRestore();
+    expect(store2.listAccounts()).toHaveLength(1);
+    expect(store2.listAccounts()[0]!.kind).toBe('mnemonic');
+  });
+});

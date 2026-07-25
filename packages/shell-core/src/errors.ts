@@ -22,7 +22,13 @@ export type ShellErrorCode =
   | 'keystore.unsupported_kdf'
   | 'keystore.passphrase_required'
   | 'keystore.corrupt_blob'
-  | 'keystore.webcrypto_unavailable';
+  | 'keystore.webcrypto_unavailable'
+  // 다중 계정 관리
+  | 'account.not_found'           // idx out of range
+  | 'account.kind_mismatch'       // exportMnemonic 을 privateKey 계정에 호출, 등
+  | 'account.last_cannot_remove'  // 마지막 계정 제거 시도 (lock() 을 쓰라)
+  | 'account.duplicate'           // 동일 시크릿이 이미 추가되어 있음
+  | 'privateKey.invalid';         // hex 길이/문자/range 위반
 
 /** shell-core 가 던지는 도메인 에러. `code` 로 사용자 언어 매핑. */
 export class ShellError extends Error {

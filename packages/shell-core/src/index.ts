@@ -1,7 +1,9 @@
 export {
   WalletStore,
   createWalletStore,
+  privateKeyToHex,
   type WalletStoreOptions,
+  type AccountInfo,
 } from './store.js';
 export {
   type SessionStore,
@@ -23,6 +25,11 @@ export {
   type EncryptedKeystoreStoreOptions,
 } from './keystore.js';
 export { detectWordlist } from './wordlist.js';
+export {
+  Addressbook,
+  type AddressbookEntry,
+  type SelfAddressInput,
+} from './addressbook.js';
 export {
   ShellError,
   shellError,
