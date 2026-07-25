@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- 기본 테마. Capacitor 템플릿의 Light.DarkActionBar 대신 다크 계열을 쓴다 —
+         WebView 가 다크 UI 라 라이트 테마면 전환 순간 흰 배경이 비친다. -->
+    <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:windowBackground">@color/byeorinInk</item>
+        <item name="android:statusBarColor">@color/colorPrimaryDark</item>
+        <item name="android:navigationBarColor">@color/byeorinInk</item>
+    </style>
+
+    <style name="AppTheme.NoActionBar" parent="AppTheme">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+
+    <!-- 런치(스플래시) 테마.
+     *
+     * ⚠ `android:background` 를 쓰면 안 된다 (Capacitor 템플릿 기본값이지만 함정이다).
+     * 그 속성은 창 배경이 아니라 **이 테마로 인플레이트되는 모든 View 의 기본
+     * 배경** 이 된다. 그래서 액티비티 테마로 지정하면 네이티브 `<select>` 드롭다운
+     * 의 각 행마다 스플래시 이미지가 통째로 깔린다 (에뮬레이터에서 실제로 재현됨:
+     * 체인 셀렉터 16 행에 로고가 하나씩).
+     *
+     * 창 배경만 칠하려면 `android:windowBackground` 를 쓴다. 스플래시 아이콘/배경은
+     * core-splashscreen 의 전용 속성으로 지정하고, 스플래시가 끝나면
+     * postSplashScreenTheme 로 넘어가 View 기본 배경을 물려주지 않는다. -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:windowBackground">@color/byeorinInk</item>
+        <item name="windowSplashScreenBackground">@color/byeorinInk</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
+        <item name="android:statusBarColor">@color/colorPrimaryDark</item>
+        <item name="android:navigationBarColor">@color/byeorinInk</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+    </style>
+</resources>

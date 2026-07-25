@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ 백업/기기이전 정책.
+     암호화된 금고(localStorage 의 byeorin:vault)는 사용자 비밀번호로 봉인돼
+     있긴 하지만, 클라우드나 새 단말로 자동 복제되지 않는 편이 낫다. 시드의
+     사본은 사용자가 적어둔 복구 문구 하나로 충분하며, 사본이 늘어날수록
+     공격 표면만 늘어난다. 그래서 클라우드 백업과 기기 간 이전 모두 차단한다. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+    </device-transfer>
+</data-extraction-rules>

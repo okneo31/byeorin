@@ -1,0 +1,82 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace = "top.ttl1.byeorin"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "top.ttl1.byeorin"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        // 모노레포 로드맵 버전(PLAN.md v0.5)과 맞춘다. 실기기 배포마다 versionCode
+        // 를 1 씩 올려야 같은 단말에 덮어 설치된다.
+        versionCode 1
+        versionName "0.5.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    // 릴리스 서명. 키스토어 자격증명은 저장소에 넣지 않는다 —
+    // `android/keystore.properties` (gitignore 대상) 에서 읽고, 파일이 없으면
+    // 서명 설정 자체를 만들지 않는다. 그래야 자격증명 없는 머신에서도
+    // assembleDebug 는 그대로 돌아간다.
+    //
+    // 파일 생성은 `node scripts/keystore.mjs` 가 담당한다 (README 참고).
+    signingConfigs {
+        release {
+            def propsFile = rootProject.file('keystore.properties')
+            if (propsFile.exists()) {
+                def props = new Properties()
+                propsFile.withInputStream { props.load(it) }
+                storeFile rootProject.file(props['storeFile'])
+                storePassword props['storePassword']
+                keyAlias props['keyAlias']
+                keyPassword props['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // 난독화는 끈다. 9 체인 라이브러리는 전부 WebView 안의 JS 라 R8 의
+            // 대상이 아니고, 켜면 Capacitor 의 리플렉션 기반 플러그인 등록만
+            // 깨진다 (실익 0, 위험만).
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (rootProject.file('keystore.properties').exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

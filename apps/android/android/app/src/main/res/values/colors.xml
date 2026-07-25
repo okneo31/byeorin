@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 벼린 팔레트 (docs/CONTEXT.md §1 컬러 팔레트 v2)를 네이티브 리소스로 옮긴 것.
+     WebView 가 그리기 전 프레임(스플래시·상태바)이 흰색으로 번쩍이지 않게 하는 것이
+     주 목적이다. -->
+<resources>
+    <color name="colorPrimary">#E84D1A</color>       <!-- 잉걸 오렌지 -->
+    <color name="colorPrimaryDark">#0B0B0D</color>   <!-- 밤 모루 -->
+    <color name="colorAccent">#E84D1A</color>
+    <!-- 팝업 스타일시트의 popup-bg 토큰과 동일. 스플래시→WebView 전환이 이어져 보인다. -->
+    <color name="byeorinInk">#0D0A08</color>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 벼린 적응형 런처 아이콘. 전경/배경 모두 icons/dist/android/adaptive 의 PNG
+     (모루+불꽃 마스터에서 생성). Capacitor 기본 벡터 아이콘을 대체한다. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@mipmap/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

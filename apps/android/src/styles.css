@@ -1,0 +1,968 @@
+/* 벼린 — 팝업 스타일 (v0.4 시각 정비)
+ *
+ * 디자인 톤:
+ *   "잉크 묻은 종이" 위에 빨간 인장이 찍힌 다크 모드. 평평한 검정 대신 살짝
+ *   갈색이 도는 어두운 톤(#0d0a08, #1a1612)으로 따뜻함을 더했다. 기업/암호화폐
+ *   특유의 차가운 네온 다크가 아니라, 80년대 한국 민중미술 포스터의 단단함을
+ *   다크 테마로 옮긴다.
+ *
+ * 위계:
+ *   1) 헤더(인장 + 워드마크 + 로케일)
+ *   2) 카드 (주소·잠금 / 사이트 관리 / 자동승인)
+ *   3) 푸터 (비수탁 안내)
+ *
+ * 토큰:
+ *   --nd-* (디자인 시스템 글로벌) 위에 --popup-* (앱 전용) 를 얹는다.
+ *   디자인 시스템 토큰은 직접 수정하지 않는다.
+ */
+
+:root {
+  /* ── 앱 전용 색상 — 디자인 시스템 위에 얹는 다크 테마 팔레트 ──
+   * 의도적으로 슬쩍 갈색이 도는 어두운 톤. 순수 #000 은 너무 차갑고 OLED 검정처럼
+   * 깊이가 없어, 종이에 잉크가 스며든 듯한 #0d0a08~#322a22 그라데이션을 쓴다.
+   */
+  --popup-bg:         #0d0a08;
+  --popup-surface-1:  #1a1612;  /* 카드 배경 */
+  --popup-surface-2:  #241e18;  /* 카드 안의 nested 행(origin/grant) */
+  --popup-border:     #322a22;
+  --popup-border-soft:#2a221c;
+  --popup-text:       #f5ede2;  /* 따뜻한 오프화이트 — 순백 X */
+  --popup-muted:      #a89986;  /* 베이지 톤 muted */
+  --popup-red:        var(--nd-red, #c41e1e);
+  --popup-red-soft:   #e85050;  /* 다크 배경 위 빨강 텍스트(가독성 보정) */
+  --popup-yellow-soft:#ffd54f;  /* 다크 배경 위 노란 텍스트 — 순노랑은 채도 충돌 */
+
+  /* 카드 inset 하이라이트 — 인쇄물 위쪽 종이결 느낌 */
+  --popup-inset-hilite: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--popup-bg);
+  color: var(--popup-text);
+  font-family: var(--nd-font-sans, 'Pretendard Variable', Pretendard, -apple-system,
+    BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* 한글은 라틴 대비 세로폭이 커서 line-height 1.6 이 안정적 */
+  line-height: 1.6;
+  /* 숫자(주소·잔액)는 항상 등폭 정렬 */
+  font-variant-numeric: tabular-nums;
+}
+
+body {
+  /* 팝업 폭 420 — Chrome MV3 액션 팝업 표준 */
+  width: 420px;
+  min-height: 520px;
+}
+
+/* ── 루트 컨테이너 ─────────────────────────────────────── */
+.popup {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px 16px;
+  min-height: 100vh;
+}
+
+/* ── 헤더 ──────────────────────────────────────────────── */
+/* test 가 'header.brand >> text=벼린' 으로 selector 를 잡으므로
+ * <header class="brand"> 와 워드마크 텍스트는 그대로 유지한다.
+ */
+.brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 2px 12px;
+  border-bottom: 1px solid var(--popup-border);
+  margin-bottom: 2px;
+}
+
+.brand__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.brand__wordmark {
+  font-size: 17px;
+  font-weight: 800;
+  /* 한글은 letter-spacing 을 살짝 줄이면 단단한 느낌이 강해진다 */
+  letter-spacing: -0.02em;
+  color: var(--popup-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.brand__right {
+  flex: 0 0 auto;
+}
+
+/* 헤더 안에 들어가는 LocaleSwitch 의 기본 색을 다크 톤에 맞춤 */
+.brand__right select,
+.brand__right button {
+  background: transparent;
+  color: var(--popup-muted);
+  border: 1px solid var(--popup-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.brand__right select:hover,
+.brand__right button:hover {
+  color: var(--popup-text);
+  border-color: var(--popup-muted);
+}
+
+/* ── 카드 ──────────────────────────────────────────────── */
+.card {
+  background: var(--popup-surface-1);
+  border: 1px solid var(--popup-border);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* 위쪽 1px hairline highlight — 종이결 느낌 */
+  box-shadow: var(--popup-inset-hilite);
+}
+
+/* 인장(stamp) 모티프 — 카드 제목 옆 작은 빨간 사각 */
+.section-title {
+  margin: 0 0 2px 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--popup-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--popup-red);
+  /* 작은 핀홀 — 도장 안의 글자 자리 느낌 */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  flex: 0 0 auto;
+}
+
+/* ── 타이포그래피 보조 ─────────────────────────────────── */
+.muted {
+  color: var(--popup-muted);
+}
+
+.small {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.warn {
+  color: var(--popup-yellow-soft);
+}
+
+.error {
+  color: var(--popup-red-soft);
+  background: rgba(232, 80, 80, 0.08);
+  border: 1px solid rgba(232, 80, 80, 0.28);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+/* ── 주소 표시 ─────────────────────────────────────────── */
+.addr {
+  font-family: var(--nd-font-mono, 'JetBrains Mono', ui-monospace, Menlo, monospace);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--popup-yellow-soft);
+  margin: 0;
+  /* 주소 한 줄에 깔끔히 들어가게 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 라벨 (체인 / 섹션 보조) ───────────────────────────── */
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--popup-muted);
+  margin: 0;
+}
+
+/* ── 버튼 베이스 ───────────────────────────────────────── */
+button {
+  font: inherit;
+  /* 한글은 라틴 같은 크기여도 시각적으로 작게 인식된다 — `font: inherit`(=16px)
+   * 받은 버튼이 실제로는 14~15px 처럼 보여 행동 가능성이 낮아진다. CTA 가
+   * 분명히 읽히도록 15.5px 로 명시. .btn-sm 은 자체 font-size 로 11.5px. */
+  font-size: 15.5px;
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    filter 120ms ease,
+    color 120ms ease;
+  /* 한글 텍스트 폭 보정 */
+  letter-spacing: -0.01em;
+}
+
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(232, 80, 80, 0.55);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* Primary — 빨간 인장 CTA. 위쪽 살짝 밝은 1픽셀 highlight 로 입체감. */
+.btn-primary {
+  background: linear-gradient(180deg, #c41e1e 0%, #a01818 100%);
+  color: #ffffff;
+  font-weight: 700;
+  /* CTA 는 베이스보다 한 단계 더 크게 (16px) — 첫 화면에서 우선 행동 명확화. */
+  font-size: 16px;
+  min-height: 44px;
+  border-color: #8e1414;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.btn-primary:active:not(:disabled) {
+  filter: brightness(0.92);
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* Ghost — 종이 위 빈 자리. 외곽선만 가지며 hover 시 텍스트가 밝아진다.
+ *
+ * CTA 가 아닌 secondary 버튼이지만 첫 화면에서 "니모닉 복구 / HW 연결" 같은
+ * 중요 분기 진입을 담당하므로 한글 가독성을 위해 폰트는 .btn-primary 와
+ * 동급(16px) 으로, 무게만 한 단계 가볍게(600) — 행동 가능성을 확보한다. */
+.btn-ghost {
+  background: transparent;
+  color: var(--popup-muted);
+  border-color: var(--popup-border);
+  min-height: 40px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.btn-ghost:hover:not(:disabled) {
+  color: var(--popup-text);
+  border-color: var(--popup-muted);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 11.5px;
+  min-height: 28px;
+  border-radius: 6px;
+}
+
+/* ── 입력 ──────────────────────────────────────────────── */
+textarea {
+  background: var(--popup-surface-2);
+  color: var(--popup-text);
+  border: 1px solid var(--popup-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: var(--nd-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 13px;
+  line-height: 1.55;
+  resize: vertical;
+  width: 100%;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: var(--popup-yellow-soft);
+  box-shadow: 0 0 0 2px rgba(255, 213, 79, 0.18);
+}
+
+textarea::placeholder {
+  color: var(--popup-muted);
+  opacity: 0.7;
+}
+
+/* ── 푸터 ──────────────────────────────────────────────── */
+footer {
+  margin-top: auto;
+  padding-top: 6px;
+  text-align: center;
+  /* 11px 은 한글에서 거의 안 읽힘 — 비수탁 안내는 작아도 읽혀야 한다. */
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--popup-muted);
+}
+
+/* ── 연결된 사이트 / 자동 승인 리스트 ──────────────────── */
+.origin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.origin-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--popup-surface-2);
+  border: 1px solid var(--popup-border-soft);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.origin-text {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--nd-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--popup-text);
+  /* origin 은 길 수 있다 — 한 줄 + 말줄임 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 빈 상태 — 굵게 강조하지 않고 조용히 안내 */
+.empty-state {
+  font-size: 12px;
+  color: var(--popup-muted);
+  font-style: italic;
+  margin: 4px 0 0 0;
+}
+
+/* ActiveGrants 의 origin + 메타 컬럼 */
+.grant-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* ── 하드웨어 월릿 패널 ────────────────────────────────── */
+.hw-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--popup-border);
+}
+
+/* ── 잠금된 상태(생성/복구 home) CTA 영역 ──────────────── */
+/* ── ZION 4종 자산 list (활성 카드 안) ────────────────────
+ * native 히어로 아래에 BTC/USDT/ETH 추가 표시. 인쇄 영수증 결처럼 단조롭게
+ * 정렬 — 단위는 우측 정렬 (등폭 숫자 + tabular-nums) 로 자릿수 비교 용이.
+ */
+.zion-assets {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--popup-border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.zion-assets__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13.5px;
+  padding: 2px 0;
+}
+.zion-assets__symbol {
+  color: var(--popup-muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.zion-assets__amount {
+  color: var(--popup-text);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.zion-assets__usd {
+  color: var(--popup-muted);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+.zion-assets__toggle {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: var(--popup-muted);
+  font-size: 12px;
+  padding: 4px 0 0;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.zion-assets__toggle:hover {
+  color: var(--popup-text);
+}
+.zion-assets__actions {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.add-token-form {
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: var(--popup-surface-2);
+  border: 1px solid var(--popup-border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.add-token-form__actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* "지갑이 없습니다." 안내 위에 살짝 강한 폰트로 무게감 */
+.lead {
+  /* 첫 화면 안내문은 버튼 위에서 의도를 잡아야 한다 — 16px 로 키워 한글
+   * 무게감 보강. 버튼 .btn-primary(16px) 와 톤 균형. */
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--popup-text);
+  margin: 0;
+}
+
+/* ── 지갑 생성 3단계 흐름 ──────────────────────────────── */
+/* 언어 선택 → 니모닉 표시 → 4개 단어 재확인 → unlock.
+ * 각 step 은 .card 안에 들어가고, 본 블록은 step 공용 보조 클래스만 정의한다.
+ */
+.create-step__title {
+  margin: 0 0 6px 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--popup-text);
+}
+
+.create-step__lead {
+  margin: 0 0 4px 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--popup-muted);
+}
+
+/* 언어 선택 — 두 칸짜리 큰 라디오 버튼. radio 입력은 sr-only, label 이 시각 표면. */
+.lang-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 2px 0 6px;
+}
+
+.lang-toggle__opt {
+  /* label 자체가 클릭 표면. 내부에 sr-only input[type=radio]. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  border: 1px solid var(--popup-border);
+  border-radius: 10px;
+  background: var(--popup-surface-2);
+  color: var(--popup-text);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.lang-toggle__opt:hover {
+  border-color: var(--popup-muted);
+}
+
+.lang-toggle__opt--active {
+  border-color: var(--popup-red);
+  background: rgba(196, 30, 30, 0.10);
+  color: var(--popup-text);
+  box-shadow: inset 0 0 0 1px var(--popup-red);
+}
+
+/* sr-only — 시각적으로 숨기지만 키보드 포커스와 SR 노출은 유지. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 4×3 니모닉 그리드 — 팝업 폭 420 에서 한국어 단어 길이를 안정적으로 담을 수 있도록
+ * 셀 폰트는 13px, 인덱스는 좌상단 9px 작게. web 셸과 시각적으로 유사하나 폭/폰트가 다르다.
+ */
+.popup-mnemonic-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin: 4px 0 8px;
+  list-style: none;
+  padding: 0;
+}
+
+.popup-mnemonic-cell {
+  position: relative;
+  background: var(--popup-surface-2);
+  border: 1px solid var(--popup-border);
+  border-radius: 7px;
+  padding: 12px 8px 8px;
+  text-align: center;
+  font-family: var(--nd-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--popup-text);
+  user-select: text;
+  /* 위쪽 1px hairline — 종이 결 */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.popup-mnemonic-cell__index {
+  position: absolute;
+  top: 3px;
+  left: 6px;
+  font-family: var(--nd-font-sans, inherit);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--popup-red-soft);
+  letter-spacing: 0;
+}
+
+.popup-mnemonic-cell__word {
+  display: block;
+  margin-top: 2px;
+  word-break: keep-all;
+}
+
+/* 안전 보관 체크박스 — 텍스트와 자연스럽게 정렬 */
+.safe-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 6px 0 4px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--popup-text);
+  cursor: pointer;
+}
+
+.safe-check input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--popup-red);
+  flex: 0 0 auto;
+}
+
+/* 검증 입력 4개 — 세로 stack. 각 행은 라벨(2번) + 입력. */
+.verify-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 4px;
+}
+
+.verify-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.verify-row__label {
+  flex: 0 0 auto;
+  min-width: 56px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--popup-red-soft);
+  font-family: var(--nd-font-mono, ui-monospace, monospace);
+}
+
+.verify-row__input {
+  flex: 1 1 auto;
+  background: var(--popup-surface-2);
+  color: var(--popup-text);
+  border: 1px solid var(--popup-border);
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-family: var(--nd-font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.verify-row__input:focus {
+  border-color: var(--popup-yellow-soft);
+  box-shadow: 0 0 0 2px rgba(255, 213, 79, 0.18);
+}
+
+.verify-row__input--mismatch {
+  border-color: var(--popup-red-soft);
+  box-shadow: 0 0 0 2px rgba(232, 80, 80, 0.18);
+}
+
+/* ── 다중 계정 표시 ──────────────────────────────────────
+ * 활성 계정 카드 안 보조 메타. 작은 베이지 톤으로 카드 본문(주소)과 위계 구분.
+ */
+.account-kind-badge {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--popup-muted);
+  margin: 0 0 -2px 0;
+}
+
+/* 활성 계정 카드의 액션 한 줄 — 키 보기 / 잠금 등이 같은 행에 흐른다. */
+.account-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+/* 비활성 계정 row — origin-row 의 grid 형태를 그대로 쓰되 가로 액션 2개를 둔다. */
+.account-row .btn-ghost {
+  flex: 0 0 auto;
+}
+
+/* Export 화면의 raw private key 한 줄. 주소 hex 처럼 monospace + 줄바꿈 허용. */
+.export-key {
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--popup-text);
+  background: var(--popup-surface-2);
+  border: 1px solid var(--popup-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 4px 0 0 0;
+  /* 활성 계정 주소와 달리 노란색 강조는 빼고 본문 톤으로 — 노출에 대한 시각적 절제. */
+}
+
+/* PK import 화면의 라벨 입력 — verify-row__input 스타일 재활용 시 padding 일관. */
+input.verify-row__input {
+  width: 100%;
+}
+
+/* 체인 셀렉터 — 활성 계정 카드 상단의 16 체인 드롭다운 */
+.chain-select {
+  width: 100%;
+  background: var(--popup-surface-2);
+  color: var(--popup-text);
+  border: 1px solid var(--popup-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+  cursor: pointer;
+}
+.chain-select:focus {
+  outline: none;
+  border-color: var(--popup-yellow-soft);
+  box-shadow: 0 0 0 2px rgba(255, 213, 79, 0.18);
+}
+.chain-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ── 잔액 히어로 / 주소 + QR / 송금 ──────────────────── */
+
+.balance-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin: 4px 0 2px 0;
+  min-height: 32px;
+}
+
+.balance-hero__value {
+  margin: 0;
+  font-family: var(--nd-font-mono, ui-monospace, monospace);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--popup-text);
+  /* 큰 숫자는 잔액 라인에서 가장 강한 위계. tabular nums 로 자릿수 정렬. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* 잔액 hero 보조 — native 잔액 아래 BTC/USD 환산. 클릭으로 단위 전환. */
+.balance-hero__toggle {
+  margin: 0;
+  padding: 2px 6px;
+  margin-inline: -6px;
+  background: transparent;
+  border: none;
+  color: var(--popup-muted);
+  font-family: var(--nd-font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  user-select: text;
+  border-radius: 6px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.balance-hero__toggle:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--popup-text);
+}
+.balance-hero__toggle:focus-visible {
+  outline: none;
+  background: rgba(255, 213, 79, 0.10);
+  color: var(--popup-text);
+  box-shadow: 0 0 0 2px rgba(255, 213, 79, 0.18);
+}
+
+/* 주소 한 줄 + 복사 / QR 버튼 — 같은 행에 wrap 허용 */
+.address-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.address-row__text {
+  /* .addr 기본 white-space:nowrap 유지하되 flex 안에서 늘어나지 않도록 */
+  flex: 0 0 auto;
+}
+
+/* QR 인라인 패널 — 받기 안내가 위협적이지 않으므로 모달 X */
+.qr-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 2px 0;
+  padding: 10px;
+  background: var(--popup-surface-2);
+  border: 1px solid var(--popup-border);
+  border-radius: 10px;
+}
+
+.qr-inline img {
+  width: 200px;
+  height: 200px;
+  display: block;
+  border-radius: 6px;
+  background: #fafaf7;
+  padding: 6px;
+}
+
+/* 송금 리뷰 화면 — 라벨/값 한 줄 */
+.send-review__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--popup-border-soft);
+}
+
+.send-sent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 213, 79, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 213, 79, 0.06);
+}
+
+.send-hash {
+  /* 긴 hash 가 줄을 깨지 않도록 */
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--popup-yellow-soft);
+}
+
+.send-sent a {
+  color: var(--popup-sweat, #2e78d2);
+  text-decoration: none;
+}
+.send-sent a:hover {
+  text-decoration: underline;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 모바일 오버라이드 (안드로이드 셸 전용)
+ *
+ * 위 규칙들은 420×520 고정 크기의 확장 팝업을 전제로 쓰였다. 여기서부터는
+ * 그 전제를 단말 화면 기준으로 되돌린다. 원본을 직접 고치지 않고 뒤에 얹는
+ * 이유: 확장 popup 스타일과의 diff 를 "이 블록 하나" 로 유지해, 확장 쪽
+ * 시각 변경을 나중에 그대로 복사해 올 수 있게 하기 위함.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+html {
+  /* 가로 모드 전환 시 안드로이드가 폰트를 임의로 키우는 것을 막는다. */
+  -webkit-text-size-adjust: 100%;
+  /* 스크롤 끝에서 튕기며 WebView 배경(흰색)이 비치는 현상 제거. */
+  overscroll-behavior: none;
+  background: var(--popup-bg);
+}
+
+body {
+  /* 팝업 고정폭 해제 — 단말 폭을 그대로 쓴다. */
+  width: 100%;
+  min-height: 100vh;
+  /* 하단 시스템 네비게이션/제스처 바 영역까지 배경을 채운다. */
+  min-height: 100dvh;
+  overscroll-behavior: none;
+}
+
+.popup {
+  /* 태블릿·폴더블에서 한 줄이 지나치게 길어지지 않도록 상한만 둔다. */
+  max-width: 560px;
+  margin: 0 auto;
+  /* 노치·상태바·제스처바를 피해 내용 영역을 잡는다 (viewport-fit=cover 전제). */
+  padding-top: calc(14px + env(safe-area-inset-top));
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  padding-left: calc(16px + env(safe-area-inset-left));
+  padding-right: calc(16px + env(safe-area-inset-right));
+  min-height: 100dvh;
+}
+
+/* 터치 타깃 — Material 가이드라인 최소 48dp. 마우스 기준으로 잡힌 높이를 올린다. */
+.btn-primary,
+.btn-ghost {
+  min-height: 48px;
+  /* 길게 눌렀을 때 뜨는 안드로이드 하이라이트/선택 메뉴 제거. */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.btn-sm {
+  min-height: 40px;
+}
+
+/* 주소·니모닉 등 사용자가 복사해야 하는 텍스트만 선택을 허용하고,
+ * 나머지 UI 는 롱프레스 선택을 막아 네이티브 앱처럼 동작하게 한다. */
+* {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.addr,
+.send-hash,
+.popup-mnemonic-cell__word,
+input,
+textarea,
+[data-selectable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* ── 금고(잠금) 화면 전용 ───────────────────────────────── */
+
+.vault-pane {
+  gap: 10px;
+}
+
+.vault-pane .btn-primary {
+  margin-top: 4px;
+}
+
+/* 비밀번호 입력 — textarea 규칙과 시각을 맞춘다. */
+.input {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--popup-border);
+  background: var(--popup-surface-2);
+  color: var(--popup-text);
+  font-family: inherit;
+  font-size: 16px; /* 16px 미만이면 안드로이드가 포커스 시 확대한다 */
+  line-height: 1.4;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--popup-red-soft);
+  box-shadow: 0 0 0 2px rgba(232, 80, 80, 0.18);
+}
+
+.input:disabled {
+  opacity: 0.55;
+}
+
+/* 파괴적 동작 영역 — 시각적으로 확실히 분리한다. */
+.danger-zone {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--popup-red-soft);
+  border-radius: 8px;
+  background: rgba(232, 80, 80, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn-danger {
+  min-height: 48px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--popup-red-soft);
+  background: var(--popup-red-soft);
+  color: #1a0a0a;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.btn-danger:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

@@ -1,0 +1,41 @@
+{
+  "name": "@byeorin/android",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "벼린 — 안드로이드 셸 (Capacitor + Vite WebView). 9 체인 전부 동작.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "sync": "pnpm build && cap sync android",
+    "apk:debug": "pnpm sync && node scripts/gradle.mjs assembleDebug",
+    "apk:release": "pnpm sync && node scripts/gradle.mjs assembleRelease",
+    "apk": "pnpm sync && node scripts/gradle.mjs assembleDebug assembleRelease",
+    "open": "cap open android"
+  },
+  "dependencies": {
+    "@byeorin/design-system": "workspace:*",
+    "@byeorin/i18n": "workspace:*",
+    "@byeorin/shell-core": "workspace:*",
+    "@byeorin/wallet-sdk": "workspace:*",
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.4.2",
+    "buffer": "^6.0.3",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "viem": "^2.21.40"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.4.2",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^6.0.4",
+    "typescript": "^5.6.3",
+    "vite": "^8.1.5"
+  }
+}

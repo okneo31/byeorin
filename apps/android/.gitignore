@@ -1,0 +1,19 @@
+# 웹 번들 산출물
+dist/
+node_modules/
+
+# Gradle / Android 빌드 산출물
+android/build/
+android/app/build/
+android/.gradle/
+android/capacitor-cordova-android-plugins/build/
+android/local.properties
+android/.idea/
+*.iml
+
+# 릴리스 서명 자격증명 — 절대 커밋 금지.
+# 잃어버리면 같은 앱으로 업데이트를 낼 수 없으니 저장소 바깥에 백업할 것.
+android/keystore.properties
+android/keys/
+*.jks
+*.keystore
