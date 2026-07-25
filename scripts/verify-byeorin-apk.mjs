@@ -25,7 +25,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 
 const apkPath = process.argv[2] ?? '벼린.apk';
 const manifestPath = process.argv[3] ?? '벼린.apk.manifest.json';
@@ -86,6 +86,84 @@ results.push({
       ? '\n          ⚠ 커밋되지 않은 변경이 섞인 빌드 — 소스로 추적 불가'
       : ''),
 });
+
+// ── 4. 온체인 앵커 ────────────────────────────────────────────────────────
+//
+// 매니페스트는 저장소에만 있으므로, 저장소를 통제하는 쪽이 과거 기록을 바꿀 수
+// 있다. 체인에 들어간 기록은 그럴 수 없다. 여기서는 매니페스트가 가리키는
+// 앵커 트랜잭션을 **체인에서 직접** 읽어(우리 서버 아님) 세 가지를 본다:
+//   ① 그 트랜잭션이 실제로 존재하는가
+//   ② 보낸 주소가 공개된 publisher 목록에 있는가
+//   ③ data 안에 이 APK 의 sha256 이 들어 있는가
+//
+// 의존성 없이 순수 fetch 로 JSON-RPC 를 부른다 — 제3자가 아무것도 설치하지 않고
+// 검증할 수 있어야 하기 때문이다.
+const anchor = manifest.anchor;
+if (!anchor?.txHash) {
+  results.push({
+    name: '온체인 앵커',
+    pass: null,
+    detail:
+      '이 릴리스에는 앵커가 없다. 매니페스트가 저장소에서만 검증되므로,\n' +
+      '          저장소 통제자가 과거 기록을 바꿀 수 있다는 한계가 남는다.',
+  });
+} else {
+  const rpcUrl = process.env.TTL_RPC_URL ?? 'https://rpc.ttl1.top';
+  try {
+    const res = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1,
+        method: 'eth_getTransactionByHash', params: [anchor.txHash],
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const { result: tx, error } = await res.json();
+    if (error) throw new Error(error.message);
+    if (!tx) throw new Error('트랜잭션을 체인에서 찾을 수 없다');
+
+    const publishers = loadPublishers().map((p) => p.toLowerCase());
+    const from = (tx.from ?? '').toLowerCase();
+    const knownPublisher = publishers.length === 0 || publishers.includes(from);
+    const dataText = hexToUtf8(tx.input ?? '0x');
+    const hashInData = dataText.includes(manifest.sha256);
+
+    results.push({
+      name: '온체인 앵커',
+      pass: knownPublisher && hashInData,
+      detail:
+        `tx ${anchor.txHash}\n` +
+        `          from ${tx.from}${knownPublisher ? '' : '  ⚠ 공개된 publisher 목록에 없음'}\n` +
+        `          block ${tx.blockNumber ? parseInt(tx.blockNumber, 16) : '(pending)'}\n` +
+        `          data "${dataText.slice(0, 80)}"${hashInData ? '' : '\n          ⚠ data 에 이 APK 의 sha256 이 없음'}`,
+    });
+  } catch (e) {
+    results.push({
+      name: '온체인 앵커',
+      pass: false,
+      detail: `체인 조회 실패: ${e.message}\n          (RPC: ${rpcUrl})`,
+    });
+  }
+}
+
+function hexToUtf8(hex) {
+  try {
+    return Buffer.from(hex.replace(/^0x/, ''), 'hex').toString('utf8');
+  } catch {
+    return '';
+  }
+}
+
+/** 공개된 publisher 주소 목록. 없으면 from 검사를 건너뛴다(경고와 함께). */
+function loadPublishers() {
+  try {
+    const p = join(dirname(manifestPath) || '.', 'anchor-publishers.json');
+    return JSON.parse(readFileSync(p, 'utf8')).publishers ?? [];
+  } catch {
+    return [];
+  }
+}
 
 // ── 보고 ──────────────────────────────────────────────────────────────────
 console.log(`\n벼린 APK 검증 — ${apkPath}`);
