@@ -1,17 +1,23 @@
 // log.ts — 계정의 최근 활동(activity) 조회.
 //
-// 두 가지 경로를 지원:
+// 세 가지 경로를 순서대로 시도한다:
 //
-//   1) Etherscan-호환 explorer API (TTL: https://scan.ttl1.top/api).
-//      ?module=account&action=txlist&address=... 형식. TTL Scan 이 실제로
-//      etherscan-compatible 인지는 인터넷 검증이 필요한데, 본 SDK 차원에선
-//      "그렇다고 가정 → 실패하면 fallback" 정책으로 간다.
+//   1) TTL Scan 인덱서 API — `GET {base}/indexer/address/{addr}/txs?limit=N`.
+//      전체 이력을 한 번의 요청으로 준다. 실측(2026-07-28): 0.64초.
 //
-//   2) Fallback: 최근 N 블록을 스캔.
-//      eth_getBlockByNumber 를 거꾸로 돌며 from/to 가 일치하는 native tx 를
-//      추출 + eth_getLogs 로 ERC-20 Transfer 이벤트 토픽을 긁어 합친다.
-//      RPC 한도가 빠듯한 환경에선 N=200 정도가 적당. 호출자가 lookback 으로
-//      조절한다.
+//   2) Etherscan-호환 explorer API (`?module=account&action=txlist&...`).
+//      TTL 이 아닌 EVM 체인용. TTL Scan 은 이 규격이 **아니다** — 예전 주석은
+//      "etherscan 호환이라고 가정한다" 였는데 실측해보니 아니었다. `/api` 에
+//      catch-all 라우트가 없어 404 가 나고, 그래서 항상 3) 로 떨어지고 있었다.
+//
+//   3) Fallback: 최근 N 블록을 스캔.
+//      eth_getBlockByNumber 를 **직렬로** 거꾸로 돌기 때문에 비싸다. 실측으로
+//      60 블록에 13.8 초가 걸렸다 (블록당 ~230ms RTT). 앞의 두 경로가 모두
+//      없는 체인에서만 쓰는 최후 수단이다.
+//
+// ERC-20 Transfer 는 어느 경로에서든 eth_getLogs 로 따로 긁는다. tx 단위
+// 인덱서는 "받은" 토큰 전송을 못 보여주기 때문이다 — 받는 쪽은 tx 의
+// from/to 어디에도 안 나오고 로그에만 있다.
 //
 // 본 모듈은 의도적으로 viem 의 PublicClient 만 의존하고, fetch 는 호출 측이
 // inject 할 수 있게 옵션화했다 — 테스트에서 가짜 fetch 를 끼우기 위함.
@@ -65,12 +71,46 @@ export interface ActivityLogOptions {
   explorerApiUrl?: string;
   /** 최근 N 블록만 스캔 (fallback 경로). 기본 200. */
   fallbackLookback?: number;
+  /**
+   * TTL Scan 계열 인덱서 API base — 예) `https://scan.ttl1.top/api`.
+   * 미지정 시 TTL 체인(id 7777)에 한해 explorer URL 에서 유추한다. 다른 체인은
+   * 이 규격이 아니므로 자동으로 켜지 않는다.
+   */
+  indexerApiUrl?: string;
+  /**
+   * ERC-20 Transfer 로그를 훑을 시작 블록. 기본 0n (전체 이력).
+   *
+   * TTL 은 전체 구간 eth_getLogs 가 212ms 에 끝나서(실측 2026-07-28, 1,125,084
+   * 블록) 전체를 봐도 싸다. 로그가 많은 체인에 이 클래스를 쓸 때는 호출자가
+   * 구간을 좁혀야 한다.
+   */
+  erc20FromBlock?: bigint;
+}
+
+/** TTL Scan 인덱서의 tx 한 행. `/api/indexer/address/:addr/txs` 응답 형식. */
+interface TtlScanTxRow {
+  hash?: string;
+  block_number?: number;
+  from?: string;
+  to?: string | null;
+  value?: string;
+  status?: number;
+  timestamp?: number;
+  contract_address?: string | null;
+}
+
+interface TtlScanTxsResponse {
+  transactions?: TtlScanTxRow[];
+  total?: number;
 }
 
 // ERC-20 Transfer(address indexed from, address indexed to, uint256 value)
 // keccak256 ("Transfer(address,address,uint256)") — 토픽 0.
 const TRANSFER_TOPIC: Hex =
   '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+
+// TTL 메인넷. 인덱서 규격을 자동으로 켤 유일한 체인이다.
+const TTL_SCAN_CHAIN_ID = 7777;
 
 interface EtherscanTxRow {
   hash?: string;
@@ -148,6 +188,8 @@ export class ActivityLog {
   private readonly explorerApiUrl: string | null;
   private readonly fetchImpl: typeof fetch | undefined;
   private readonly fallbackLookback: number;
+  private readonly indexerApiUrl: string | null;
+  private readonly erc20FromBlock: bigint;
 
   constructor(adapter: EvmAdapter, opts: ActivityLogOptions = {}) {
     this.client = (
@@ -166,6 +208,17 @@ export class ActivityLog {
       const explorer = adapter.chain.blockExplorers?.default?.url;
       this.explorerApiUrl = explorer ? explorer.replace(/\/+$/, '') + '/api' : null;
     }
+
+    // 인덱서는 TTL Scan 전용 규격이다. 다른 체인의 explorer 에 같은 경로를
+    // 찔러봐야 404 만 받고 한 왕복을 버리므로, 체인 id 로 명시 판정한다.
+    if (opts.indexerApiUrl) {
+      this.indexerApiUrl = opts.indexerApiUrl.replace(/\/+$/, '');
+    } else if (adapter.chain.id === TTL_SCAN_CHAIN_ID) {
+      this.indexerApiUrl = this.explorerApiUrl;
+    } else {
+      this.indexerApiUrl = null;
+    }
+    this.erc20FromBlock = opts.erc20FromBlock ?? 0n;
   }
 
   /**
@@ -176,6 +229,21 @@ export class ActivityLog {
    * @param limit    반환할 최대 건수 (정렬 후 자르기). 기본 20.
    */
   async list(address: Address, limit = 20): Promise<Activity[]> {
+    // ① TTL Scan 인덱서. 전체 이력을 한 요청으로 준다.
+    //
+    // 인덱서가 **응답에 성공했다면 0건이어도 그게 정답이다.** 여기서 빈 배열을
+    // 보고 아래 느린 스캔으로 떨어지면, 거래가 없는 계정이 13초를 기다린 끝에
+    // 똑같이 "없음" 을 보게 된다. 그래서 "형식이 아니다/실패했다"(null) 와
+    // "물어봤고 없다"([]) 를 구분한다.
+    if (this.indexerApiUrl && this.fetchImpl) {
+      const rows = await this.fromIndexer(address, limit).catch(() => null);
+      if (rows !== null) {
+        const tokens = await this.erc20FromLogs(address).catch(() => []);
+        return sortDescAndCap([...rows, ...tokens], limit);
+      }
+    }
+
+    // ② etherscan 호환 explorer (TTL 이 아닌 EVM 체인).
     if (this.explorerApiUrl && this.fetchImpl) {
       try {
         const out = await this.fromExplorer(address, limit);
@@ -185,11 +253,72 @@ export class ActivityLog {
         // 무시하고 fallback.
       }
     }
+
+    // ③ 최후 수단 — 직렬 블록 스캔. 비싸다.
     try {
       return await this.fromRpcFallback(address, limit);
     } catch {
       return [];
     }
+  }
+
+  /**
+   * TTL Scan 인덱서 조회.
+   *
+   * @returns 정상 응답이면 Activity[] (0건도 유효한 답). 이 규격이 아니거나
+   *          HTTP 오류면 null — 호출자가 다음 경로로 넘어가라는 신호다.
+   */
+  private async fromIndexer(
+    address: Address,
+    limit: number,
+  ): Promise<Activity[] | null> {
+    if (!this.indexerApiUrl || !this.fetchImpl) return null;
+    const url =
+      `${this.indexerApiUrl}/indexer/address/${encodeURIComponent(address)}/txs` +
+      `?limit=${limit}`;
+    const body = await this.fetchJson<TtlScanTxsResponse>(url);
+    // etherscan 형식 응답(`{status, result}`)이 여기로 들어오면 transactions 가
+    // 없다. 그때는 이 규격이 아니라고 보고 다음 경로로 넘긴다.
+    if (!body || !Array.isArray(body.transactions)) return null;
+
+    const out: Activity[] = [];
+    for (const r of body.transactions) {
+      if (!r || typeof r.hash !== 'string') continue;
+      let value = 0n;
+      try {
+        value = BigInt(r.value ?? '0');
+      } catch {
+        // 숫자로 못 읽는 값은 0 으로 두되 항목 자체는 버리지 않는다.
+      }
+      out.push({
+        hash: r.hash as Hex,
+        blockNumber: BigInt(r.block_number ?? 0),
+        timestamp: Number(r.timestamp ?? 0),
+        from: ((r.from ?? '0x') as string) as Address,
+        // 컨트랙트 생성 tx 는 to 가 null 이고 생성된 주소가 따로 온다.
+        to: ((r.to ?? r.contract_address ?? '0x') as string) as Address,
+        value,
+        status: r.status === 0 ? 'failed' : 'success',
+      });
+    }
+    return out;
+  }
+
+  /**
+   * ERC-20 Transfer 로그를 긁는다 (보낸 것 + 받은 것).
+   *
+   * tx 단위 인덱서로는 **받은** 토큰 전송을 볼 수 없다 — 받는 쪽 주소는 tx 의
+   * from/to 어디에도 없고 로그 topic 에만 있기 때문이다. 그래서 어느 경로를
+   * 타든 이건 따로 부른다.
+   */
+  private async erc20FromLogs(address: Address): Promise<Activity[]> {
+    const padded = padAddressToTopic(address);
+    const fromHex = numberToHex(this.erc20FromBlock);
+    const [logsFrom, logsTo] = await Promise.all([
+      this.rawGetLogs(fromHex, 'latest' as Hex, [TRANSFER_TOPIC, padded, null]),
+      this.rawGetLogs(fromHex, 'latest' as Hex, [TRANSFER_TOPIC, null, padded]),
+    ]);
+    return logsToActivities([...logsFrom, ...logsTo]);
   }
 
   private async fromExplorer(address: Address, limit: number): Promise<Activity[]> {
@@ -263,35 +392,7 @@ export class ActivityLog {
       this.rawGetLogs(fromHex, toHex, [TRANSFER_TOPIC, null, padded]),
     ]);
 
-    const acc: Activity[] = [];
-    for (const log of [...logsFrom, ...logsTo]) {
-      const topics = log.topics;
-      const fromTopic = topics[1];
-      const toTopic = topics[2];
-      if (!fromTopic || !toTopic) continue;
-      let value = 0n;
-      try {
-        value = hexToBigInt(log.data);
-      } catch {
-        /* skip */
-      }
-      const blk =
-        typeof log.blockNumber === 'bigint'
-          ? log.blockNumber
-          : log.blockNumber
-            ? hexToBigInt(log.blockNumber)
-            : 0n;
-      acc.push({
-        hash: ((log.transactionHash as Hex | undefined) ?? '0x') as Hex,
-        blockNumber: blk,
-        timestamp: 0,
-        from: topicToAddress(fromTopic as Hex),
-        to: topicToAddress(toTopic as Hex),
-        value,
-        token: log.address as Address,
-        status: 'success',
-      });
-    }
+    const acc: Activity[] = logsToActivities([...logsFrom, ...logsTo]);
 
     // Native transfer 스캔 — 최근 lookback 블록을 거꾸로 훑는다. 큰 lookback
     // 으로는 절대 호출하지 말 것 (코스트가 O(lookback)). RPC 가 batched 가
@@ -304,12 +405,16 @@ export class ActivityLog {
   }
 
   /**
-   * eth_getLogs 를 raw topic 으로 호출한다. viem 의 public getLogs() 는 ABI
-   * event 객체를 요구하므로 본 메서드는 두 경로로 시도:
-   *   1) 어댑터 client 가 모킹된 getLogs 를 들고 있으면 거기로 위임.
-   *   2) 그렇지 않으면 client.request 로 eth_getLogs 직접 호출.
+   * eth_getLogs 를 raw topic 으로 호출한다.
    *
-   * 테스트가 client.getLogs 를 monkey-patch 한 경우 (1) 로 자연스럽게 떨어진다.
+   * **client.request 만 쓴다.** 예전에는 "테스트가 monkey-patch 하기 쉽게"
+   * viem 의 client.getLogs 를 먼저 시도하고 실패 시 request 로 떨어졌는데,
+   * 실사용에서 그 경로가 재앙이었다 — viem 의 getLogs 는 우리가 넘기는 raw
+   * topics 배열을 처리하지 못한 채 **41초를 매달렸다가** 타임아웃했다(실측
+   * 2026-07-28). 같은 질의를 request 로 직접 쏘면 617ms 다.
+   *
+   * 즉 모킹 편의를 위해 둔 우회로가 모든 실사용 호출에 41초를 얹고 있었다.
+   * 테스트는 client.request 를 모킹한다 — 실제로 타는 경로와 같아진다.
    */
   private async rawGetLogs(
     fromBlock: Hex,
@@ -317,27 +422,14 @@ export class ActivityLog {
     topics: ReadonlyArray<Hex | null>,
   ): Promise<LooseLog[]> {
     const client = this.client as unknown as {
-      getLogs?: (args: unknown) => Promise<unknown>;
       request: (args: { method: string; params: unknown[] }) => Promise<unknown>;
     };
-    if (typeof client.getLogs === 'function') {
-      try {
-        const out = (await client.getLogs({
-          fromBlock,
-          toBlock,
-          topics,
-        })) as LooseLog[];
-        return out;
-      } catch {
-        // viem 의 정식 getLogs 는 topics arg 를 거절할 수 있다 — request 로 폴백.
-      }
-    }
     try {
       const out = (await client.request({
         method: 'eth_getLogs',
         params: [{ fromBlock, toBlock, topics }],
       })) as LooseLog[];
-      return out;
+      return Array.isArray(out) ? out : [];
     } catch {
       return [];
     }
@@ -387,6 +479,50 @@ export class ActivityLog {
     }
     return out;
   }
+}
+
+/** ERC-20 Transfer 로그 배열 → Activity[]. 로그에는 시각이 없어 timestamp=0. */
+function logsToActivities(logs: LooseLog[]): Activity[] {
+  const out: Activity[] = [];
+  for (const log of logs) {
+    const fromTopic = log.topics[1];
+    const toTopic = log.topics[2];
+    if (!fromTopic || !toTopic) continue;
+    let value = 0n;
+    try {
+      value = hexToBigInt(log.data);
+    } catch {
+      /* 값을 못 읽어도 항목은 남긴다 */
+    }
+    const blk =
+      typeof log.blockNumber === 'bigint'
+        ? log.blockNumber
+        : log.blockNumber
+          ? hexToBigInt(log.blockNumber)
+          : 0n;
+    out.push({
+      hash: ((log.transactionHash as Hex | undefined) ?? '0x') as Hex,
+      blockNumber: blk,
+      timestamp: 0,
+      from: topicToAddress(fromTopic as Hex),
+      to: topicToAddress(toTopic as Hex),
+      value,
+      token: log.address as Address,
+      status: 'success',
+    });
+  }
+  return out;
+}
+
+/** 블록 내림차순(같으면 시각 내림차순) 정렬 후 limit 만큼 자른다. */
+function sortDescAndCap(items: Activity[], limit: number): Activity[] {
+  items.sort((x, y) => {
+    if (y.blockNumber !== x.blockNumber) {
+      return y.blockNumber > x.blockNumber ? 1 : -1;
+    }
+    return y.timestamp - x.timestamp;
+  });
+  return items.slice(0, limit);
 }
 
 // 테스트가 RPC fallback 로직을 검증할 때 헬퍼로 쓸 수 있도록 노출.
