@@ -216,7 +216,17 @@ console.log(
         '   (주의: 재현 빌드는 아직 보장되지 않습니다. 매니페스트의 commit 이\n' +
         '    이 바이트를 만들었다는 증명은 아닙니다 — docs/VERIFIABILITY.md 참고)\n',
 );
-process.exit(failed ? 1 : 0);
+// process.exit() 를 쓰지 않는다.
+//
+// 앵커 검사가 fetch 를 쓰는데, 그 직후 process.exit() 를 호출하면 Windows 에서
+// libuv 가 죽는다 — `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)`.
+// 그러면 **검증에 성공하고도 exit 127** 이 나간다. 화면에는 ✅ 가 찍히는데
+// 종료 코드는 실패로 보이는 것이라, `verify && deploy` 같은 자동 검증이
+// 정상 산출물을 거부하게 된다. 이 도구는 제3자가 스크립트로 돌리는 것이
+// 존재 이유라 종료 코드가 화면 출력만큼 중요하다.
+//
+// exitCode 만 정하고 이벤트 루프가 스스로 비워지게 둔다.
+process.exitCode = failed ? 1 : 0;
 
 function findApksigner() {
   const sdk =
