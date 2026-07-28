@@ -218,10 +218,14 @@ export const DEFAULT_CHAINS: readonly ChainSpec[] = [
     curve: 'ed25519',
     nativeSymbol: NON_EVM_NATIVE.solana.symbol,
     nativeDecimals: NON_EVM_NATIVE.solana.decimals,
-    // 공식 api.mainnet-beta.solana.com 가 extension origin 익명 요청을 거부(403).
-    // publicnode (Allnodes) 가 CORS·익명 친화적이라 1차로 채택. 멀티 fallback
-    // (publicnode → OnFinality → dRPC) 은 SDK 수준 wrapper 작업으로 분리한다.
-    build: () => new SolanaAdapter({ rpcUrl: 'https://solana-rpc.publicnode.com' }),
+    // 무인자 기본값 = SOLANA_MAINNET_RPC_URLS (publicnode → OnFinality → dRPC).
+    // 읽기만 그 순서로 fallback 하고, 송금은 0번(publicnode) 고정이다 — blockhash 를
+    // A 에서 받아 B 로 보내면 tx 가 깨진다.
+    // 공식 api.mainnet-beta.solana.com 은 extension origin 익명 요청을 거부(403)해
+    // 기본 목록에 없다.
+    // 실측 주의(2026-07-28): 2·3순위는 무키 상태에서 각각 429/400 을 돌려주므로
+    // 지금은 실질 이중화가 아니다. 키를 넣거나 요금제가 바뀌면 코드 변경 없이 산다.
+    build: () => new SolanaAdapter(),
   },
   {
     key: 'tron',
