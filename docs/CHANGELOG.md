@@ -6,6 +6,76 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Unt
 
 ---
 
+## [58bbbe5…76d7820] verifiability: 검증 가능한 보안 — 릴리스 검증 체계 + 금고 하드웨어 바인딩 + 공개 저장소 준비 — 2026-07-26
+
+커밋 8개: `58bbbe5` `c1d85a1` `08e954b` `2316a0c` `83f372e` `b33ebf3` `dfdaff7` `76d7820`.
+
+### Added (android — 금고 하드웨어 바인딩, `58bbbe5`)
+- `apps/android/android/app/src/main/java/top/ttl1/byeorin/VaultCryptoPlugin.java` (158줄) — 로컬 Capacitor 플러그인 `isAvailable`/`wrap`/`unwrap`. AndroidKeyStore 에서 AES-256 키 생성, StrongBox 우선 시도 후 미탑재 단말은 TEE 폴백. 서드파티 의존성 0.
+- `apps/android/src/vault-hw.ts` (146줄) — shell-core `PersistentBackend` 를 감싸는 백엔드. `EncryptedKeystoreStore` 가 저장소를 인터페이스로 주입받는 구조라 **shell-core 변경 0줄**.
+- 금고 계층 순서: `시드 → AES-GCM(scrypt(비밀번호)) → AES-GCM(AndroidKeyStore 키) → localStorage`. 바깥 겹의 키는 칩 밖으로 나오지 않아, 저장 파일만으로는 그 폰 밖에서 복호화를 시작할 수 없다 — 오프라인 대입 경로가 사라진다. 하드웨어 계층이 뚫려도 남는 것은 scrypt 로 잠긴 blob.
+- 하드웨어를 쓸 수 없으면 보호 수준을 낮춰 저장하지 않고 실패한다.
+- `setUserAuthenticationRequired` 는 켜지 않음 — 생체 재등록/화면잠금 변경으로 키가 무효화되면 금고를 못 여는 사고가 난다.
+- `apps/android/README.md` — 이 계층이 **막지 못하는 것**(칩 벤더/OEM, 물리 공격, 잠금 해제된 단말) 명시.
+
+### Added (릴리스 검증 체계, `c1d85a1`)
+- `apps/android/scripts/release-manifest.mjs` (165줄) — release 빌드마다 매니페스트 자동 생성. 파일 SHA-256, 서명 인증서 지문, 출처 커밋/브랜치, **작업 트리 청결 여부**, 툴체인 버전, `claims`(주장하지 않는 것).
+- `scripts/verify-byeorin-apk.mjs` (122줄) — 제3자용 검증기. 의존성 0, 저장소 없이 파일 하나로 동작. 우리 서버에 아무것도 묻지 않는다.
+- `apps/android/scripts/gradle.mjs` — release 빌드 후 매니페스트 자동 생성 (매니페스트 없는 APK 를 만들지 않는다).
+- `docs/VERIFIABILITY.md` — 원칙, 공개/비공개 경계(Kerckhoffs), 지금 검증 가능한 것, **아직 못 하는 것**, 로드맵. 난독화 방향은 명시적으로 기각.
+- `hardware/SPEC.md` F-11~F-14 — 재현 빌드 / 온체인 앵커 기반 정품 증명 / 사용자 엔트로피 혼합 / 멀티벤더 쿼럼의 한 다리.
+- 공개 서명 인증서 지문: `303f801bb44af8c494b6e89844fbe86c36bd6f48ab404a4b6c0228fa3f103480`
+
+### Added (온체인 릴리스 앵커 — 구현 완료, **발행 대기**, `76d7820`)
+- `scripts/anchor-release.mjs` (154줄) — 매니페스트 해시를 TTL 체인(ChainID 7777)에 기록. **컨트랙트를 쓰지 않는다** — 0-value 트랜잭션 `data` 에 사람이 읽는 텍스트 한 줄: `byeorin:release:1|sha256=<64hex>|v=<name>+<code>|commit=<40hex>`.
+- `scripts/verify-byeorin-apk.mjs` 에 4번째 검사 추가 — `eth_getTransactionByHash` **1회**(O(1))로 ① tx 존재 ② `from` 이 공개 publisher 목록에 있는가 ③ `data` 에 해당 sha256 이 있는가. 검증기는 여전히 **의존성 0**(순수 fetch), viem 은 기록기에서만 사용.
+- `anchor-publishers.json` — publisher 허용 목록. 단일 키로 시작하며 그 약점을 문서에 명시. 목록이 비면 `from` 검사를 건너뛰고 경고.
+- append-only — 수정·폐기 기능 없음. 커밋 안 된 변경이 섞인 빌드는 기록기가 **거부**한다.
+- **드라이런만 확인. 실제 앵커 트랜잭션은 미발행** — publisher 키와 자금이 필요하다. `anchor-publishers.json` 의 `publishers` 는 현재 빈 배열.
+
+### Added (공개 저장소 준비, `b33ebf3`)
+- `LICENSE` — Apache License 2.0 원문 (apache.org 에서 수령).
+- `NOTICE` — 창작재산권 okneo31 명시 + 상표 조항(§6, 포크는 개명 필요) + 제3자 구성요소.
+- `README.md` — 원칙, APK 검증법, 지원 체인(16 슬롯 / 9 어댑터), 금고 2겹 구조, **못 하는 것을 포함한 상태표**.
+- `SECURITY.md` — 취약점 신고 절차(72시간 목표 응답), in scope, **문서화된 설계 한계**(칩 벤더·물리 공격·재현 빌드 미보장), 서명 지문 공개.
+- 라이선스 = Apache-2.0 으로 확정. 자체 라이선스는 SPDX/GitHub/npm/기업 스캐너가 인식 못 하면 `unknown license` 로 차단되므로 채택하지 않았다.
+
+### Measured — 재현 빌드는 **안 된다** (`2316a0c`)
+추측하지 않고 측정했다.
+
+```
+증분 빌드 직후          cd3fcb6d27264d60c63cc61575990fc541078e8d2979e3487fdbda7752575b67
+gradlew clean 후 재빌드  5363e84330ca8b6d153e5e603830fb7691b6c38421f6585d6b61284ab19002dc
+```
+
+- **같은 머신·같은 커밋·같은 툴체인인데 바이트가 다르다.** 다른 사람·다른 머신은 말할 것도 없다.
+- 앞서 `08e954b` 에서 재빌드 후 해시가 같게 나온 것은 Gradle 이 130개 태스크를 up-to-date 로 재사용한 증분 빌드였고, 결정성의 근거가 아니었다 — 그렇게 서술했던 것을 문서에서 정정.
+- 결과: 매니페스트의 `commit` 이 그 바이트를 만들었다는 **증명은 없다.** 현재는 우리 주장이다.
+- 이 사실은 앵커링에도 걸린다 — 재현 빌드 없이 하는 앵커링은 "사실"이 아니라 "주장"을 못 박는다.
+
+### Fixed (매니페스트 정직성, `2316a0c`)
+- `벼린.apk` 가 git 에 추적되고 있었다. `.gitignore` 규칙을 **이미 추적 중인 파일 뒤에** 넣어 효력이 없었던 탓에, 빌드마다 5MB 바이너리가 변경으로 잡혀 "작업 트리 더러움" 신호가 상시 켜져 있었다. `git rm --cached` 로 추적 해제.
+- 더러움 판정에서 산출물 자신(매니페스트)을 제외. 빼지 않으면 "매니페스트를 쓰는 행위가 트리를 더럽혀 다음 매니페스트가 더럽다고 말하는" 자기참조에 빠진다.
+- git 호출에 `core.quotepath=false` — 안 붙이면 한글 경로가 8진 이스케이프로 나와 경로 비교가 맞지 않는다.
+- 금고 승급 버그(`58bbbe5`): 셸의 "내용 같으면 저장 건너뛰기" 최적화 탓에 옛 금고가 열리기만 하고 다시 봉인되지 않았다. `lastReadWasWrapped` 로 강제 재기록.
+
+### Changed (이력 재작성, `dfdaff7`)
+- 5MB APK blob 3개를 이력에서 제거 (force push). `.git` 42MB → 21MB, 이력 내 `벼린.apk` 0건.
+- 검증: 커밋 39 = 39, 파일 455 = 455, 트리 diff 없음 — **소스 유실 없음**.
+- 커밋 SHA 가 전부 바뀌어 직전 매니페스트가 존재하지 않는 커밋(`a665666`)을 가리켰다. 새 HEAD 기준으로 재생성.
+
+### Verified (에뮬레이터 실측, `58bbbe5`)
+- CDP 로 localStorage 직접 확인. 이전 빌드 금고 `{"v":1,"kdf":"scrypt","N":65536,…}` → 새 빌드 덮어 설치 후 잠금 해제 시 `{"hw":1,"iv":…,"ct":…}` 로 자동 승급, scrypt 파라미터가 저장소에서 완전히 사라짐. 계정 `0xf39F…2266` 그대로 복원.
+- 앱 재시작 후 봉인된 금고를 읽는 경로 확인.
+- `isAvailable → {available:true, strongBox:false}` (에뮬레이터는 TEE 폴백).
+
+### Artifact
+- `top.ttl1.byeorin` **v0.5.2 (versionCode 3)** · 5,221,596 B · sha256 `5363e843…002dc`
+- 매니페스트 출처: commit `b33ebf3` (main), `workingTreeClean: true`
+- 툴체인: Node v24.15.0 · Gradle 8.14.3 · AGP 8.13.0 · compileSdk 36 / minSdk 24 / targetSdk 36
+
+---
+
 ## [v0.5] brand: 노동자의 지갑 → 벼린 (Byeorin) 전면 마이그레이션 + 디자인 시스템 v2 — 2026-05-18
 
 ### Brand

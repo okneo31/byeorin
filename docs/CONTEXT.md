@@ -3,7 +3,7 @@
 > 이 문서의 역할: **새 세션에서 5분 안에 풀 컨텍스트 잡기.**
 > 단일 진실원은 [`PLAN.md`](./PLAN.md)지만, "방금 무엇이 어디까지 됐는가"는 이 문서에서 본다.
 >
-> 마지막 갱신: **2026-07-25** (Android APK 셸 완성 — apps/android 신설)
+> 마지막 갱신: **2026-07-28** (릴리스 검증 체계 + 금고 하드웨어 바인딩 + 공개 저장소 준비)
 > GitHub: <https://github.com/okneo31/byeorin> (private)
 
 ---
@@ -14,7 +14,23 @@
 - **Q0 완료, Q1 진입.** SDK + 4종 SW 셸 + HW 사양/펌웨어 스캐폴드 + 보험 v2 + 보안 감사 모두 끝남.
 - **2026-05-25 라운드: Extension popup 풀스코프.** 멀티체인 16 슬롯 + 다중 계정 + import/export + ZION 통합. Stage E1(셀렉터·잔액·송금) 완료, E2(주소록·매트릭스 복사)/E3(활동·토큰) 대기.
 - **2026-07-25 라운드: 안드로이드 APK 완성.** `apps/android` 신설 — Capacitor 8 + Vite WebView 셸에 Extension popup UI 를 이식. **9 체인 전부 실기기 경로에서 동작 검증** (Pixel 7 Pro 에뮬레이터, release APK). 확장에 없던 계층 추가: 비밀번호 금고 · 자동 잠금 · 뒤로가기.
-- **다음 행동: 실기기 테스트 피드백 반영** → 송금/스왑 브로드캐스트 확인 → 릴리스 전 항목([apps/android/README.md](../apps/android/README.md) 하단).
+- **2026-07-26 라운드: 검증 가능한 보안 + 공개 저장소 준비.** 금고를 AndroidKeyStore(TEE/StrongBox) 키로 한 겹 더 감쌈 · 릴리스 매니페스트/검증기 도입 · **재현 빌드가 실측에서 실패**(clean 후 재빌드 시 해시 불일치, [VERIFIABILITY §2.1](./VERIFIABILITY.md)) · 이력 재작성(force push)으로 APK blob 제거 · LICENSE Apache-2.0 + NOTICE + README + SECURITY 추가 · 온체인 앵커 기록기/검증기 구현(**발행 대기**).
+- **다음 행동: 실기기 테스트 피드백 반영** → 송금/스왑 브로드캐스트 확인 → 릴리스 전 항목([apps/android/README.md](../apps/android/README.md) 하단). 검증 트랙은 온체인 앵커 실제 발행(§7 D).
+
+### 2026-07-26 라운드 — 검증 가능한 보안
+
+| 항목 | 내용 |
+|---|---|
+| 금고 하드웨어 바인딩 | `시드 → AES-GCM(scrypt(비밀번호)) → AES-GCM(AndroidKeyStore 키) → localStorage`. 바깥 겹의 키는 TEE/StrongBox 안에서 생성돼 칩 밖으로 나오지 않음 → 저장 파일만 떠가는 **오프라인 대입 경로 제거**. 하드웨어 계층이 뚫려도 남는 것은 scrypt 로 잠긴 blob. 신규 `VaultCryptoPlugin.java`(로컬 Capacitor 플러그인, 서드파티 의존성 0) + `src/vault-hw.ts`(`PersistentBackend` 래퍼) — **shell-core 변경 0줄**. 하드웨어를 못 쓰면 보호 수준을 낮춰 저장하지 않고 실패. `setUserAuthenticationRequired` 는 켜지 않음(생체 재등록·화면잠금 변경 시 키 무효화 사고). 에뮬레이터 실측: 옛 금고 `{"v":1,"kdf":"scrypt","N":65536,…}` → 새 빌드에서 `{"hw":1,"iv":…,"ct":…}` 자동 승급, 계정 `0xf39F…2266` 복원. `isAvailable → {available:true, strongBox:false}` (에뮬레이터는 TEE 폴백) |
+| 릴리스 매니페스트 | `apps/android/scripts/release-manifest.mjs` — release 빌드 때 `gradle.mjs` 가 자동 생성. 담기는 값: 파일 SHA-256 · 서명 인증서 지문 · 출처 커밋/브랜치 · **작업 트리 청결 여부** · 툴체인 버전 · **주장하지 않는 것**(`claims.notClaimed`) |
+| 제3자 검증기 | `scripts/verify-byeorin-apk.mjs` — 의존성 0(순수 fetch). 무결성(SHA-256) / 진위(서명 인증서) / 출처(주장) / 온체인 앵커 4항목. 우리 서버에 아무것도 묻지 않음 |
+| 공개 서명 인증서 지문 | `303f801bb44af8c494b6e89844fbe86c36bd6f48ab404a4b6c0228fa3f103480` |
+| **재현 빌드 = 안 됨 (실측)** | 추측이 아니라 측정 결과. 증분 빌드 직후 `cd3fcb6d…75b67` / `gradlew clean` 후 재빌드 `5363e843…002dc`. **같은 머신·같은 커밋·같은 툴체인인데 바이트가 다르다.** 앞선 커밋(`08e954b`)에서 해시가 같게 나온 것은 Gradle 이 산출물 130 태스크를 up-to-date 로 재사용한 증분 빌드였고 결정성의 근거가 아니었다 — 그렇게 서술했던 것을 `2316a0c` 에서 정정. 따라서 매니페스트의 `commit` 이 그 바이트를 만들었다는 **증명은 없고 현재는 주장이다** |
+| 매니페스트 정직성 버그 2건 | ① `벼린.apk` 가 git 에 추적 중이라 빌드마다 "작업 트리 더러움" 이 상시 켜져 있었음 — `.gitignore` 규칙을 이미 추적된 파일 뒤에 넣어 효력이 없었다. `git rm --cached` 로 해제. ② 더러움 판정에서 산출물 자신(매니페스트)을 제외 — 빼지 않으면 "매니페스트를 쓰는 행위가 트리를 더럽혀 다음 매니페스트가 더럽다고 말하는" 자기참조. git 호출에 `core.quotepath=false` (한글 경로 8진 이스케이프 방지) |
+| 이력 재작성 | 5MB APK blob 3개를 이력에서 제거 (force push). `.git` 42MB → 21MB, 커밋 39 = 39 · 파일 455 = 455 · 트리 diff 없음(소스 유실 없음). 커밋 SHA 가 전부 바뀌어 매니페스트를 새 HEAD 기준으로 재생성 |
+| 공개 저장소 준비 | `LICENSE`(Apache-2.0 원문, apache.org 에서 수령) · `NOTICE`(창작재산권 okneo31 + 상표 조항 + 제3자 구성요소) · `README.md`(원칙 · APK 검증법 · 지원 체인 · 금고 구조 · 못 하는 것 포함 상태표) · `SECURITY.md`(신고 절차, in scope / 문서화된 설계 한계) |
+| 온체인 앵커 (**발행 대기**) | `scripts/anchor-release.mjs` 기록기 + 검증기 확장. **컨트랙트 없음** — 0-value 트랜잭션 `data` 에 사람이 읽는 텍스트 한 줄 `byeorin:release:1\|sha256=<64hex>\|v=<name>+<code>\|commit=<40hex>`. 검증은 `eth_getTransactionByHash` 1회(O(1)). append-only(수정·폐기 기능 없음). 커밋 안 된 변경이 섞인 빌드는 기록기가 거부. publisher 단일 키로 시작(약점 명시). 드라이런만 확인, **실제 앵커 트랜잭션은 미발행** — `anchor-publishers.json` 의 `publishers` 는 현재 빈 배열 |
+| 산출물 | `top.ttl1.byeorin` **v0.5.2 (versionCode 3)** · APK 5,221,596 B · sha256 `5363e843…002dc` · 매니페스트 출처 커밋 `b33ebf3` (main, workingTreeClean=true) |
 
 ### 2026-07-25 라운드 — 안드로이드
 
@@ -134,6 +150,15 @@
 | `deploy_icons.py` | `icons/dist/` → 각 앱 적절한 위치로 (17 타겟) |
 | `migrate_brand.py` | 브랜드 텍스트 일괄 치환 (dry-run/--apply, 슬로건 보호) |
 
+릴리스 검증 2종 (2026-07-26 신설):
+
+| 스크립트 | 용도 |
+|---|---|
+| `verify-byeorin-apk.mjs` | **제3자용 검증기.** 의존성 0(순수 fetch). 무결성/진위/출처/온체인 앵커 4항목 대조 |
+| `anchor-release.mjs` | 릴리스 매니페스트 해시를 TTL 체인(7777)에 앵커링. 기본 드라이런, `--send` + `BYEORIN_ANCHOR_KEY` 로 발행 |
+
+> 매니페스트 생성기는 안드로이드 앱 쪽에 있다 — `apps/android/scripts/release-manifest.mjs` (release 빌드 시 `gradle.mjs` 가 자동 호출).
+
 기존 코어 도구 (참고):
 - `setup-check.mjs`, `verify-addresses.mjs`, `devnet-round-trip.mjs`, `generate-extension-icons.mjs`
 
@@ -158,10 +183,13 @@ D:\TTLCOINWalet\
 │   └── app/         Zephyr RTOS, nRF52840 + SE050 + e-ink. 컴파일 통과, HW-터치는 -ENOSYS stub
 ├── hardware/        SPEC.md, BOM.csv, pin-map.md, threat-model.md
 ├── verification/    10/10 cross-SDK 주소 검증 + test-dapp.html
-├── docs/            PLAN.md(v0.5), ARCHITECTURE.md, CHANGELOG.md, INSURANCE.md, CONTEXT.md(본문)
+├── docs/            PLAN.md(v0.5), ARCHITECTURE.md, VERIFIABILITY.md, CHANGELOG.md, INSURANCE.md, CONTEXT.md(본문)
 ├── icons/dist/      64 파일 앱 아이콘 패키지
 ├── scripts/         자동화 (위 §3)
 ├── branding/raw/    옛 곡괭이 자산 (정리 후보)
+├── LICENSE, NOTICE, README.md, SECURITY.md   공개 저장소 세트 (2026-07-26)
+├── anchor-publishers.json   앵커 publisher 허용 목록 (chainId 7777, 현재 비어 있음)
+├── 벼린.apk (git 미추적) + 벼린.apk.manifest.json (추적 — 공개 검증 근거)
 ├── BYEORINWordMark.png, lockup{가로,세로}.png, 벼린 워드마크.png, logo0.{png,svg,_dark.png}
 └── package.json (byeorin-wallet, pnpm workspace)
 ```
@@ -170,6 +198,11 @@ D:\TTLCOINWalet\
 
 ## 5. 닫힌 결정 (재논의 X)
 
+- **라이선스 = 전체 Apache-2.0** (2026-07-26). 창작재산권은 okneo31, NOTICE 표기
+  의무(§4(d))로 파생물에도 표기가 따라간다. "벼린"·"Byeorin"·"벼린 요세" 상표는
+  라이선스 대상이 아니다(§6) — 포크는 다른 이름을 써야 한다. 자체 라이선스를
+  쓰지 않은 이유: SPDX/GitHub/npm/기업 스캐너가 인식 못 하면 `unknown license` 로
+  차단된다. 파일: [`LICENSE`](../LICENSE), [`NOTICE`](../NOTICE).
 - **검증 가능한 보안** (2026-07-25) — "규칙은 누구나 검증 가능하게, 권한은 아무나가
   아니게". 목표는 "최고의 보안"이 아니라 확인 가능한 보안. 규칙을 이해 못 하게 만드는
   방향(난독화)은 채택하지 않는다 — 감사 불가능한 규칙은 중앙 권위를 재발명한다.
@@ -194,8 +227,9 @@ D:\TTLCOINWalet\
 - TTL coin_type SLIP-0044 신청? (현재 60 공유)
 - HW 1차 시판 국가 (한국 단독? 한+미+EU?)
 - 시드 백업 정책 (종이 + Shamir + 클라우드 보조?)
-- ~~라이선스~~ → **결정: 전체 Apache-2.0** (2026-07-26). 창작재산권 okneo31,
-  NOTICE 표기 의무(§4(d)), "벼린" 상표는 라이선스 대상 아님(§6) — 포크는 개명 필요.
+- 요세 펌웨어를 공개·재현 가능하게 낼지 ([SPEC F-11](../hardware/SPEC.md), [VERIFIABILITY §2](./VERIFIABILITY.md) 에 "미결정"으로 기재)
+
+> 라이선스 항목은 2026-07-26 에 닫혔다 → §5.
 
 ---
 
@@ -209,14 +243,26 @@ D:\TTLCOINWalet\
 
 ### B. 정리/위생 작업
 - 옛 곡괭이 자산 (`branding/raw/`, `verification/icon-concepts/`) 삭제/아카이브 결정
-- README.md 작성 (현재 없음 — GitHub 첫 방문자용)
-- 옛 커밋 `c4213e8` author도 okneo31로 (history rewrite, force push 필요)
+- 옛 커밋 author 정리 — 현재 41 커밋 중 **19개**가 `*@nodong.local` 봇 author
+  (`c4213e8` = design-pickaxe 등). 2026-07-26 이력 재작성 때는 author 를 건드리지
+  않아 그대로 남아 있다. history rewrite + force push 필요.
 - Mobile/Android RN bare 빌드에 새 아이콘 wire up
 
 ### C. HW Q4 진입 사전작업
 - SE050 vs ST31N600 최종 결정 (lead time 견적)
 - KiCad EVT-1 스키매틱 캡쳐 시작 (`hardware/kicad/`)
 - USB-IF VID 신청
+
+### D. 검증 체계 ([VERIFIABILITY.md §3](./VERIFIABILITY.md) 로드맵)
+1. **온체인 릴리스 앵커 실제 발행** (로드맵 1순위) — 기록기/검증기는 `76d7820` 에서
+   구현 완료, 드라이런만 확인됨. 발행에 필요한 것: publisher 개인키
+   (`BYEORIN_ANCHOR_KEY`) + ChainID 7777 가스. 발행 후 publisher 주소를
+   `anchor-publishers.json`(현재 `publishers: []`) 에 넣고 매니페스트에 `anchor.txHash` 기록.
+2. **재현 빌드** (2순위) — 현재 **안 됨**(실측, §0 표). `SOURCE_DATE_EPOCH` 로 zip
+   타임스탬프 고정, AGP/Gradle/JDK 핀 고정, 컨테이너 빌드. 서명 전 APK 기준으로
+   재현성 확보 후 서명은 분리 검증.
+3. **앱 내 빌드 커밋 표시** (3순위) — 푸터가 현재 `v0.5.2 (3)` 까지만 표시하므로
+   실행 중인 앱과 매니페스트를 커밋 단위로 대조할 수단이 없음.
 
 ---
 
@@ -238,6 +284,12 @@ python scripts/deploy_icons.py
 # 브랜드 마이그레이션 (재실행 시)
 python scripts/migrate_brand.py            # dry-run
 python scripts/migrate_brand.py --apply    # 실제 적용
+
+# 릴리스 검증 (매니페스트는 release 빌드 시 자동 생성)
+cd apps/android && pnpm apk                 # → 벼린.apk + 벼린.apk.manifest.json
+node scripts/verify-byeorin-apk.mjs 벼린.apk 벼린.apk.manifest.json
+node scripts/anchor-release.mjs                              # 앵커 드라이런
+BYEORIN_ANCHOR_KEY=0x… node scripts/anchor-release.mjs --send  # 실제 발행 (미실행)
 
 # Git (origin = github.com/okneo31/byeorin, main 추적 중)
 git status
@@ -266,7 +318,12 @@ git push                                    # 추가 변경 후
 | [`docs/ARCHITECTURE.md`](./ARCHITECTURE.md) | 시스템 다이어그램 + 모듈 책임 + 위협 경계 + 키 invariant |
 | [`docs/CHANGELOG.md`](./CHANGELOG.md) | 커밋 단위 변경 기록 (v0.5 entry 포함) |
 | [`docs/INSURANCE.md`](./INSURANCE.md) | 보험 시스템 v2 (849줄, 5개 kill criteria) |
-| [`hardware/SPEC.md`](../hardware/SPEC.md) | HW 사양 v0 (외부 벤더 리뷰용) |
+| [`README.md`](../README.md) | 저장소 첫 화면 — 원칙 · APK 검증법 · 지원 체인 · 금고 구조 · 상태표 |
+| [`SECURITY.md`](../SECURITY.md) | 취약점 신고 절차 · in scope · 문서화된 설계 한계 |
+| [`LICENSE`](../LICENSE) | Apache License 2.0 원문 |
+| [`NOTICE`](../NOTICE) | 창작재산권(okneo31) 표기 · 상표 조항 · 제3자 구성요소 |
+| [`hardware/SPEC.md`](../hardware/SPEC.md) | HW 사양 v0 (외부 벤더 리뷰용). 검증 요구 F-11~F-14 |
+| [`apps/android/README.md`](../apps/android/README.md) | 안드로이드 셸 — 금고 2겹 구조와 **막지 못하는 것** |
 | [`firmware/README.md`](../firmware/README.md) | 펌웨어 빌드/레이아웃 |
 | [`icons/dist/README.md`](../icons/dist/README.md) | 아이콘 패키지 플랫폼별 적용법 |
 
