@@ -60,6 +60,7 @@ import {
 } from './screens/AddressbookPane.js';
 import { ActivityPane } from './screens/ActivityPane.js';
 import { SendPane } from './screens/SendPane.js';
+import { TokenListPane } from './screens/TokenListPane.js';
 
 // 벼린 — 확장 팝업.
 // 셸 라이프사이클: 잠금 → (생성/복구/PK import) → 잠금해제 → (계정 추가/전환/제거/키 노출) → 잠금.
@@ -74,6 +75,7 @@ import { SendPane } from './screens/SendPane.js';
 //   - 'addresses'  : 활성 계정의 체인별 주소 매트릭스 (Stage E2)
 //   - 'addressbook': 주소록 — 내 계정 자동 sync + 외부 주소 CRUD (Stage E2)
 //   - 'activity'   : 활동 내역 (Stage E3, EVM 체인 전용)
+//   - 'tokens'     : 토큰 목록 — 검색·보기/가리기·벼린 환율 가치 (Stage E4)
 
 type Mode =
   | 'home'
@@ -86,7 +88,8 @@ type Mode =
   | 'swap'
   | 'addresses'
   | 'addressbook'
-  | 'activity';
+  | 'activity'
+  | 'tokens';
 
 // 송금 금액 검증 — 10진수, 소수점 18자리 이하 (체인별 decimals 는 parseUnits 가 처리).
 const AMOUNT_RE = /^\d+(\.\d{1,18})?$/;
@@ -476,6 +479,7 @@ export function App() {
             onAddresses={() => setMode('addresses')}
             onAddressbook={() => setMode('addressbook')}
             onActivity={() => setMode('activity')}
+            onTokens={() => setMode('tokens')}
             onTokensChange={setSendTokens}
             onNativeBalanceChange={setSendNativeBalance}
             onLock={handleLogout}
@@ -529,6 +533,15 @@ export function App() {
           book={book}
           chainSpecs={chainSpecs}
           defaultChainKey={activeChainKey}
+          onBack={() => setMode('home')}
+        />
+      )}
+
+      {/* 토큰 목록 — 66 종 검색 · 보기/가리기 · 벼린 환율 가치 */}
+      {unlocked && mode === 'tokens' && (
+        <TokenListPane
+          tokens={sendTokens}
+          chainKey={activeChainKey}
           onBack={() => setMode('home')}
         />
       )}
@@ -646,6 +659,7 @@ function AccountListCard({
   onAddresses,
   onAddressbook,
   onActivity,
+  onTokens,
   onTokensChange,
   onNativeBalanceChange,
   onLock,
@@ -670,6 +684,7 @@ function AccountListCard({
   onAddresses: () => void;
   onAddressbook: () => void;
   onActivity: () => void;
+  onTokens: () => void;
   onTokensChange: (rows: DiscoveredBalance[] | null) => void;
   onNativeBalanceChange: (b: bigint | null) => void;
   onLock: () => void;
@@ -704,6 +719,7 @@ function AccountListCard({
           onAddresses={onAddresses}
           onAddressbook={onAddressbook}
           onActivity={onActivity}
+          onTokens={onTokens}
           onTokensChange={onTokensChange}
           onNativeBalanceChange={onNativeBalanceChange}
           onLock={onLock}
@@ -785,6 +801,7 @@ function ActiveAccountCard({
   onAddresses,
   onAddressbook,
   onActivity,
+  onTokens,
   onTokensChange,
   onNativeBalanceChange,
   onLock,
@@ -807,6 +824,7 @@ function ActiveAccountCard({
   onAddresses: () => void;
   onAddressbook: () => void;
   onActivity: () => void;
+  onTokens: () => void;
   /** 발견한 ERC-20 잔액을 상위(App)로 흘려보낸다 — 송금 화면이 재조회 없이 쓴다. */
   onTokensChange: (rows: DiscoveredBalance[] | null) => void;
   /** native 잔액을 상위로. 송금 화면의 잔액 초과 검사에 쓰인다. */
@@ -839,6 +857,10 @@ function ActiveAccountCard({
   // 양수 잔액만 / 빌트인 4종 전부 보여줌.
   const [evmTokens, setEvmTokens] = useState<DiscoveredBalance[] | null>(null);
   const [showZeroTokens, setShowZeroTokens] = useState(false);
+  // 조회는 항상 전체. 여기서만 거른다 — 토글이 RPC 를 유발하지 않는다.
+  const visibleEvmTokens = (evmTokens ?? []).filter(
+    (t) => showZeroTokens || t.balance > 0n,
+  );
   // "토큰 추가" 모달: idle | 'open' (입력 폼) | 'adding' (RPC fetch 중)
   const [addTokenMode, setAddTokenMode] = useState<'idle' | 'open' | 'adding'>('idle');
   const [addTokenAddr, setAddTokenAddr] = useState('');
@@ -952,8 +974,12 @@ function ActiveAccountCard({
     }
     let cancelled = false;
     setEvmTokens(null);
+    // 항상 전체를 받는다. 토글은 표시 단계에서만 거른다.
+    //   - includeZero 를 토글에 묶으면 켤 때마다 RPC 를 다시 때린다.
+    //   - 상위(App)로 올라가는 목록도 잔액>0 만 담겨, 토큰 목록 화면이 66 종을
+    //     검색한다는 목적 자체가 성립하지 않는다.
     void discoverEvmTokens(adapter as unknown as EvmAdapter, chainAddress, {
-      includeZero: showZeroTokens,
+      includeZero: true,
     })
       .then((tokens) => {
         if (!cancelled) setEvmTokens(tokens);
@@ -964,7 +990,7 @@ function ActiveAccountCard({
     return () => {
       cancelled = true;
     };
-  }, [chainAddress, adapter, activeChainKey, showZeroTokens, tokenListRev]);
+  }, [chainAddress, adapter, activeChainKey, tokenListRev]);
 
   async function handleAddCustomToken(): Promise<void> {
     if (!addTokenAddr.trim() || !chainAddress) return;
@@ -1132,9 +1158,9 @@ function ActiveAccountCard({
               어떤 토큰을 watch 가능한지 확인할 수 있다. ZION list 와 같은 스타일. */}
           {activeChainKey.startsWith('evm:') && evmTokens !== null && (
             <>
-              {evmTokens.length > 0 && (
+              {visibleEvmTokens.length > 0 && (
                 <ul className="zion-assets">
-                  {evmTokens.map((t) => {
+                  {visibleEvmTokens.map((t) => {
                     const usd = tokenToUsd(t.token.symbol, prices);
                     const usdValue =
                       usd !== null && t.balance > 0n
@@ -1165,6 +1191,13 @@ function ActiveAccountCard({
                   onClick={() => setShowZeroTokens((v) => !v)}
                 >
                   {showZeroTokens ? '잔액 0 숨기기' : '전체 보기'}
+                </button>
+                <button
+                  type="button"
+                  className="zion-assets__toggle"
+                  onClick={onTokens}
+                >
+                  {t('tokens.title')}
                 </button>
                 <button
                   type="button"

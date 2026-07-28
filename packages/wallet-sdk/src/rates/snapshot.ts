@@ -1,0 +1,1048 @@
+// 이 파일은 생성물이다. 손으로 고치지 마라.
+// 생성: node scripts/build-rate-snapshot.mjs
+//
+// 1 TTL = 노동자 1일 품삯. 국적과 무관하다. 그 나라의 하루 품삯이 그 통화로 얼마인가가 곧 환율이다.
+// perTtl = 명목GDP(자국통화) / 인구 / 365   →   1 TTL = perTtl 단위의 t{iso}
+//
+// 앵커다 — 한 번 만들고 그 뒤로 외부 데이터를 다시 보지 않는다.
+// 루트의 rate-snapshot.json 과 같은 실행에서 함께 나온 사본이다.
+
+import type { RateSnapshot } from './types.js';
+
+export const RATE_SNAPSHOT: RateSnapshot = {
+  "v": 1,
+  "anchoredAt": "2026-07-29",
+  "principle": "1 TTL = 노동자 1일 품삯. 국적과 무관하다. 그 나라의 하루 품삯이 그 통화로 얼마인가가 곧 환율이다.",
+  "formula": "perTtl = 명목GDP(자국통화) / 인구 / 365   →   1 TTL = perTtl 단위의 t{iso}",
+  "daysPerYear": 365,
+  "sources": {
+    "gdp": "World Bank NY.GDP.MKTP.CN (GDP, current LCU — 명목·자국통화)",
+    "population": "World Bank SP.POP.TOTL",
+    "tokens": "https://scan.ttl1.top/api/tokens?limit=500",
+    "api": "https://api.worldbank.org/v2"
+  },
+  "notes": [
+    "이 파일은 앵커다. 한 번 만들고 그 뒤로 외부 데이터를 다시 보지 않는다.",
+    "실질 GDP 를 쓰지 않는 이유: 인플레이션을 제거한 지표라 통화 남발이 가치에 반영되지 않는다.",
+    "달러 환산 GDP 를 쓰지 않는 이유: 시장환율이 이미 곱해진 값이다.",
+    "TTL 의 외부 시세(BTC 앵커)와는 별개 트랙이다. 여기에는 등장하지 않는다.",
+    "데이터가 없는 통화는 추측하지 않고 unresolved 에 남긴다 — 지갑은 가치 미표시로 처리한다."
+  ],
+  "rates": [
+    {
+      "symbol": "tAED",
+      "iso": "AED",
+      "address": "0x98CCC523872ab39A81e0D41ebF45CDbD80676456",
+      "decimals": 18,
+      "country": "United Arab Emirates",
+      "iso3": "ARE",
+      "perTtl": 505.8341783913137,
+      "inputs": {
+        "gdpLocal": 2028413265379.59,
+        "gdpYear": "2024",
+        "population": 10986400,
+        "populationYear": "2024"
+      }
+    },
+    {
+      "symbol": "tAOA",
+      "iso": "AOA",
+      "address": "0xbE9183E889f2D4Dc9166c2a0c185B49FB3Acc6C2",
+      "decimals": 18,
+      "country": "Angola",
+      "iso3": "AGO",
+      "perTtl": 9070.782822598987,
+      "inputs": {
+        "gdpLocal": 129255156031500,
+        "gdpYear": "2025",
+        "population": 39040039,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tARS",
+      "iso": "ARS",
+      "address": "0x7aD3C742D3bD3ab564666Cd79fA15cfD84802323",
+      "decimals": 18,
+      "country": "Argentina",
+      "iso3": "ARG",
+      "perTtl": 50647.4297395954,
+      "inputs": {
+        "gdpLocal": 847622872687300,
+        "gdpYear": "2025",
+        "population": 45851378,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tAUD",
+      "iso": "AUD",
+      "address": "0x76E3BCEf2f61cc22942755E4EfA6bfCEE19d1626",
+      "decimals": 18,
+      "country": "Australia",
+      "iso3": "AUS",
+      "perTtl": 275.70446598901435,
+      "inputs": {
+        "gdpLocal": 2778897000000,
+        "gdpYear": "2025",
+        "population": 27614411,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tAZN",
+      "iso": "AZN",
+      "address": "0xda03f187399D5236986F3927242364Da3daCB9D1",
+      "decimals": 18,
+      "country": "Azerbaijan",
+      "iso3": "AZE",
+      "perTtl": 34.51569531019841,
+      "inputs": {
+        "gdpLocal": 129094000000,
+        "gdpYear": "2025",
+        "population": 10246996,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tBDT",
+      "iso": "BDT",
+      "address": "0x93B8d67608fDEA26977ea378272D6181f31CA483",
+      "decimals": 18,
+      "country": "Bangladesh",
+      "iso3": "BGD",
+      "perTtl": 860.0334406219902,
+      "inputs": {
+        "gdpLocal": 55150262000000,
+        "gdpYear": "2025",
+        "population": 175686899,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tBRL",
+      "iso": "BRL",
+      "address": "0x734E39F214b2809A722a97deA0f0153bED945253",
+      "decimals": 18,
+      "country": "Brazil",
+      "iso3": "BRA",
+      "perTtl": 163.99504419918372,
+      "inputs": {
+        "gdpLocal": 12738565613900,
+        "gdpYear": "2025",
+        "population": 212812405,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tBYN",
+      "iso": "BYN",
+      "address": "0xb2F896533FD8eC1263f5818e924873439A155857",
+      "decimals": 18,
+      "country": "Belarus",
+      "iso3": "BLR",
+      "perTtl": 86.43515507509201,
+      "inputs": {
+        "gdpLocal": 286652400000,
+        "gdpYear": "2025",
+        "population": 9085991,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tCAD",
+      "iso": "CAD",
+      "address": "0xed72de4eB7feB2FDCd4B00945F5f1157d6F1A0Ae",
+      "decimals": 18,
+      "country": "Canada",
+      "iso3": "CAN",
+      "perTtl": 213.34580597442448,
+      "inputs": {
+        "gdpLocal": 3243465000000,
+        "gdpYear": "2025",
+        "population": 41651653,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tCHF",
+      "iso": "CHF",
+      "address": "0x4Eed2451f55F9b87c09e8BEd03dBb03B0a08e090",
+      "decimals": 18,
+      "country": "Switzerland",
+      "iso3": "CHE",
+      "perTtl": 261.40791198189805,
+      "inputs": {
+        "gdpLocal": 867544669000,
+        "gdpYear": "2025",
+        "population": 9092436,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tCLP",
+      "iso": "CLP",
+      "address": "0x2eBc14C418eDEb08d78F3D7F016B79487659D944",
+      "decimals": 18,
+      "country": "Chile",
+      "iso3": "CHL",
+      "perTtl": 46900.77977316348,
+      "inputs": {
+        "gdpLocal": 339977710113700,
+        "gdpYear": "2025",
+        "population": 19859921,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tCNY",
+      "iso": "CNY",
+      "address": "0xB48214c65b3e8A234939c4f441eaA6b948AB5279",
+      "decimals": 18,
+      "country": "China",
+      "iso3": "CHN",
+      "perTtl": 273.05601378564745,
+      "inputs": {
+        "gdpLocal": 140187920000000,
+        "gdpYear": "2025",
+        "population": 1406585000,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tCOP",
+      "iso": "COP",
+      "address": "0xc9145E205e9bb13EC0f79B163a3dbD9bc3C144DB",
+      "decimals": 18,
+      "country": "Colombia",
+      "iso3": "COL",
+      "perTtl": 95072.36310552066,
+      "inputs": {
+        "gdpLocal": 1853945000000000,
+        "gdpYear": "2025",
+        "population": 53425635,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tCRC",
+      "iso": "CRC",
+      "address": "0x750F9d852144c8d6fEE7AeDBC80fbc01A87C50DB",
+      "decimals": 18,
+      "country": "Costa Rica",
+      "iso3": "CRI",
+      "perTtl": 27547.62064076343,
+      "inputs": {
+        "gdpLocal": 51812301800000,
+        "gdpYear": "2025",
+        "population": 5152950,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tCZK",
+      "iso": "CZK",
+      "address": "0x6aBD040271f92F2E529511C0EEcb881ee5ABdAd8",
+      "decimals": 18,
+      "country": "Czechia",
+      "iso3": "CZE",
+      "perTtl": 2153.2650817410963,
+      "inputs": {
+        "gdpLocal": 8556452000000,
+        "gdpYear": "2025",
+        "population": 10886878,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tDKK",
+      "iso": "DKK",
+      "address": "0x8DB4079413AF55f35f12964752e8258213ceb07E",
+      "decimals": 18,
+      "country": "Denmark",
+      "iso3": "DNK",
+      "perTtl": 1396.391488379777,
+      "inputs": {
+        "gdpLocal": 3062770642000,
+        "gdpYear": "2025",
+        "population": 6009169,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tDOP",
+      "iso": "DOP",
+      "address": "0x75B3580f6b513E315e2C1042D33C365Cfef60B13",
+      "decimals": 18,
+      "country": "Dominican Republic",
+      "iso3": "DOM",
+      "perTtl": 1878.1434168609533,
+      "inputs": {
+        "gdpLocal": 7897551288600,
+        "gdpYear": "2025",
+        "population": 11520487,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tDZD",
+      "iso": "DZD",
+      "address": "0xF5b332800A532716eA3ee8995421260777e31B72",
+      "decimals": 18,
+      "country": "Algeria",
+      "iso3": "DZA",
+      "perTtl": 2181.775005131025,
+      "inputs": {
+        "gdpLocal": 37775010000000,
+        "gdpYear": "2025",
+        "population": 47435312,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tEGP",
+      "iso": "EGP",
+      "address": "0x374e92BC66401F6A8FCFC7B9D3Cc194FF51a7777",
+      "decimals": 18,
+      "country": "Egypt",
+      "iso3": "EGY",
+      "perTtl": 419.78457730264665,
+      "inputs": {
+        "gdpLocal": 18136200000000,
+        "gdpYear": "2025",
+        "population": 118365995,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tETB",
+      "iso": "ETB",
+      "address": "0x421a8DE8f34C86A07A2EADbF44B4E47f04388937",
+      "decimals": 18,
+      "country": "Ethiopia",
+      "iso3": "ETH",
+      "perTtl": 305.26276365591906,
+      "inputs": {
+        "gdpLocal": 15094419030534.4,
+        "gdpYear": "2025",
+        "population": 135472051,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tEUR",
+      "iso": "EUR",
+      "address": "0x99995C6ff6642145925919824daF6E8957c9b468",
+      "decimals": 18,
+      "country": "Euro Area",
+      "iso3Members": [
+        "AUT",
+        "BEL",
+        "HRV",
+        "CYP",
+        "EST",
+        "FIN",
+        "FRA",
+        "DEU",
+        "GRC",
+        "IRL",
+        "ITA",
+        "LVA",
+        "LTU",
+        "LUX",
+        "MLT",
+        "NLD",
+        "PRT",
+        "SVK",
+        "SVN",
+        "ESP"
+      ],
+      "perTtl": 123.07112411918769,
+      "inputs": {
+        "gdpLocal": 15822557419000,
+        "gdpYear": "2025",
+        "population": 352231059,
+        "populationYear": "2025",
+        "gdpSynthetic": "회원국 20개국 GDP 합산"
+      }
+    },
+    {
+      "symbol": "tGBP",
+      "iso": "GBP",
+      "address": "0xbb13b71fc1A4352206b132AF7dA65039ADe6E84b",
+      "decimals": 18,
+      "country": "United Kingdom",
+      "iso3": "GBR",
+      "perTtl": 119.85531540244742,
+      "inputs": {
+        "gdpLocal": 3039861000000,
+        "gdpYear": "2025",
+        "population": 69487000,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tGHS",
+      "iso": "GHS",
+      "address": "0x7D8D77120128c08AF466EdDfb724B6a626cB1069",
+      "decimals": 18,
+      "country": "Ghana",
+      "iso3": "GHA",
+      "perTtl": 112.05370226382672,
+      "inputs": {
+        "gdpLocal": 1434114745596.83,
+        "gdpYear": "2025",
+        "population": 35064272,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tGTQ",
+      "iso": "GTQ",
+      "address": "0xec9Aa2B7E3c94C97E47d64a2FEd0B64cF67c5768",
+      "decimals": 18,
+      "country": "Guatemala",
+      "iso3": "GTM",
+      "perTtl": 138.83520467417594,
+      "inputs": {
+        "gdpLocal": 947005561000,
+        "gdpYear": "2025",
+        "population": 18687881,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tHKD",
+      "iso": "HKD",
+      "address": "0x9014B0C4A47b46268cdfd59d5C4Ba38dA92faEDA",
+      "decimals": 18,
+      "country": "Hong Kong",
+      "iso3": "HKG",
+      "perTtl": 1217.2649248830467,
+      "inputs": {
+        "gdpLocal": 3331774000000,
+        "gdpYear": "2025",
+        "population": 7498900,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tHUF",
+      "iso": "HUF",
+      "address": "0xae5161c03a3f5Eb86a1D9A63aE5Fc51004E5f12C",
+      "decimals": 18,
+      "country": "Hungary",
+      "iso3": "HUN",
+      "perTtl": 25065.65885880178,
+      "inputs": {
+        "gdpLocal": 87045554000000,
+        "gdpYear": "2025",
+        "population": 9514251,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tIDR",
+      "iso": "IDR",
+      "address": "0x3BEb1FB7313AFB5e544FF77368f3891efca47081",
+      "decimals": 18,
+      "country": "Indonesia",
+      "iso3": "IDN",
+      "perTtl": 228415.9849226138,
+      "inputs": {
+        "gdpLocal": 23821103600000000,
+        "gdpYear": "2025",
+        "population": 285721236,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tILS",
+      "iso": "ILS",
+      "address": "0x6599c00972c753A054478A164d136F83a019Af7f",
+      "decimals": 18,
+      "country": "Israel",
+      "iso3": "ISR",
+      "perTtl": 570.6198961682052,
+      "inputs": {
+        "gdpLocal": 2108338946000,
+        "gdpYear": "2025",
+        "population": 10122800,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tINR",
+      "iso": "INR",
+      "address": "0x9d5965AF76957155CC72baB817fFd2e181704c8d",
+      "decimals": 18,
+      "country": "India",
+      "iso3": "IND",
+      "perTtl": 646.5740399743045,
+      "inputs": {
+        "gdpLocal": 345471567964600,
+        "gdpYear": "2025",
+        "population": 1463865525,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tIQD",
+      "iso": "IQD",
+      "address": "0xC3dF014C49e02b8FDf08804B5bCCB5Ca6B3642D3",
+      "decimals": 18,
+      "country": "Iraq",
+      "iso3": "IRQ",
+      "perTtl": 19267.349852933057,
+      "inputs": {
+        "gdpLocal": 330677481600000,
+        "gdpYear": "2025",
+        "population": 47020774,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tJPY",
+      "iso": "JPY",
+      "address": "0x8a837891d3Aa290eBCCd1eC8229C959977a10812",
+      "decimals": 18,
+      "country": "Japan",
+      "iso3": "JPN",
+      "perTtl": 14740.709198680186,
+      "inputs": {
+        "gdpLocal": 663757300000000,
+        "gdpYear": "2025",
+        "population": 123366734,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tKES",
+      "iso": "KES",
+      "address": "0x18e6385FE24363950d903208e2676c2F593bdcC1",
+      "decimals": 18,
+      "country": "Kenya",
+      "iso3": "KEN",
+      "perTtl": 837.0520361590953,
+      "inputs": {
+        "gdpLocal": 17577557000000,
+        "gdpYear": "2025",
+        "population": 57532493,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tKRW",
+      "iso": "KRW",
+      "address": "0x371ca60b282E66Ad80deFD85031032D09FA4d6aD",
+      "decimals": 18,
+      "country": "South Korea",
+      "iso3": "KOR",
+      "perTtl": 141180.04441511573,
+      "inputs": {
+        "gdpLocal": 2663342600000000,
+        "gdpYear": "2025",
+        "population": 51684564,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tKWD",
+      "iso": "KWD",
+      "address": "0x75ABdD5a17127603A079b298F8A463F025605c23",
+      "decimals": 18,
+      "country": "Kuwait",
+      "iso3": "KWT",
+      "perTtl": 27.12950567818929,
+      "inputs": {
+        "gdpLocal": 48177492346.7353,
+        "gdpYear": "2025",
+        "population": 4865298,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tKZT",
+      "iso": "KZT",
+      "address": "0x7FE59940D9c79F688Ce630Fb8f8C5b56A9F5AB58",
+      "decimals": 18,
+      "country": "Kazakhstan",
+      "iso3": "KAZ",
+      "perTtl": 20972.91947729643,
+      "inputs": {
+        "gdpLocal": 159561346600000,
+        "gdpYear": "2025",
+        "population": 20843754,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tLKR",
+      "iso": "LKR",
+      "address": "0xEDB78f6BE09333EeE107B7B559a2b3830f02Af3B",
+      "decimals": 18,
+      "country": "Sri Lanka",
+      "iso3": "LKA",
+      "perTtl": 4124.30314630365,
+      "inputs": {
+        "gdpLocal": 32750843826608.5,
+        "gdpYear": "2025",
+        "population": 21756000,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tMAD",
+      "iso": "MAD",
+      "address": "0x687AD88c9D1EbE42A55777ae2078BfD96E070Ff1",
+      "decimals": 18,
+      "country": "Morocco",
+      "iso3": "MAR",
+      "perTtl": 121.56739626100334,
+      "inputs": {
+        "gdpLocal": 1705253955500,
+        "gdpYear": "2025",
+        "population": 38430770,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tMMK",
+      "iso": "MMK",
+      "address": "0x6FFE97B2fBb1503B692eA45C5E1A58A0D45d38DE",
+      "decimals": 18,
+      "country": "Myanmar",
+      "iso3": "MMR",
+      "perTtl": 8566.131738540787,
+      "inputs": {
+        "gdpLocal": 171498125000000,
+        "gdpYear": "2025",
+        "population": 54850648,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tMXN",
+      "iso": "MXN",
+      "address": "0x086A3E8482fd7A88D6Fa170e5AC407b793C0C39C",
+      "decimals": 18,
+      "country": "Mexico",
+      "iso3": "MEX",
+      "perTtl": 732.0390396564363,
+      "inputs": {
+        "gdpLocal": 35255452916000,
+        "gdpYear": "2025",
+        "population": 131946900,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tMYR",
+      "iso": "MYR",
+      "address": "0xDa56676144d6aD40bB54c854fA03596ce600f6C4",
+      "decimals": 18,
+      "country": "Malaysia",
+      "iso3": "MYS",
+      "perTtl": 154.05797320949986,
+      "inputs": {
+        "gdpLocal": 2023075573000,
+        "gdpYear": "2025",
+        "population": 35977838,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tNGN",
+      "iso": "NGN",
+      "address": "0x02bbE88B79736FC7ea23DeF99DF4781cece42B19",
+      "decimals": 18,
+      "country": "Nigeria",
+      "iso3": "NGA",
+      "perTtl": 5092.819223453922,
+      "inputs": {
+        "gdpLocal": 441535409810000,
+        "gdpYear": "2025",
+        "population": 237527782,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tNOK",
+      "iso": "NOK",
+      "address": "0xBE97C931e6a362D505cF41b16c5413eE8E29588B",
+      "decimals": 18,
+      "country": "Norway",
+      "iso3": "NOR",
+      "perTtl": 2694.20675146928,
+      "inputs": {
+        "gdpLocal": 5517648000000,
+        "gdpYear": "2025",
+        "population": 5610870,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tNZD",
+      "iso": "NZD",
+      "address": "0xB720b76c48e46B8190b185bB14d02719A2a7c372",
+      "decimals": 18,
+      "country": "New Zealand",
+      "iso3": "NZL",
+      "perTtl": 231.43731037905283,
+      "inputs": {
+        "gdpLocal": 449802000000,
+        "gdpYear": "2025",
+        "population": 5324700,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tOMR",
+      "iso": "OMR",
+      "address": "0xE9D9990A7Df5e6060a738BbBD3dCCfA64Dba9811",
+      "decimals": 18,
+      "country": "Oman",
+      "iso3": "OMN",
+      "perTtl": 21.013079455977188,
+      "inputs": {
+        "gdpLocal": 42143038177.7006,
+        "gdpYear": "2025",
+        "population": 5494691,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tPEN",
+      "iso": "PEN",
+      "address": "0xc4f3f3e8007A7c6B4Ce5cF18dea808c06b829d0D",
+      "decimals": 18,
+      "country": "Peru",
+      "iso3": "PER",
+      "perTtl": 94.64360643146478,
+      "inputs": {
+        "gdpLocal": 1194448000000,
+        "gdpYear": "2025",
+        "population": 34576665,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tPHP",
+      "iso": "PHP",
+      "address": "0x10f5467256b23B2fdA48E0F19161D54845f14eFe",
+      "decimals": 18,
+      "country": "Philippines",
+      "iso3": "PHL",
+      "perTtl": 657.0900215304786,
+      "inputs": {
+        "gdpLocal": 28009934791896.6,
+        "gdpYear": "2025",
+        "population": 116786962,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tPKR",
+      "iso": "PKR",
+      "address": "0x4Ea5Cf0CB0C9BDAf87D10B6d3e17F8cF996245Ce",
+      "decimals": 18,
+      "country": "Pakistan",
+      "iso3": "PAK",
+      "perTtl": 1221.697510342994,
+      "inputs": {
+        "gdpLocal": 113807399205117,
+        "gdpYear": "2025",
+        "population": 255219554,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tPLN",
+      "iso": "PLN",
+      "address": "0x0dDb177D8484FccBb9b51B82C863ba359ebfa30f",
+      "decimals": 18,
+      "country": "Poland",
+      "iso3": "POL",
+      "perTtl": 292.80275682095737,
+      "inputs": {
+        "gdpLocal": 3894010000000,
+        "gdpYear": "2025",
+        "population": 36435861,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tQAR",
+      "iso": "QAR",
+      "address": "0xD427DcdcdB0d3A645Dc44A31B523ba0008aaED1B",
+      "decimals": 18,
+      "country": "Qatar",
+      "iso3": "QAT",
+      "perTtl": 723.2620826417012,
+      "inputs": {
+        "gdpLocal": 784637000000,
+        "gdpYear": "2025",
+        "population": 2972215,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tRON",
+      "iso": "RON",
+      "address": "0xaD1EeA2CbCd1130BfB89C9C16b83670BD09FB792",
+      "decimals": 18,
+      "country": "Romania",
+      "iso3": "ROU",
+      "perTtl": 276.043615969596,
+      "inputs": {
+        "gdpLocal": 1916404900000,
+        "gdpYear": "2025",
+        "population": 19020271,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tRSD",
+      "iso": "RSD",
+      "address": "0x149344981be5088cA3EDA39b7B59572A9980454B",
+      "decimals": 18,
+      "country": "Serbia",
+      "iso3": "SRB",
+      "perTtl": 4347.609263752273,
+      "inputs": {
+        "gdpLocal": 10392686893400,
+        "gdpYear": "2025",
+        "population": 6549143,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tRUB",
+      "iso": "RUB",
+      "address": "0xcEEE855C13368E8058D9F7a5431C7eDAA61D664c",
+      "decimals": 18,
+      "country": "Russia",
+      "iso3": "RUS",
+      "perTtl": 4090.3274338919537,
+      "inputs": {
+        "gdpLocal": 214261023466350,
+        "gdpYear": "2025",
+        "population": 143513328,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tSAR",
+      "iso": "SAR",
+      "address": "0xf47e602A3EbB836Da2FB35edD191ecA890172c25",
+      "decimals": 18,
+      "country": "Saudi Arabia",
+      "iso3": "SAU",
+      "perTtl": 354.8286528663194,
+      "inputs": {
+        "gdpLocal": 4788536000000,
+        "gdpYear": "2025",
+        "population": 36973555,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tSEK",
+      "iso": "SEK",
+      "address": "0x724263aA5eC6189a832c980Fa67DC6132C6F1C59",
+      "decimals": 18,
+      "country": "Sweden",
+      "iso3": "SWE",
+      "perTtl": 1698.6649374343015,
+      "inputs": {
+        "gdpLocal": 6570039000000,
+        "gdpYear": "2025",
+        "population": 10596620,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tSGD",
+      "iso": "SGD",
+      "address": "0x0415Ad07DB435C8e55aC5b20D86995747a7b5fF8",
+      "decimals": 18,
+      "country": "Singapore",
+      "iso3": "SGP",
+      "perTtl": 353.95708658811714,
+      "inputs": {
+        "gdpLocal": 789529200000,
+        "gdpYear": "2025",
+        "population": 6111175,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tTHB",
+      "iso": "THB",
+      "address": "0x183916ce5fa6677876e9dA7758d2152EAD835Bb1",
+      "decimals": 18,
+      "country": "Thailand",
+      "iso3": "THA",
+      "perTtl": 725.8149095253316,
+      "inputs": {
+        "gdpLocal": 18973709000000,
+        "gdpYear": "2025",
+        "population": 71619863,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tTRY",
+      "iso": "TRY",
+      "address": "0x0d4C4022cbD7e961A91aF106eE4aB1956a36054e",
+      "decimals": 18,
+      "country": "Turkey",
+      "iso3": "TUR",
+      "perTtl": 2010.5137300619074,
+      "inputs": {
+        "gdpLocal": 63020905823900,
+        "gdpYear": "2025",
+        "population": 85878556,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tTZS",
+      "iso": "TZS",
+      "address": "0x207a86F65D31881afE720b8fbE93BF8d5624506A",
+      "decimals": 18,
+      "country": "Tanzania",
+      "iso3": "TZA",
+      "perTtl": 8895.615212448172,
+      "inputs": {
+        "gdpLocal": 229055337502300,
+        "gdpYear": "2025",
+        "population": 70545865,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tUAH",
+      "iso": "UAH",
+      "address": "0xe788F27F921F00F0b099F8222115b8d8C695a08C",
+      "decimals": 18,
+      "country": "Ukraine",
+      "iso3": "UKR",
+      "perTtl": 627.7267478778102,
+      "inputs": {
+        "gdpLocal": 8931194000000,
+        "gdpYear": "2025",
+        "population": 38980376,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tUSD",
+      "iso": "USD",
+      "address": "0xc00d0FF37e9CE83C269e762644202D4Ab82F023c",
+      "decimals": 18,
+      "country": "United States",
+      "iso3": "USA",
+      "perTtl": 246.64798986458746,
+      "inputs": {
+        "gdpLocal": 30769700000000,
+        "gdpYear": "2025",
+        "population": 341784857,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tUYU",
+      "iso": "UYU",
+      "address": "0x0f392d00f6Ed2BBFEEbeE36cDC4208294973960F",
+      "decimals": 18,
+      "country": "Uruguay",
+      "iso3": "URY",
+      "perTtl": 2845.6252684531446,
+      "inputs": {
+        "gdpLocal": 3515517100000,
+        "gdpYear": "2025",
+        "population": 3384688,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tUZS",
+      "iso": "UZS",
+      "address": "0xB7e6b911e6AA4EFaCb1294f6905A4b7F0D15e12a",
+      "decimals": 18,
+      "country": "Uzbekistan",
+      "iso3": "UZB",
+      "perTtl": 136762.89991121757,
+      "inputs": {
+        "gdpLocal": 1849650006700000,
+        "gdpYear": "2025",
+        "population": 37053428,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tVND",
+      "iso": "VND",
+      "address": "0x0c9F6B8823935594c0cc6d808Cba9D2B06DDF6d6",
+      "decimals": 18,
+      "country": "Vietnam",
+      "iso3": "VNM",
+      "perTtl": 346450.1532517109,
+      "inputs": {
+        "gdpLocal": 12847571215993800,
+        "gdpYear": "2025",
+        "population": 101598527,
+        "populationYear": "2025"
+      }
+    },
+    {
+      "symbol": "tXOF",
+      "iso": "XOF",
+      "address": "0x51E38b3f08c0da7e9B64a7B781aCf3b33eB98ff1",
+      "decimals": 18,
+      "country": "Cote d'Ivoire",
+      "iso3Members": [
+        "BEN",
+        "BFA",
+        "CIV",
+        "GNB",
+        "MLI",
+        "NER",
+        "SEN",
+        "TGO"
+      ],
+      "perTtl": 2632.678512405709,
+      "inputs": {
+        "gdpLocal": 148454046215238,
+        "gdpYear": "2025",
+        "population": 154490346,
+        "populationYear": "2025",
+        "gdpSynthetic": "회원국 8개국 GDP 합산"
+      }
+    },
+    {
+      "symbol": "tZAR",
+      "iso": "ZAR",
+      "address": "0x24E6386d85eba0Eac3977Ce0669Cc40087E915a1",
+      "decimals": 18,
+      "country": "South Africa",
+      "iso3": "ZAF",
+      "perTtl": 323.35577761237715,
+      "inputs": {
+        "gdpLocal": 7641793184500,
+        "gdpYear": "2025",
+        "population": 64747319,
+        "populationYear": "2025"
+      }
+    }
+  ],
+  "unresolved": [
+    {
+      "symbol": "tTWD",
+      "iso": "TWD",
+      "country": "Taiwan",
+      "reason": "World Bank 에 해당 국가 없음"
+    }
+  ]
+} as const;

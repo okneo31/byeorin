@@ -34,3 +34,19 @@ export {
   type DiscoveredBalance,
   type FetchTtlScanTokensOptions,
 } from './tokens/index.js';
+
+// 벼린 환율 — TTL 기준, 각국 통화토큰이 여기에 매달린다.
+export {
+  RATE_SNAPSHOT,
+  rateByAddress,
+  rateByIso,
+  unresolvedRates,
+  tokenAmountToTtl,
+  ttlToTokenAmount,
+  crossRate,
+  snapshot as rateSnapshot,
+  type RateSnapshot,
+  type TokenRate,
+  type UnresolvedRate,
+  type RateInputs,
+} from './rates/index.js';

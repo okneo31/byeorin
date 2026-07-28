@@ -1048,3 +1048,152 @@ input.verify-row__input {
   white-space: nowrap;
 }
 .activity-row__link:hover { text-decoration: underline; }
+
+/* ── 토큰 목록 (TokenListPane) ───────────────────────────
+ * 66 종을 420px 폭에서 훑는 화면. 행은 2 단(심볼/국가 · 수량/TTL)으로 고정하고,
+ * 근거 패널만 아래로 펼친다. */
+.token-list__tabs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.token-list__tab {
+  background: transparent;
+  border: 1px solid var(--popup-border);
+  border-radius: 999px;
+  color: var(--popup-muted);
+  font-size: 12px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.token-list__tab:hover { color: var(--popup-text); }
+.token-list__tab--on {
+  color: var(--popup-text);
+  border-color: var(--popup-red);
+  background: var(--popup-surface-2);
+}
+
+.token-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* 66 종을 팝업 한 화면에 우겨넣지 않는다 — 목록만 스크롤. */
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.token-row {
+  background: var(--popup-surface-2);
+  border: 1px solid var(--popup-border-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* 가린 항목은 "가린 항목 보기" 탭에서만 보인다. 되돌릴 수 있음을 톤으로 알린다. */
+.token-row--hidden { opacity: 0.62; }
+
+.token-row__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.token-row__ident {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.token-row__symbol {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--popup-text);
+}
+
+.token-row__country {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 190px;
+}
+
+.token-row__amounts {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.token-row__balance {
+  font-family: var(--nd-font-mono, 'JetBrains Mono', ui-monospace, Menlo, monospace);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--popup-text);
+}
+.token-row__balance--zero { color: var(--popup-muted); font-weight: 500; }
+
+.token-row__ttl {
+  font-size: 11.5px;
+  color: var(--popup-muted);
+  white-space: nowrap;
+}
+/* 환율이 없는 토큰 — 숫자를 지어내지 않고 상태를 그대로 적는다. */
+.token-row__ttl--none {
+  color: var(--popup-yellow-soft);
+  font-style: italic;
+}
+
+.token-row__actions {
+  display: flex;
+  gap: 14px;
+}
+
+.token-basis {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  background: var(--popup-bg);
+  border: 1px solid var(--popup-border-soft);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11.5px;
+}
+
+.token-basis__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.token-basis__row dt { color: var(--popup-muted); flex: 0 1 auto; }
+.token-basis__row dd {
+  margin: 0;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--popup-text);
+  text-align: right;
+  word-break: break-all;
+}
+
+.token-basis__formula { margin: 4px 0 0; line-height: 1.45; }
+
+.token-basis__addr {
+  margin: 4px 0 0;
+  font-size: 10.5px;
+  word-break: break-all;
+}
