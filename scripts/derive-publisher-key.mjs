@@ -55,6 +55,7 @@ function parseArgs(argv) {
     rpc: DEFAULT_RPC,
     balance: true,
     passphrase: '',
+    stdinBase64: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -63,6 +64,7 @@ function parseArgs(argv) {
     else if (a === '--wordlist') out.wordlist = String(argv[++i]);
     else if (a === '--rpc') out.rpc = String(argv[++i]);
     else if (a === '--no-balance') out.balance = false;
+    else if (a === '--stdin-base64') out.stdinBase64 = true;
     else throw new Error(`알 수 없는 인자: ${a}`);
   }
   if (!Number.isInteger(out.account) || out.account < 0) {
@@ -105,6 +107,28 @@ async function rpc(url, method, params) {
   return j.result;
 }
 
+/**
+ * 실패 원인 분류용 통계. **시드 내용은 한 글자도 내보내지 않는다** — 개수와
+ * 성질만 센다. 어느 단어가 틀렸는지 알려주는 건 이 스크립트의 일이 아니고,
+ * 그렇게 하면 오류 메시지가 시드 유출 경로가 된다.
+ */
+function diagnose(mnemonic, getWordlist) {
+  const words = mnemonic.split(' ').filter((w) => w.length > 0);
+  const inList = (wl) => {
+    const set = new Set(getWordlist(wl).map((w) => w.normalize('NFKD')));
+    return words.filter((w) => !set.has(w.normalize('NFKD'))).length;
+  };
+  return {
+    wordCount: words.length,
+    validWordCount: [12, 15, 18, 21, 24].includes(words.length),
+    unknownEnglish: inList('english'),
+    unknownKorean: inList('korean'),
+    hasNonAscii: /[^\x20-\x7E]/.test(mnemonic),
+    // U+FFFD = 디코딩 실패로 치환된 문자. 있으면 인코딩이 깨진 것이 확실하다.
+    mangled: mnemonic.includes('�'),
+  };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
@@ -117,10 +141,38 @@ async function main() {
 
   const core = await import(sdkUrl('core.js'));
   const evm = await import(sdkUrl('evm.js'));
-  const { Wallet, isValidMnemonic, mnemonicToSeed, deriveSecp256k1, privateKeyToHex } = core;
+  const {
+    Wallet,
+    isValidMnemonic,
+    mnemonicToSeed,
+    deriveSecp256k1,
+    privateKeyToHex,
+    getWordlist,
+  } = core;
   const { EvmAdapter, TTL_CHAIN } = evm;
 
-  const mnemonic = normalizeMnemonic(await readStdin());
+  // base64 전송 모드.
+  //
+  // 왜 필요한가: PowerShell 이 네이티브 프로세스 stdin 으로 문자열을 보낼 때
+  // 쓰는 인코딩은 $OutputEncoding 전역 변수인데, PS 5.1 기본값이 ASCII 다.
+  // 그러면 한국어 시드가 '?' 로 전부 치환돼 도착한다 — 실제로 그렇게 터졌고,
+  // 스크립트에서 그 변수를 UTF-8 로 바꿔도 파이프에 반영되지 않았다.
+  //
+  // 그래서 그 전역 변수에 의존하는 구조 자체를 없앤다. 호출자가 UTF-8 바이트를
+  // base64 로 감싸 보내면 전선 위에는 ASCII 만 흐르고, 어떤 코드페이지도
+  // 훼손할 수 없다.
+  const rawStdin = await readStdin();
+  let decoded;
+  if (args.stdinBase64) {
+    const b64 = rawStdin.trim();
+    if (!/^[A-Za-z0-9+/=\s]*$/.test(b64)) {
+      throw new Error('--stdin-base64 인데 입력이 base64 가 아니다');
+    }
+    decoded = Buffer.from(b64, 'base64').toString('utf8');
+  } else {
+    decoded = rawStdin;
+  }
+  const mnemonic = normalizeMnemonic(decoded);
   if (mnemonic.length === 0) throw new Error('시드구문이 비어 있다');
 
   // wordlist 판정. auto 는 english → korean 순으로 시도한다.
@@ -135,10 +187,26 @@ async function main() {
     }
   }
   if (wordlist === null) {
+    // 왜 실패했는지 말해주지 않으면 사용자가 손댈 데가 없다. 단, 시드 자체나
+    // 어느 단어가 틀렸는지는 절대 내보내지 않는다 — **개수와 성질만** 센다.
+    const diag = diagnose(mnemonic, getWordlist);
     throw new Error(
-      args.wordlist === 'auto'
-        ? '유효한 시드구문이 아니다 (english/korean 둘 다 실패). 단어 수와 순서를 확인하라.'
-        : `유효한 시드구문이 아니다 (wordlist=${args.wordlist})`,
+      `유효한 시드구문이 아니다 (${args.wordlist === 'auto' ? 'english/korean 둘 다 실패' : `wordlist=${args.wordlist}`}). ` +
+        `단어 ${diag.wordCount}개` +
+        (diag.validWordCount ? '' : ` — BIP-39 는 12/15/18/21/24 개만 유효하다`) +
+        `. 사전에 없는 단어: english ${diag.unknownEnglish}개, korean ${diag.unknownKorean}개` +
+        (diag.unknownEnglish > 0 && diag.unknownKorean > 0 && diag.hasNonAscii === false
+          ? '. (전부 ASCII 인데 english 사전에 없다 — 오타이거나 다른 언어 사전이다)'
+          : '') +
+        (diag.unknownKorean === 0 && diag.validWordCount
+          ? '. (모든 단어가 korean 사전에 있다 — 단어는 맞고 체크섬이 안 맞는다. 순서가 틀렸을 가능성이 크다)'
+          : '') +
+        (diag.unknownEnglish === 0 && diag.validWordCount
+          ? '. (모든 단어가 english 사전에 있다 — 단어는 맞고 체크섬이 안 맞는다. 순서가 틀렸을 가능성이 크다)'
+          : '') +
+        (diag.mangled
+          ? '. ⚠ 입력에 치환문자(U+FFFD)가 있다 — 인코딩이 깨진 채로 전달됐다'
+          : ''),
     );
   }
 
