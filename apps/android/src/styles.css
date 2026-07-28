@@ -832,6 +832,223 @@ input.verify-row__input {
   text-decoration: underline;
 }
 
+/* ── 송금 화면 — 선택 자산 보유 잔액 줄 (Stage E3) ────── */
+.send-asset__balance {
+  margin: -2px 0 2px;
+}
+
+/* ── 체인별 주소 매트릭스 (AddressMatrix, Stage E2) ───── */
+/* 16 체인이 세로로 쌓이면 팝업이 한없이 길어진다 — 리스트 자체를 스크롤시켜
+ * 카드 높이를 고정한다. 폭은 420px 팝업 안(콘텐츠 ~388px)에서 절대 넘치지
+ * 않도록 주소 칸만 늘어나고 나머지는 고정폭. */
+.addr-matrix {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  /* 스크롤 영역임을 시각적으로 알림 */
+  border-top: 1px solid var(--popup-border-soft);
+  border-bottom: 1px solid var(--popup-border-soft);
+  padding: 8px 0;
+}
+
+.addr-matrix__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 2px;
+}
+
+.addr-matrix__chain {
+  flex: 0 0 92px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--popup-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* .addr 의 15px/nowrap 을 매트릭스 밀도에 맞춰 낮춘다 */
+.addr-matrix__addr {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.addr-matrix__copy {
+  flex: 0 0 auto;
+}
+
+.addr-matrix__unsupported {
+  flex: 1 1 auto;
+  color: var(--popup-muted);
+  font-style: italic;
+}
+
+/* ── 주소록 (AddressbookPane, Stage E2) ───────────────── */
+.addressbook {
+  list-style: none;
+  margin: 4px 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.addressbook__row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--popup-surface-2);
+  border: 1px solid var(--popup-border-soft);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.addressbook__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.addressbook__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--popup-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.addressbook__chain {
+  flex: 0 0 auto;
+}
+
+/* 주소록은 축약하지 않고 전체를 보여준다 — 보내기 전 눈으로 대조하는 화면이라
+ * 말줄임이 오히려 위험하다. .addr 의 nowrap/ellipsis 를 덮어쓴다. */
+.addressbook__addr {
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-all;
+  line-height: 1.45;
+}
+
+.addressbook__actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.addressbook-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* ── 활동 내역 (ActivityPane, Stage E3) ───────────────── */
+/* popup 폭이 420 이라 데스크톱의 5열 표는 못 쓴다. 항목당 3줄 카드로:
+ * 1행 방향/시각, 2행 상대주소/금액, 3행 자산·상태/탐색기. */
+.activity-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.activity-row {
+  background: var(--popup-surface-2);
+  border: 1px solid var(--popup-border-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.activity-row__line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.activity-row__line--foot {
+  align-items: center;
+}
+
+.activity-row__dir {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.activity-row__dir--out { color: var(--popup-red-soft); }
+.activity-row__dir--in  { color: #6fcf7f; }
+
+.activity-row__time {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* .addr 를 함께 쓰지만 활동 행에서는 잔액 히어로만큼 클 필요가 없다 */
+.activity-row__peer {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--popup-text);
+  min-width: 0;
+}
+
+.activity-row__amount {
+  flex: 0 0 auto;
+  font-family: var(--nd-font-mono, 'JetBrains Mono', ui-monospace, Menlo, monospace);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.activity-row__amount--out { color: var(--popup-text); }
+.activity-row__amount--in  { color: #6fcf7f; }
+
+.activity-row__symbol {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--popup-muted);
+}
+
+.activity-row__status { color: var(--popup-muted); }
+.activity-row__status--failed  { color: var(--popup-red-soft); }
+.activity-row__status--pending { color: var(--popup-yellow-soft); }
+
+.activity-row__link {
+  flex: 0 0 auto;
+  color: var(--popup-yellow-soft);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.activity-row__link:hover { text-decoration: underline; }
+
 /* ═══════════════════════════════════════════════════════════════════════
  * 모바일 오버라이드 (안드로이드 셸 전용)
  *
