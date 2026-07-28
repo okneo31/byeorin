@@ -28,7 +28,7 @@
  *   BYEORIN_ANCHOR_KEY=0x... node scripts/anchor-release.mjs --send
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -73,6 +73,40 @@ async function rpc(method, params) {
   return json.result;
 }
 
+/** 공개된 publisher 주소 목록. 파일이 없거나 깨졌으면 빈 배열. */
+function loadPublishers() {
+  try {
+    const p = join(repoRoot, 'anchor-publishers.json');
+    if (!existsSync(p)) return [];
+    return JSON.parse(readFileSync(p, 'utf8')).publishers ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 0-value + data 트랜잭션의 실제 비용을 체인에 물어본다.
+ * from 은 아무 주소나 써도 된다 — 순수 데이터 tx 라 결과가 발신자에 의존하지 않는다.
+ */
+async function estimateCost(data) {
+  const probe = '0x000000000000000000000000000000000000dEaD';
+  const [chainIdHex, gasHex, gasPriceHex] = await Promise.all([
+    rpc('eth_chainId', []),
+    rpc('eth_estimateGas', [{ from: probe, to: probe, value: '0x0', data }]),
+    rpc('eth_gasPrice', []),
+  ]);
+  const gas = BigInt(gasHex);
+  const gasPrice = BigInt(gasPriceHex);
+  const wei = gas * gasPrice;
+  return {
+    chainId: parseInt(chainIdHex, 16),
+    gas: Number(gas),
+    gasPriceGwei: Number(gasPrice) / 1e9,
+    wei: wei.toString(),
+    costTtl: (Number(wei) / 1e18).toFixed(9).replace(/0+$/, ''),
+  };
+}
+
 async function main() {
   const manifestPath = join(repoRoot, '벼린.apk.manifest.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
@@ -89,7 +123,34 @@ async function main() {
       '\n[anchor] ⚠ 이 매니페스트는 커밋되지 않은 변경이 섞인 빌드에서 나왔다.\n' +
         '          소스로 추적할 수 없는 산출물을 체인에 못 박으면 안 된다. 중단.\n',
     );
-    process.exit(1);
+    return 1;
+  }
+
+  // 가스 예측. 키 없이도 돌아간다 — 발행 전에 얼마가 드는지 먼저 안다.
+  // RPC 가 막혀 있어도 드라이런 자체는 실패시키지 않는다.
+  const cost = await estimateCost(data).catch((e) => ({ error: e.message }));
+  if (cost.error) {
+    console.log(`  가스      추정 실패 (${cost.error})`);
+  } else {
+    console.log(`  체인확인  eth_chainId = ${cost.chainId}${cost.chainId === TTL_CHAIN.chainId ? '' : '  ⚠ 기대와 다름'}`);
+    console.log(`  가스      ${cost.gas} × ${cost.gasPriceGwei} gwei = ${cost.costTtl} TTL`);
+  }
+
+  // 발행 주소가 공개 목록에 없으면 검증기가 나중에 FAIL 을 낸다. 미리 잡는다.
+  const publishers = loadPublishers();
+  const addr = process.env.BYEORIN_ANCHOR_ADDRESS ?? null;
+  if (publishers.length === 0) {
+    console.log(
+      '\n  ⚠ anchor-publishers.json 의 publishers 가 비어 있다.\n' +
+        '    발행 후 publisher 주소를 여기 넣지 않으면 검증기가 from 을 검사하지\n' +
+        '    못하고 [ SKIP ] 으로 내린다 — 앵커가 "누구의" 것인지 증명되지 않는다.',
+    );
+  } else if (addr && !publishers.map((p) => p.toLowerCase()).includes(addr.toLowerCase())) {
+    console.error(
+      `\n[anchor] ⚠ BYEORIN_ANCHOR_ADDRESS(${addr}) 가 anchor-publishers.json 에 없다.\n` +
+        '          이 주소로 발행하면 검증기가 FAIL 을 낸다. 중단.\n',
+    );
+    return 1;
   }
 
   const send = process.argv.includes('--send');
@@ -101,14 +162,33 @@ async function main() {
   const key = process.env.BYEORIN_ANCHOR_KEY;
   if (!key) {
     console.error('[anchor] BYEORIN_ANCHOR_KEY 환경변수가 없습니다.');
-    process.exit(1);
+    return 1;
   }
 
   // viem 은 이 스크립트에서만 쓴다. 검증기(verify-byeorin-apk.mjs)는 의존성 0 을
   // 유지해야 하므로 그쪽은 순수 fetch 로 RPC 를 부른다 — 제3자가 설치 없이
   // 검증할 수 있어야 하기 때문이다.
-  const { createWalletClient, http, defineChain } = await import('viem');
-  const { privateKeyToAccount } = await import('viem/accounts');
+  //
+  // 주의: viem 은 워크스페이스 패키지의 의존성이지 루트 의존성이 아니다.
+  // pnpm 은 기본적으로 호이스팅하지 않으므로 저장소 루트에서 이 import 는
+  // 실패한다. 실패하면 무엇을 해야 하는지 알려준다.
+  let viem, viemAccounts;
+  try {
+    viem = await import('viem');
+    viemAccounts = await import('viem/accounts');
+  } catch (e) {
+    console.error(
+      '\n[anchor] viem 을 불러올 수 없습니다.\n' +
+        `          ${e.message.split('\n')[0]}\n\n` +
+        '          viem 은 워크스페이스 패키지(apps/*, packages/wallet-sdk)의 의존성이고\n' +
+        '          저장소 루트에는 설치돼 있지 않습니다. 둘 중 하나로 해결합니다:\n\n' +
+        '            pnpm add -w -D viem            # 루트에 추가 (package.json 변경됨)\n' +
+        '            npm i --no-save viem           # 일회성, package.json 안 건드림\n',
+    );
+    return 1;
+  }
+  const { createWalletClient, http, defineChain } = viem;
+  const { privateKeyToAccount } = viemAccounts;
 
   const chain = defineChain({
     id: TTL_CHAIN.chainId,
@@ -120,6 +200,26 @@ async function main() {
   const client = createWalletClient({ account, chain, transport: http() });
 
   console.log(`  publisher ${account.address}`);
+
+  // 발행 직전 최종 확인 — 여기서 틀리면 append-only 라 되돌릴 수 없다.
+  const liveChainId = parseInt(await rpc('eth_chainId', []), 16);
+  if (liveChainId !== TTL_CHAIN.chainId) {
+    console.error(`[anchor] RPC 의 chainId 가 ${liveChainId} 다 (기대 ${TTL_CHAIN.chainId}). 중단.`);
+    return 1;
+  }
+  if (publishers.length > 0 && !publishers.map((p) => p.toLowerCase()).includes(account.address.toLowerCase())) {
+    console.error(
+      `[anchor] 이 키의 주소 ${account.address} 가 anchor-publishers.json 에 없다.\n` +
+        '          이대로 발행하면 검증기가 FAIL 을 낸다. 중단.',
+    );
+    return 1;
+  }
+  const balance = BigInt(await rpc('eth_getBalance', [account.address, 'latest']));
+  console.log(`  잔액      ${(Number(balance) / 1e18).toFixed(9)} TTL`);
+  if (!cost.error && balance < BigInt(cost.wei)) {
+    console.error(`[anchor] 잔액 부족 — 최소 ${cost.costTtl} TTL 필요. 중단.`);
+    return 1;
+  }
 
   // 자기 자신에게 0 TTL 을 보내며 data 만 싣는다. 수신자를 두지 않는 편이
   // "이건 값 전송이 아니라 기록" 이라는 의도가 분명하다.
@@ -147,8 +247,16 @@ async function main() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((e) => {
-    console.error('[anchor] 실패:', e.message);
-    process.exit(1);
-  });
+  // process.exit() 를 쓰지 않는다 — fetch 로 열린 소켓이 남은 상태에서 강제 종료하면
+  // Windows 에서 libuv assertion 이 터지며 종료 코드가 127 로 뒤덮인다.
+  // exitCode 만 세우고 이벤트 루프가 자연히 비도록 둔다.
+  main().then(
+    (code) => {
+      process.exitCode = code ?? 0;
+    },
+    (e) => {
+      console.error('[anchor] 실패:', e.message);
+      process.exitCode = 1;
+    },
+  );
 }

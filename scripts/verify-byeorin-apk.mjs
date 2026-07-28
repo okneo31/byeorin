@@ -91,10 +91,16 @@ results.push({
 //
 // 매니페스트는 저장소에만 있으므로, 저장소를 통제하는 쪽이 과거 기록을 바꿀 수
 // 있다. 체인에 들어간 기록은 그럴 수 없다. 여기서는 매니페스트가 가리키는
-// 앵커 트랜잭션을 **체인에서 직접** 읽어(우리 서버 아님) 세 가지를 본다:
+// 앵커 트랜잭션을 **체인에서 직접** 읽어(우리 서버 아님) 다음을 본다:
+//   ⓪ 이 RPC 가 매니페스트가 말하는 그 체인인가 (eth_chainId)
 //   ① 그 트랜잭션이 실제로 존재하는가
 //   ② 보낸 주소가 공개된 publisher 목록에 있는가
 //   ③ data 안에 이 APK 의 sha256 이 들어 있는가
+//   ④ 블록에 들어갔는가 (pending 은 확정이 아니다)
+//
+// publisher 목록이 비어 있으면 ② 를 검사할 수 없다. 그때는 **OK 를 주지 않는다** —
+// SKIP 으로 내리고 경고를 찍는다. "누가 공표했는지 모르는 앵커" 를 초록불로
+// 보여주면 앵커가 증명하는 것보다 많은 것을 주장하게 된다.
 //
 // 의존성 없이 순수 fetch 로 JSON-RPC 를 부른다 — 제3자가 아무것도 설치하지 않고
 // 검증할 수 있어야 하기 때문이다.
@@ -109,34 +115,63 @@ if (!anchor?.txHash) {
   });
 } else {
   const rpcUrl = process.env.TTL_RPC_URL ?? 'https://rpc.ttl1.top';
-  try {
+  const rpc = async (method, params) => {
     const res = await fetch(rpcUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0', id: 1,
-        method: 'eth_getTransactionByHash', params: [anchor.txHash],
-      }),
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
       signal: AbortSignal.timeout(15000),
     });
-    const { result: tx, error } = await res.json();
+    const { result, error } = await res.json();
     if (error) throw new Error(error.message);
+    return result;
+  };
+  try {
+    // ⓪ 이 RPC 가 매니페스트가 가리키는 체인인가. TTL_RPC_URL 로 아무 체인이나
+    //    가리킬 수 있으므로, 확인하지 않으면 "아무 체인에서나 통과" 가 된다.
+    const wantChainId = anchor.chainId ?? null;
+    const gotChainId = parseInt(await rpc('eth_chainId', []), 16);
+    const chainMatch = wantChainId === null || gotChainId === wantChainId;
+
+    const tx = await rpc('eth_getTransactionByHash', [anchor.txHash]);
     if (!tx) throw new Error('트랜잭션을 체인에서 찾을 수 없다');
 
     const publishers = loadPublishers().map((p) => p.toLowerCase());
-    const from = (tx.from ?? '').toLowerCase();
-    const knownPublisher = publishers.length === 0 || publishers.includes(from);
+    const from = typeof tx.from === 'string' ? tx.from.toLowerCase() : '';
+    const publisherUnchecked = publishers.length === 0;
+    const knownPublisher = !publisherUnchecked && from !== '' && publishers.includes(from);
     const dataText = hexToUtf8(tx.input ?? '0x');
     const hashInData = dataText.includes(manifest.sha256);
+    const mined = Boolean(tx.blockNumber);
+
+    // 확실히 틀린 것 = FAIL. 확인할 수 없는 것 = SKIP. 둘을 섞지 않는다.
+    const hardFail = !chainMatch || !hashInData || (!publisherUnchecked && !knownPublisher);
+    const warnings = [];
+    if (!chainMatch)
+      warnings.push(`⚠ 체인 불일치 — 매니페스트는 chainId ${wantChainId}, 이 RPC 는 ${gotChainId}`);
+    if (!hashInData) warnings.push('⚠ data 에 이 APK 의 sha256 이 없음');
+    if (!publisherUnchecked && !knownPublisher)
+      warnings.push('⚠ from 이 공개된 publisher 목록에 없음');
+    if (publisherUnchecked)
+      warnings.push(
+        '⚠ anchor-publishers.json 이 없거나 publishers 가 비어 있어 from 을 검사하지 못했다.\n' +
+          '          → 이 앵커를 "누가" 공표했는지 확인되지 않았다. 아무나 만든\n' +
+          '            트랜잭션이어도 여기까지는 통과한다. 목록을 채우기 전에는\n' +
+          '            이 항목을 근거로 삼지 말 것.',
+      );
+    if (!mined)
+      warnings.push('⚠ 아직 블록에 들어가지 않았다(pending) — 확정된 기록이 아니다');
 
     results.push({
       name: '온체인 앵커',
-      pass: knownPublisher && hashInData,
+      pass: hardFail ? false : publisherUnchecked || !mined ? null : true,
       detail:
         `tx ${anchor.txHash}\n` +
-        `          from ${tx.from}${knownPublisher ? '' : '  ⚠ 공개된 publisher 목록에 없음'}\n` +
-        `          block ${tx.blockNumber ? parseInt(tx.blockNumber, 16) : '(pending)'}\n` +
-        `          data "${dataText.slice(0, 80)}"${hashInData ? '' : '\n          ⚠ data 에 이 APK 의 sha256 이 없음'}`,
+        `          chainId ${gotChainId}${chainMatch ? '' : ` (기대 ${wantChainId})`}\n` +
+        `          from ${tx.from ?? '(없음)'}\n` +
+        `          block ${mined ? parseInt(tx.blockNumber, 16) : '(pending)'}\n` +
+        `          data "${dataText.slice(0, 80)}"` +
+        warnings.map((w) => `\n          ${w}`).join(''),
     });
   } catch (e) {
     results.push({
