@@ -18,7 +18,8 @@
     "@resvg/resvg-js": "^2.6.2",
     "opentype.js": "^2.0.0",
     "sharp": "^0.34.5",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "viem": "^2.21.40"
   },
   "pnpm": {
     "overrides": {
