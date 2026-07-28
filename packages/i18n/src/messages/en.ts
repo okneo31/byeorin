@@ -509,4 +509,56 @@ export const en: Catalog = {
   'settings.info.title': 'About',
   'settings.info.app_line': '벼린 (Worker\'s Wallet) — Desktop · v{version}',
   'settings.info.chain_line': 'TTL Chain ID 7777 · https://rpc.ttl1.top',
+
+  // ───────── Addresses by chain (Stage E2) ─────────
+  'addresses.title': 'Addresses by chain',
+  'addresses.lead': 'Addresses of the active account on each chain. Share one of these to receive funds.',
+  'addresses.loading': 'Loading chains…',
+  'addresses.unsupported': 'Not supported',
+  'addresses.copy_aria': 'Copy {chain} address',
+  'addresses.copy_failed': 'Clipboard access was denied. Select the address and copy it manually.',
+
+  // ───────── Address book (Stage E2) ─────────
+  'addressbook.title': 'Address book',
+  'addressbook.lead': 'Keep the addresses you send to often, with labels.',
+  'addressbook.loading': 'Loading address book…',
+  'addressbook.self_section': 'My accounts',
+  'addressbook.self_empty': 'No account addresses yet.',
+  'addressbook.self_readonly': 'Your own addresses are synced automatically from your accounts.',
+  'addressbook.external_section': 'External addresses',
+  'addressbook.external_empty': 'No saved external addresses.',
+  'addressbook.add_title': 'Add an external address',
+  'addressbook.label_field': 'Label',
+  'addressbook.label_placeholder': 'e.g. Exchange deposit',
+  'addressbook.address_field': 'Address',
+  'addressbook.chain_field': 'Chain',
+  'addressbook.add_button': 'Add to address book',
+  'addressbook.added': 'Added to the address book.',
+  'addressbook.duplicate_updated': 'This address was already saved — its label was updated.',
+  'addressbook.remove_button': 'Delete',
+  'addressbook.remove_confirm_yes': 'Confirm delete',
+  'addressbook.error_label_required': 'Enter a label.',
+  'addressbook.error_address_required': 'Enter an address.',
+  'addressbook.error_chain_required': 'Select a chain.',
+  'addressbook.error_save_failed': 'Could not save the address book: {reason}',
+  'addressbook.error_load_failed': 'Could not load the address book: {reason}',
+  'addressbook.suggestions_label': 'Pick from address book',
+
+  // ───────── Activity — extension popup additions (Stage E3) ─────────
+  'activity.unsupported_chain': 'Activity is not supported on this chain yet.',
+  'activity.retry': 'Try again',
+  'activity.rel.just_now': 'Just now',
+  'activity.rel.minutes': '{n, plural, one {1 minute ago} other {# minutes ago}}',
+  'activity.rel.hours': '{n, plural, one {1 hour ago} other {# hours ago}}',
+  'activity.rel.days': '{n, plural, one {1 day ago} other {# days ago}}',
+  'activity.block_number': 'Block #{n}',
+
+  // ───────── Token transfer (Stage E3) ─────────
+  // send.asset_native_option hardcodes 'TTL', which is wrong on Polygon/BSC/etc.
+  // This key takes the symbol instead.
+  'send.asset_native_option_symbol': '{symbol} (native)',
+  'send.available_balance': 'Available {amount} {symbol}',
+  'send.amount_exceeds_balance': 'Exceeds your balance ({balance} {symbol}).',
+  'send.amount_decimals_exceeded': '{symbol} allows at most {decimals} decimal places.',
+  'send.review_contract_label': 'Token contract',
 };

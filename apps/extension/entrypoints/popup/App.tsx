@@ -19,7 +19,13 @@ import type {
   ZionPool,
   ZionSwapQuote,
 } from '@byeorin/wallet-sdk/multichain';
-import { ShellError, type AccountInfo } from '@byeorin/shell-core';
+import {
+  Addressbook,
+  ChromeLocalBackend,
+  ShellError,
+  type AccountInfo,
+  type SelfAddressInput,
+} from '@byeorin/shell-core';
 import { LocaleSwitch, useT } from '@byeorin/i18n/react';
 import type { DiscoveredBalance, EvmAdapter } from '@byeorin/wallet-sdk/evm';
 import {
@@ -45,6 +51,14 @@ import {
   type GrantMethod,
   type GrantRecord,
 } from '../../src/lib/grants.js';
+// Stage E2/E3 화면들 — App.tsx 가 2500 줄을 넘겨 화면 단위로 분리했다.
+import { AddressMatrix } from './screens/AddressMatrix.js';
+import {
+  AddressbookPane,
+  notifyAddressbookChanged,
+} from './screens/AddressbookPane.js';
+import { ActivityPane } from './screens/ActivityPane.js';
+import { SendPane } from './screens/SendPane.js';
 
 // 벼린 — 확장 팝업.
 // 셸 라이프사이클: 잠금 → (생성/복구/PK import) → 잠금해제 → (계정 추가/전환/제거/키 노출) → 잠금.
@@ -56,6 +70,9 @@ import {
 //   - 'export'     : 활성 계정의 비밀 키 노출 (경고 + 체크박스 게이트)
 //   - 'create'     : 3 단계 시드 생성 (잠금 전/후 공용)
 //   - 'restore'    : 시드 복구 입력 (잠금 전/후 공용)
+//   - 'addresses'  : 활성 계정의 체인별 주소 매트릭스 (Stage E2)
+//   - 'addressbook': 주소록 — 내 계정 자동 sync + 외부 주소 CRUD (Stage E2)
+//   - 'activity'   : 활동 내역 (Stage E3, EVM 체인 전용)
 
 type Mode =
   | 'home'
@@ -65,7 +82,10 @@ type Mode =
   | 'import-pk'
   | 'export'
   | 'send'
-  | 'swap';
+  | 'swap'
+  | 'addresses'
+  | 'addressbook'
+  | 'activity';
 
 // 송금 금액 검증 — 10진수, 소수점 18자리 이하 (체인별 decimals 는 parseUnits 가 처리).
 const AMOUNT_RE = /^\d+(\.\d{1,18})?$/;
@@ -147,6 +167,13 @@ export function App() {
   const [prices, setPrices] = useState<Record<string, number> | null>(null);
   // BTC ↔ USD 토글 — 모든 활성 계정 카드가 공유 (사용자가 한 번 USD 켜면 체인 바꿔도 유지).
   const [showUsd, setShowUsd] = useState(false);
+  // 송금 화면이 쓸 자산 정보 — ActiveAccountCard 가 이미 조회한 값을 끌어올린다.
+  // 카드는 mode==='home' 에서만 마운트되므로 App 이 들고 있어야 send 화면에서 산다.
+  const [sendTokens, setSendTokens] = useState<DiscoveredBalance[] | null>(null);
+  const [sendNativeBalance, setSendNativeBalance] = useState<bigint | null>(null);
+
+  // 주소록 — 저장은 chrome.storage.local 평문 JSON (공개키 파생물인 주소만 담는다).
+  const book = useMemo(() => new Addressbook(new ChromeLocalBackend()), []);
 
   const methodLabel = (m: GrantMethod): string => t(`popup.method.${m}`);
 
@@ -158,6 +185,29 @@ export function App() {
   useEffect(() => {
     void loadCustomTokensFromStorage();
   }, []);
+
+  // 내 계정 × 전 체인 주소를 주소록의 self 구역에 자동 반영.
+  // 계정/체인 목록이 바뀔 때만 돈다. 계정 수 × 체인 수만큼 adapter 를 만들지만
+  // build() 는 RPC 를 때리지 않는 순수 객체 생성이다.
+  useEffect(() => {
+    if (!chainSpecs || accounts.length === 0) return;
+    const inputs: SelfAddressInput[] = [];
+    for (const acc of accounts) {
+      const accLabel = acc.label ?? t('accounts.no_label', { idx: acc.idx + 1 });
+      for (const spec of chainSpecs) {
+        try {
+          inputs.push({
+            label: `${accLabel} · ${spec.displayName}`,
+            address: walletStore.getAccountAt(acc.idx, spec.build()).address,
+            chainKey: spec.key,
+          });
+        } catch {
+          // 계정 × 체인 미지원 조합 (raw key + ed25519 등) — 주소록에 넣지 않는다.
+        }
+      }
+    }
+    void book.syncSelfEntries(inputs).then(notifyAddressbookChanged);
+  }, [accounts, chainSpecs, book, t]);
 
   // HW 상태 구독. wallet-service 의 메모리 상태(transport 점유 시) 와,
   // hw-connect.html 페이지가 chrome.storage.session 에 적는 결과(별도 window
@@ -419,6 +469,11 @@ export function App() {
             onShowKey={() => setMode('export')}
             onSend={() => setMode('send')}
             onSwap={() => setMode('swap')}
+            onAddresses={() => setMode('addresses')}
+            onAddressbook={() => setMode('addressbook')}
+            onActivity={() => setMode('activity')}
+            onTokensChange={setSendTokens}
+            onNativeBalanceChange={setSendNativeBalance}
             onLock={handleLogout}
             chainSpecs={chainSpecs}
             chainSpecsErr={chainSpecsErr}
@@ -441,7 +496,7 @@ export function App() {
         </>
       )}
 
-      {/* 송금 화면 — 활성 계정 + 활성 체인 기준 네이티브 송금. ERC-20 토큰은 Stage E2. */}
+      {/* 송금 화면 — 활성 계정 + 활성 체인. native + ERC-20 토큰(EVM) 둘 다. */}
       {unlocked && mode === 'send' && (
         <SendPane
           onBack={() => setMode('home')}
@@ -449,6 +504,40 @@ export function App() {
           nativeSymbol={effectiveSymbol}
           nativeDecimals={effectiveDecimals}
           chainKey={activeChainKey}
+          tokens={sendTokens}
+          nativeBalance={sendNativeBalance}
+          book={book}
+        />
+      )}
+
+      {/* 체인별 주소 매트릭스 — 활성 계정 기준 */}
+      {unlocked && mode === 'addresses' && accounts.length > 0 && (
+        <AddressMatrix
+          account={accounts.find((a) => a.active) ?? accounts[0]!}
+          chainSpecs={chainSpecs}
+          onBack={() => setMode('home')}
+        />
+      )}
+
+      {/* 주소록 */}
+      {unlocked && mode === 'addressbook' && (
+        <AddressbookPane
+          book={book}
+          chainSpecs={chainSpecs}
+          defaultChainKey={activeChainKey}
+          onBack={() => setMode('home')}
+        />
+      )}
+
+      {/* 활동 내역 — EVM 체인 전용. 비-EVM 은 화면 안에서 미지원 안내. */}
+      {unlocked && mode === 'activity' && (
+        <ActivityPane
+          onBack={() => setMode('home')}
+          address={accounts.find((a) => a.active)?.address ?? null}
+          adapter={effectiveAdapter}
+          chainKey={activeChainKey}
+          nativeSymbol={effectiveSymbol}
+          nativeDecimals={effectiveDecimals}
         />
       )}
 
@@ -550,6 +639,11 @@ function AccountListCard({
   onShowKey,
   onSend,
   onSwap,
+  onAddresses,
+  onAddressbook,
+  onActivity,
+  onTokensChange,
+  onNativeBalanceChange,
   onLock,
   chainSpecs,
   chainSpecsErr,
@@ -569,6 +663,11 @@ function AccountListCard({
   onShowKey: () => void;
   onSend: () => void;
   onSwap: () => void;
+  onAddresses: () => void;
+  onAddressbook: () => void;
+  onActivity: () => void;
+  onTokensChange: (rows: DiscoveredBalance[] | null) => void;
+  onNativeBalanceChange: (b: bigint | null) => void;
   onLock: () => void;
   chainSpecs: ChainSpec[] | null;
   chainSpecsErr: string | null;
@@ -598,6 +697,11 @@ function AccountListCard({
           onShowKey={onShowKey}
           onSend={onSend}
           onSwap={onSwap}
+          onAddresses={onAddresses}
+          onAddressbook={onAddressbook}
+          onActivity={onActivity}
+          onTokensChange={onTokensChange}
+          onNativeBalanceChange={onNativeBalanceChange}
           onLock={onLock}
           adapter={adapter}
           nativeSymbol={nativeSymbol}
@@ -674,6 +778,11 @@ function ActiveAccountCard({
   onShowKey,
   onSend,
   onSwap,
+  onAddresses,
+  onAddressbook,
+  onActivity,
+  onTokensChange,
+  onNativeBalanceChange,
   onLock,
   adapter,
   nativeSymbol,
@@ -691,6 +800,13 @@ function ActiveAccountCard({
   onShowKey: () => void;
   onSend: () => void;
   onSwap: () => void;
+  onAddresses: () => void;
+  onAddressbook: () => void;
+  onActivity: () => void;
+  /** 발견한 ERC-20 잔액을 상위(App)로 흘려보낸다 — 송금 화면이 재조회 없이 쓴다. */
+  onTokensChange: (rows: DiscoveredBalance[] | null) => void;
+  /** native 잔액을 상위로. 송금 화면의 잔액 초과 검사에 쓰인다. */
+  onNativeBalanceChange: (b: bigint | null) => void;
   onLock: () => void;
   adapter: ChainAdapter;
   nativeSymbol: string;
@@ -725,6 +841,16 @@ function ActiveAccountCard({
   const [addTokenErr, setAddTokenErr] = useState<string | null>(null);
   // 토큰 추가 후 즉시 evmTokens 를 refresh — 트리거용 카운터.
   const [tokenListRev, setTokenListRev] = useState(0);
+
+  // 조회 결과를 상위(App)로 올린다. 이 카드는 mode==='home' 에서만 마운트되므로,
+  // 송금 화면이 열리는 순간 카드가 사라져 값을 잃는다 — App 이 대신 들고 있어야
+  // 송금 화면이 같은 RPC 를 두 번 때리지 않는다.
+  useEffect(() => {
+    onTokensChange(evmTokens);
+  }, [evmTokens, onTokensChange]);
+  useEffect(() => {
+    onNativeBalanceChange(balance);
+  }, [balance, onNativeBalanceChange]);
 
   // native asset → BTC 비율. 미상장(TTL/kWR) 은 PRICE_PEG_TO_BTC 페그, 그 외는
   // Binance ticker 의 {SYM}BTC pair. BTC 자체는 1:1.
@@ -1149,6 +1275,16 @@ function ActiveAccountCard({
             {t('account.swap')}
           </button>
         )}
+        {/* 활동 내역 — 비-EVM 에서도 눌러 "미지원" 안내를 볼 수 있게 막지 않는다. */}
+        <button className="btn-ghost btn-sm" onClick={onActivity}>
+          {t('activity.title')}
+        </button>
+        <button className="btn-ghost btn-sm" onClick={onAddresses}>
+          {t('addresses.title')}
+        </button>
+        <button className="btn-ghost btn-sm" onClick={onAddressbook}>
+          {t('addressbook.title')}
+        </button>
         <button className="btn-ghost btn-sm" onClick={onShowKey}>
           {t('accounts.show_key_button')}
         </button>
@@ -1158,202 +1294,6 @@ function ActiveAccountCard({
       </div>
 
       <p className="warn small">{t('popup.session_only_warn')}</p>
-    </section>
-  );
-}
-
-// ────────── 송금 화면 ──────────
-//
-// Web Send.tsx 의 핵심을 popup 폭에 맞춰 포팅. 1차는 native TTL 만 지원하고
-// ERC-20 송금은 Stage A2 (토큰 목록 도입과 함께) 에서 활성화한다.
-//
-// 단계: 'compose' (주소/금액 입력) → 'review' (요약 + 확정) → 'sent' / 'error'.
-function SendPane({
-  onBack,
-  adapter,
-  nativeSymbol,
-  nativeDecimals,
-  chainKey,
-}: {
-  onBack: () => void;
-  adapter: ChainAdapter;
-  nativeSymbol: string;
-  nativeDecimals: number;
-  chainKey: string;
-}) {
-  const t = useT();
-  type Step = 'compose' | 'review';
-  type Status =
-    | { kind: 'idle' }
-    | { kind: 'pending' }
-    | { kind: 'sent'; hash: string }
-    | { kind: 'error'; message: string };
-
-  const [step, setStep] = useState<Step>('compose');
-  const [to, setTo] = useState('');
-  const [amount, setAmount] = useState('');
-  const [status, setStatus] = useState<Status>({ kind: 'idle' });
-
-  // TTL(evm:ttl) 만 익스플로러 링크를 노출한다 — scan.ttl1.top 은 TTL 전용.
-  const isTtl = chainKey === 'evm:ttl';
-  const isEvm = chainKey.startsWith('evm:');
-  const trimmedTo = to.trim();
-  const trimmedAmount = amount.trim();
-  // EVM 은 0x+40hex 엄격 검증. 비-EVM(cosmos bech32, solana base58 등)은 형식이
-  // 체인마다 달라 popup 에서 일괄 검증하지 않고 non-empty 만 본다 — 잘못된 주소는
-  // 어댑터의 broadcast 단계에서 실패한다.
-  const validAddress = isEvm
-    ? /^0x[0-9a-fA-F]{40}$/.test(trimmedTo)
-    : trimmedTo.length > 0;
-  const validAmount = AMOUNT_RE.test(trimmedAmount) && Number(trimmedAmount) > 0;
-  const showAmountError = trimmedAmount.length > 0 && !validAmount;
-  const locked = status.kind === 'pending' || status.kind === 'sent';
-  const canProceed = validAddress && validAmount && !locked;
-
-  async function performSend(): Promise<void> {
-    let value: bigint;
-    try {
-      // 활성 체인의 decimals 로 파싱 — EVM 18, Cosmos 6, BTC 8 등.
-      value = parseUnits(trimmedAmount, nativeDecimals);
-    } catch {
-      setStatus({ kind: 'error', message: t('send.amount_invalid') });
-      return;
-    }
-    const intent: TransferIntent = { to: trimmedTo, amount: value };
-    setStatus({ kind: 'pending' });
-    try {
-      // 활성 체인 어댑터로 송금 — defaultAdapter(TTL) 아님.
-      const hash = await walletStore.transfer(intent, adapter);
-      setStatus({ kind: 'sent', hash });
-    } catch (err) {
-      let msg: string;
-      if (err instanceof ShellError) msg = t(`errors.${err.code}`);
-      else if (err instanceof Error) msg = err.message || t('send.failed');
-      else msg = t('send.failed');
-      setStatus({ kind: 'error', message: msg });
-    }
-  }
-
-  if (step === 'review') {
-    const shortTo =
-      trimmedTo.length > 14 ? `${trimmedTo.slice(0, 6)}…${trimmedTo.slice(-4)}` : trimmedTo;
-
-    return (
-      <section className="card">
-        <h2 className="create-step__title">{t('send.review_title')}</h2>
-        <p className="create-step__lead">
-          {t('send.review_summary', {
-            amount: trimmedAmount,
-            symbol: nativeSymbol,
-            address: shortTo,
-          })}
-        </p>
-        <div className="send-review__row">
-          <span className="muted small">{t('send.review_gas_label')}</span>
-          <span className="small">{t('send.review_gas_unknown')}</span>
-        </div>
-        <p className="warn small" style={{ margin: 0 }}>
-          {t('send.review_irreversible')}
-        </p>
-
-        {status.kind === 'pending' && (
-          <p className="muted small">{t('send.pending')}</p>
-        )}
-        {status.kind === 'sent' && (
-          <div className="send-sent">
-            <p className="label">{t('send.sent_title')}</p>
-            <p className="addr send-hash" title={status.hash}>
-              {shortenAddress(status.hash)}
-            </p>
-            {isTtl && (
-              <a
-                href={`https://scan.ttl1.top/tx/${status.hash}`}
-                target="_blank"
-                rel="noreferrer"
-                className="small"
-              >
-                {t('send.view_in_explorer')}
-              </a>
-            )}
-          </div>
-        )}
-        {status.kind === 'error' && <p className="error">{status.message}</p>}
-
-        {status.kind === 'sent' ? (
-          <button className="btn-primary" onClick={onBack}>
-            {t('send.back_to_wallet')}
-          </button>
-        ) : (
-          <button
-            className="btn-primary"
-            disabled={!canProceed}
-            onClick={() => {
-              void performSend();
-            }}
-          >
-            {status.kind === 'pending' ? t('send.sending') : t('send.review_confirm')}
-          </button>
-        )}
-        <button
-          className="btn-ghost"
-          onClick={() => setStep('compose')}
-          disabled={status.kind === 'pending' || status.kind === 'sent'}
-        >
-          {t('send.review_edit')}
-        </button>
-      </section>
-    );
-  }
-
-  // step === 'compose'
-  return (
-    <section className="card">
-      <h2 className="create-step__title">{t('send.title')}</h2>
-      <p className="create-step__lead">{t('send.lead_native', { symbol: nativeSymbol })}</p>
-
-      <label className="label" htmlFor="send-to">
-        {t('send.to_label')}
-      </label>
-      <textarea
-        id="send-to"
-        rows={2}
-        value={to}
-        onChange={(e) => setTo(e.target.value)}
-        placeholder={isEvm ? '0x...' : ''}
-        spellCheck={false}
-        autoCapitalize="none"
-        autoCorrect="off"
-        disabled={locked}
-      />
-      {trimmedTo.length > 0 && !validAddress && (
-        <p className="error small">{t('send.to_invalid')}</p>
-      )}
-
-      <label className="label" htmlFor="send-amount">
-        {t('send.amount_label', { symbol: nativeSymbol })}
-      </label>
-      <input
-        id="send-amount"
-        type="text"
-        inputMode="decimal"
-        className="verify-row__input"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        placeholder="0.0"
-        disabled={locked}
-      />
-      {showAmountError && <p className="error small">{t('send.amount_invalid')}</p>}
-
-      <button
-        className="btn-primary"
-        disabled={!canProceed}
-        onClick={() => setStep('review')}
-      >
-        {t('send.next_step')}
-      </button>
-      <button className="btn-ghost" onClick={onBack}>
-        {t('common.back')}
-      </button>
     </section>
   );
 }

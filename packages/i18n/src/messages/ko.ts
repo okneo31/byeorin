@@ -518,4 +518,56 @@ export const ko: Catalog = {
   'settings.info.title': '정보',
   'settings.info.app_line': '벼린 데스크톱 · v{version}',
   'settings.info.chain_line': 'TTL Chain ID 7777 · https://rpc.ttl1.top',
+
+  // ───────── 체인별 주소 매트릭스 (Stage E2) ─────────
+  'addresses.title': '체인별 주소',
+  'addresses.lead': '활성 계정의 체인별 주소입니다. 받을 때 상대에게 이 주소를 알려주세요.',
+  'addresses.loading': '체인 목록을 불러오는 중…',
+  'addresses.unsupported': '미지원',
+  'addresses.copy_aria': '{chain} 주소 복사',
+  'addresses.copy_failed': '클립보드 접근이 거부되었습니다. 주소를 직접 선택해 복사하세요.',
+
+  // ───────── 주소록 (Stage E2) ─────────
+  'addressbook.title': '주소록',
+  'addressbook.lead': '자주 보내는 주소를 라벨과 함께 보관합니다.',
+  'addressbook.loading': '주소록을 불러오는 중…',
+  'addressbook.self_section': '내 계정',
+  'addressbook.self_empty': '내 계정 주소가 아직 없습니다.',
+  'addressbook.self_readonly': '내 계정 주소는 계정 목록에서 자동으로 갱신됩니다.',
+  'addressbook.external_section': '외부 주소',
+  'addressbook.external_empty': '저장된 외부 주소가 없습니다.',
+  'addressbook.add_title': '외부 주소 추가',
+  'addressbook.label_field': '라벨',
+  'addressbook.label_placeholder': '예) 거래소 입금',
+  'addressbook.address_field': '주소',
+  'addressbook.chain_field': '체인',
+  'addressbook.add_button': '주소록에 추가',
+  'addressbook.added': '주소록에 추가했습니다.',
+  'addressbook.duplicate_updated': '이미 저장된 주소입니다 — 라벨만 갱신했습니다.',
+  'addressbook.remove_button': '삭제',
+  'addressbook.remove_confirm_yes': '삭제 확인',
+  'addressbook.error_label_required': '라벨을 입력하세요.',
+  'addressbook.error_address_required': '주소를 입력하세요.',
+  'addressbook.error_chain_required': '체인을 선택하세요.',
+  'addressbook.error_save_failed': '주소록 저장에 실패했습니다: {reason}',
+  'addressbook.error_load_failed': '주소록을 불러오지 못했습니다: {reason}',
+  'addressbook.suggestions_label': '주소록에서 선택',
+
+  // ───────── 활동 내역 — 확장 popup 추가분 (Stage E3) ─────────
+  'activity.unsupported_chain': '이 체인은 아직 활동 내역을 지원하지 않습니다.',
+  'activity.retry': '다시 시도',
+  'activity.rel.just_now': '방금',
+  'activity.rel.minutes': '{n}분 전',
+  'activity.rel.hours': '{n}시간 전',
+  'activity.rel.days': '{n}일 전',
+  'activity.block_number': '블록 #{n}',
+
+  // ───────── 토큰 송금 (Stage E3) ─────────
+  // send.asset_native_option 은 'TTL (네이티브)' 로 하드코딩이라 Polygon/BSC 등에서
+  // 틀린 표시가 된다. 심볼을 받는 아래 키를 새로 쓴다.
+  'send.asset_native_option_symbol': '{symbol} (네이티브)',
+  'send.available_balance': '보유 {amount} {symbol}',
+  'send.amount_exceeds_balance': '잔액을 초과합니다 (보유 {balance} {symbol}).',
+  'send.amount_decimals_exceeded': '{symbol} 은(는) 소수점 {decimals}자리까지만 보낼 수 있습니다.',
+  'send.review_contract_label': '토큰 컨트랙트',
 };
