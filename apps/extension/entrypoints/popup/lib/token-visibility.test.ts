@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { DiscoveredBalance } from '@byeorin/wallet-sdk/evm';
+import { unresolvedRates } from '@byeorin/wallet-sdk/evm';
 import {
   EMPTY_HIDDEN,
   HIDDEN_TOKENS_KEY,
@@ -292,14 +293,23 @@ describe('defaultMetaResolver', () => {
     });
   });
 
-  it('실제 스냅샷의 tTWD 는 환율 없이 국가/사유만 나온다', () => {
+  // 어느 통화가 미해결인지는 데이터 사정에 따라 변한다 — 대만은 World Bank 에
+  // 없어 미해결이었다가 IMF 폴백으로 채워졌다. 특정 통화를 못 박는 대신
+  // "미해결이면 환율 없이 사유가 나온다" 는 불변식을 검사한다.
+  it('미해결 통화는 환율 없이 국가/사유만 나온다', () => {
+    const first = unresolvedRates()[0];
+    if (!first) {
+      // 미해결이 하나도 없는 것은 정상 상태다. 그때는 검사할 대상이 없다.
+      expect(unresolvedRates().length).toBe(0);
+      return;
+    }
     // unresolved 목록은 주소가 없으므로 심볼로 걸린다.
     const meta = defaultMetaResolver(
       '0x0000000000000000000000000000000000000000',
-      'tTWD',
+      first.symbol,
     );
     expect(meta.rate).toBeNull();
-    expect(meta.country).toBe('Taiwan');
+    expect(meta.country).toBe(first.country);
     expect(meta.unresolvedReason).toBeTruthy();
   });
 });

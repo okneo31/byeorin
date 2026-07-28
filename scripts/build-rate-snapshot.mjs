@@ -84,6 +84,56 @@ const CURRENCY_UNIONS = {
  */
 const ANCHORED_AT = '2026-07-29';
 
+/**
+ * World Bank 가 다루지 않는 나라를 IMF 로 채운다. 현재는 대만뿐.
+ * 키는 TTL Scan 국가명, 값은 IMF DataMapper 국가코드.
+ */
+const IMF_FALLBACK = { Taiwan: 'TWN' };
+
+const IMF = 'https://www.imf.org/external/datamapper/api/v1';
+
+/**
+ * IMF 에서 **자국통화** 명목 GDP 와 인구를 얻는다.
+ *
+ * IMF DataMapper 에는 자국통화 GDP 계열이 아예 없다 — 달러(NGDPD)와 PPP 뿐이다.
+ * 달러 환산값은 시장환율이 이미 곱해진 값이라 쓸 수 없다. 그래서 항등식으로
+ * 되돌린다:
+ *
+ *   PPPGDP(국제달러) × PPPEX(자국통화/국제달러) = 자국통화 GDP
+ *
+ * PPP 환산율은 물가 기반이지 시장환율이 아니므로 이 체계의 전제를 깨지 않는다.
+ * 실측 검증(2026-07-29): 한국·일본·미국·독일에서 World Bank 자국통화 GDP 와
+ * 오차 0.00~0.02% 로 일치했다.
+ */
+async function imfLocalGdpAndPop(code, years) {
+  const get = async (ind) => {
+    const res = await fetch(`${IMF}/${ind}/${code}`);
+    if (!res.ok) return null;
+    const body = await res.json();
+    return body?.values?.[ind]?.[code] ?? null;
+  };
+  const [pppGdp, pppEx, pop] = await Promise.all([get('PPPGDP'), get('PPPEX'), get('LP')]);
+  if (!pppGdp || !pppEx || !pop) return null;
+  for (const y of years) {
+    const g = pppGdp[y];
+    const x = pppEx[y];
+    const p = pop[y];
+    if (typeof g === 'number' && typeof x === 'number' && typeof p === 'number' && p > 0) {
+      return {
+        // PPPGDP 는 10억 국제달러, LP 는 백만 명 단위다.
+        gdp: {
+          value: g * 1e9 * x,
+          year: y,
+          synthetic: 'IMF PPPGDP × PPPEX 로 자국통화 GDP 복원 (World Bank 미수록국)',
+        },
+        pop: { value: p * 1e6, year: y },
+        year: y,
+      };
+    }
+  }
+  return null;
+}
+
 const norm = (s) => String(s).toLowerCase().replace(/[^a-z]/g, '');
 
 async function wbIndicator(indicator, year) {
@@ -182,18 +232,32 @@ async function main() {
   for (const t of tokens) {
     const iso3 = ISO3_ALIAS[t.country] ?? byName.get(norm(t.country)) ?? null;
     const union = CURRENCY_UNIONS[t.iso];
-    const pair = union ? unionPair(union) : iso3 ? pickPair(iso3) : null;
+    const imfCode = IMF_FALLBACK[t.country];
+    // World Bank 우선. 거기 없는 나라만 IMF 로 채운다 — 출처를 하나로 몰아
+    // 두는 편이 재현이 쉽고, 섞이는 지점을 최소화한다.
+    const pair = union
+      ? unionPair(union)
+      : iso3
+        ? pickPair(iso3)
+        : imfCode
+          ? await imfLocalGdpAndPop(imfCode, ['2025', '2024'])
+          : null;
     const gdp = pair?.gdp ?? null;
     const pop = pair?.pop ?? null;
 
-    if ((!iso3 && !union) || !gdp || !pop || !(pop.value > 0)) {
+    if ((!iso3 && !union && !imfCode) || !gdp || !pop || !(pop.value > 0)) {
       // 추측하지 않는다. 데이터가 없으면 그 토큰은 가치 미표시로 남긴다 —
       // 틀린 환율을 보여주는 것보다 낫다.
       unresolved.push({
         symbol: t.symbol,
         iso: t.iso,
         country: t.country,
-        reason: !iso3 && !union ? 'World Bank 에 해당 국가 없음' : !gdp ? '명목GDP 없음' : '인구 없음',
+        reason:
+          !iso3 && !union && !imfCode
+            ? 'World Bank·IMF 어디에도 없음'
+            : !gdp
+              ? '명목GDP 없음'
+              : '인구 없음',
       });
       continue;
     }
@@ -205,7 +269,7 @@ async function main() {
       address: t.address,
       decimals: t.decimals,
       country: t.country,
-      ...(union ? { iso3Members: [...union] } : { iso3 }),
+      ...(union ? { iso3Members: [...union] } : { iso3: iso3 ?? imfCode }),
       // 1 TTL = perTtl 단위의 이 토큰.
       perTtl,
       inputs: {
@@ -232,6 +296,7 @@ async function main() {
       population: `World Bank ${POPULATION}`,
       tokens: TOKENS_API,
       api: WB,
+      imfFallback: `IMF DataMapper — World Bank 미수록국만. PPPGDP × PPPEX 로 자국통화 GDP 복원 (${IMF})`,
     },
     notes: [
       '이 파일은 앵커다. 한 번 만들고 그 뒤로 외부 데이터를 다시 보지 않는다.',

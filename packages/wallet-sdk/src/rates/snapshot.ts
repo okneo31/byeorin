@@ -19,7 +19,8 @@ export const RATE_SNAPSHOT: RateSnapshot = {
     "gdp": "World Bank NY.GDP.MKTP.CN (GDP, current LCU — 명목·자국통화)",
     "population": "World Bank SP.POP.TOTL",
     "tokens": "https://scan.ttl1.top/api/tokens?limit=500",
-    "api": "https://api.worldbank.org/v2"
+    "api": "https://api.worldbank.org/v2",
+    "imfFallback": "IMF DataMapper — World Bank 미수록국만. PPPGDP × PPPEX 로 자국통화 GDP 복원 (https://www.imf.org/external/datamapper/api/v1)"
   },
   "notes": [
     "이 파일은 앵커다. 한 번 만들고 그 뒤로 외부 데이터를 다시 보지 않는다.",
@@ -907,6 +908,22 @@ export const RATE_SNAPSHOT: RateSnapshot = {
       }
     },
     {
+      "symbol": "tTWD",
+      "iso": "TWD",
+      "address": "0xD6f32FF1FC05F71C9ABDaC8e3b79fDB57cE574aa",
+      "decimals": 18,
+      "country": "Taiwan",
+      "iso3": "TWN",
+      "perTtl": 3374.7436284819087,
+      "inputs": {
+        "gdpLocal": 28699275407000,
+        "gdpYear": "2025",
+        "population": 23299000,
+        "populationYear": "2025",
+        "gdpSynthetic": "IMF PPPGDP × PPPEX 로 자국통화 GDP 복원 (World Bank 미수록국)"
+      }
+    },
+    {
       "symbol": "tTZS",
       "iso": "TZS",
       "address": "0x207a86F65D31881afE720b8fbE93BF8d5624506A",
@@ -1037,12 +1054,5 @@ export const RATE_SNAPSHOT: RateSnapshot = {
       }
     }
   ],
-  "unresolved": [
-    {
-      "symbol": "tTWD",
-      "iso": "TWD",
-      "country": "Taiwan",
-      "reason": "World Bank 에 해당 국가 없음"
-    }
-  ]
+  "unresolved": []
 } as const;

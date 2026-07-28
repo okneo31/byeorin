@@ -210,17 +210,32 @@ describe('crossRate — TTL 절대 눈금이 약분된다', () => {
 });
 
 describe('unresolvedRates — 추측하지 않고 남긴 것', () => {
-  it('대만(tTWD)이 실제로 여기 있다', () => {
-    const twd = RATE_SNAPSHOT.unresolved.find((u) => u.iso === 'TWD');
-    expect(twd).toBeDefined();
-    expect(twd!.symbol).toBe('tTWD');
-    expect(twd!.country).toBe('Taiwan');
-    expect(twd!.reason.length).toBeGreaterThan(0);
+  // 어느 통화가 미해결인지는 데이터 사정에 따라 변한다 — 실제로 대만은
+  // World Bank 에 없어 미해결이었다가 IMF 폴백으로 채워졌다. 그러므로 특정
+  // 통화의 상태가 아니라 **불변식**을 검사한다.
+  it('미해결 항목은 사유를 반드시 갖는다 — 왜 비었는지 말하지 않는 빈칸을 두지 않는다', () => {
+    for (const u of RATE_SNAPSHOT.unresolved) {
+      expect(u.symbol.length).toBeGreaterThan(0);
+      expect(u.iso.length).toBeGreaterThan(0);
+      expect(u.country.length).toBeGreaterThan(0);
+      expect(u.reason.length).toBeGreaterThan(0);
+    }
   });
 
-  it('tTWD 는 rates 에도 없고 rateByIso 로도 안 잡힌다', () => {
-    expect(rateByIso('TWD')).toBeNull();
-    expect(RATE_SNAPSHOT.rates.some((r) => r.iso === 'TWD')).toBe(false);
+  it('미해결 통화는 조회 API 로 절대 잡히지 않는다 — 추정값이 새어나갈 경로가 없다', () => {
+    for (const u of RATE_SNAPSHOT.unresolved) {
+      expect(rateByIso(u.iso)).toBeNull();
+      expect(RATE_SNAPSHOT.rates.some((r) => r.iso === u.iso)).toBe(false);
+    }
+  });
+
+  it('IMF 폴백으로 채운 항목은 합성값임을 표시한다 — 출처가 섞인 것을 숨기지 않는다', () => {
+    for (const r of RATE_SNAPSHOT.rates) {
+      if (r.inputs.gdpSynthetic?.includes('IMF')) {
+        expect(r.inputs.gdpSynthetic).toMatch(/PPPGDP/);
+        expect(r.perTtl).toBeGreaterThan(0);
+      }
+    }
   });
 
   it('unresolved 는 주소를 갖지 않으므로 rateByAddress 로 잡을 방법이 없다', () => {
