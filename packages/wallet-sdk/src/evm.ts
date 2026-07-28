@@ -28,7 +28,9 @@ export {
   TokenRegistry,
   BUILTIN_CHAIN_IDS,
   discoverTokens,
+  fetchTtlScanTokens,
   type TokenInfo,
   type DiscoverOpts,
   type DiscoveredBalance,
+  type FetchTtlScanTokensOptions,
 } from './tokens/index.js';

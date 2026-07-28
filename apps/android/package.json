@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "sync": "pnpm build && cap sync android",
+    "sync": "pnpm -r --filter @byeorin/android^... build && pnpm build && cap sync android",
     "apk:debug": "pnpm sync && node scripts/gradle.mjs assembleDebug",
     "apk:release": "pnpm sync && node scripts/gradle.mjs assembleRelease",
     "apk": "pnpm sync && node scripts/gradle.mjs assembleDebug assembleRelease",

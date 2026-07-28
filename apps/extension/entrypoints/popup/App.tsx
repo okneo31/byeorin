@@ -35,6 +35,7 @@ import {
   discoverEvmTokens,
   getHwAccount,
   loadCustomTokensFromStorage,
+  loadTtlScanTokens,
   subscribeHwState,
   walletStore,
   type HwAccountState,
@@ -184,6 +185,9 @@ export function App() {
   // 사용자 커스텀 ERC-20 토큰을 storage 에서 registry 로 복원. 한 번만.
   useEffect(() => {
     void loadCustomTokensFromStorage();
+    // TTL 발행 토큰 목록을 체인 쪽에서 받아 registry 에 얹는다. 실패해도
+    // 빌트인으로 계속 동작하므로 결과를 기다리거나 오류를 띄우지 않는다.
+    void loadTtlScanTokens();
   }, []);
 
   // 내 계정 × 전 체인 주소를 주소록의 self 구역에 자동 반영.

@@ -6,7 +6,7 @@
   "description": "벼린 — 브라우저 확장 (MV3, EIP-1193)",
   "scripts": {
     "dev": "wxt",
-    "build": "wxt build",
+    "build": "pnpm -r --filter @byeorin/extension^... build && wxt build",
     "build:icons": "node scripts/build-icons.mjs",
     "zip": "wxt zip",
     "typecheck": "wxt prepare && tsc --noEmit",

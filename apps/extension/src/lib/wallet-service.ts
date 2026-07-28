@@ -28,6 +28,7 @@ import {
   TTL_CHAIN,
   TokenRegistry,
   discoverTokens,
+  fetchTtlScanTokens,
   type DiscoveredBalance,
   type TokenInfo,
 } from '@byeorin/wallet-sdk/evm';
@@ -75,6 +76,10 @@ type CustomTokensStored = Record<string, TokenInfo[]>;
 
 let _customTokensLoaded = false;
 
+// TTL 메인넷. 발행 목록 API 를 가진 유일한 체인이라 여기서만 자동 로드한다.
+const TTL_CHAIN_ID = 7777;
+let _ttlScanTokensLoaded = false;
+
 /** chrome.storage.local 에서 사용자 커스텀 토큰을 registry 로 복원. 멱등. */
 export async function loadCustomTokensFromStorage(): Promise<void> {
   if (_customTokensLoaded) return;
@@ -95,6 +100,31 @@ export async function loadCustomTokensFromStorage(): Promise<void> {
     // storage 비가용 — 다음 popup mount 에서 다시 시도.
     _customTokensLoaded = false;
   }
+}
+
+/**
+ * TTL Scan 이 들고 있는 발행 토큰 목록을 registry 에 넣는다. 멱등.
+ *
+ * 왜: 레지스트리의 BUILTIN 은 코드에 박힌 목록이라, 체인에 새 토큰이 발행돼도
+ * 확장을 새로 배포하기 전까지 보이지 않는다. 실제로 스테이블 66 종이 발행됐는데
+ * 지갑에는 하나도 안 떴다. 사용자가 주소를 손으로 넣을 이유가 없다 —
+ * 발행 사실은 이미 공개돼 있다.
+ *
+ * 목록은 **무엇을 조회할지**만 정한다. 잔액은 여기서 안 받고 체인에서
+ * balanceOf 로 읽는다. 익스플로러가 거짓 목록을 줘도 잔액을 부풀릴 수는 없다.
+ *
+ * storage 에 저장하지 않는다 — 발행 목록은 체인 쪽 사실이라 매번 최신을 받는
+ * 편이 맞고, 사용자가 손으로 추가한 토큰과 섞이면 지울 수도 없어진다.
+ * 실패하면 조용히 빌트인만 쓴다 (fetchTtlScanTokens 가 빈 배열을 준다).
+ */
+export async function loadTtlScanTokens(chainId: number = TTL_CHAIN_ID): Promise<number> {
+  if (chainId !== TTL_CHAIN_ID) return 0;
+  if (_ttlScanTokensLoaded) return 0;
+  const tokens = await fetchTtlScanTokens();
+  if (tokens.length === 0) return 0;
+  _ttlScanTokensLoaded = true;
+  for (const t of tokens) tokenRegistry.addCustomToken(chainId, t);
+  return tokens.length;
 }
 
 /** 새 커스텀 토큰을 registry + storage 양쪽에 등록. 중복 주소는 silently no-op. */
@@ -156,6 +186,9 @@ export async function discoverEvmTokens(
 ): Promise<DiscoveredBalance[]> {
   return discoverTokens(adapter, tokenRegistry, ownerAddress as `0x${string}`, {
     includeZero: opts.includeZero,
+    // 기본 상한 50 은 TTL 발행 66 종을 조용히 잘라낸다 — 잘린 토큰은 잔액이
+    // 있어도 화면에 안 나온다. 여유를 둬 전부 본다.
+    maxRpcCalls: 256,
   });
 }
 

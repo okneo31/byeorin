@@ -11,3 +11,7 @@ export {
   type DiscoverOpts,
   type DiscoveredBalance,
 } from './discovery.js';
+export {
+  fetchTtlScanTokens,
+  type FetchTtlScanTokensOptions,
+} from './ttlscan.js';
