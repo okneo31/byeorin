@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "network": "ttl",
+  "chainId": 7777,
+  "deployer": "0x49b60177cC7DcD4EC4477a7F9fC42F18fE40CeC4",
+  "feeToSetter": "0x49b60177cC7DcD4EC4477a7F9fC42F18fE40CeC4",
+  "contracts": {
+    "wttl": {
+      "address": "0xC555ee718E5330Ac41a0587e464f6e4Aad5B8Def",
+      "txHash": "0x9cd0b6fe73af08e2e170c29952af20ddc8084386332ce7d540eabe0c448e1ead",
+      "blockNumber": 1140755
+    },
+    "factory": {
+      "address": "0x0Aa9A48eB91AA49e61cb22D9DB5c0494e1Bcd2F8",
+      "txHash": "0x29053d1ab0abf3f923dfa3e55776a9ef81c53baaece66dbeeea49e9eeb8d9ed7",
+      "blockNumber": 1140901
+    },
+    "router": {
+      "address": "0xa9AFd8042A7E306784f3EdCF02Ab3BB0fbcA928c",
+      "txHash": "0x592e4128b4ec1b0f660eb4d9a34a1c876a5efa7d6309c23c09d12ed58971f796",
+      "blockNumber": 1140914
+    }
+  },
+  "compiler": {
+    "solcVersion": "0.8.28",
+    "optimizer": {
+      "enabled": true,
+      "runs": 999999
+    },
+    "evmVersion": "paris"
+  },
+  "deployedAt": "2026-07-29T12:16:08.297Z"
+}

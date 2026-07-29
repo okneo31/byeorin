@@ -1,0 +1,327 @@
+{
+  "router": "0xa9AFd8042A7E306784f3EdCF02Ab3BB0fbcA928c",
+  "chainId": 7777,
+  "done": {
+    "AED": {
+      "approveTx": "0x7fc2758f52d6d196ed40b9f4d33985e767e2e7430af0334680d4028fe4e22077",
+      "addTx": "0xd131b628e291949b3675f730f08c2f8cc6f3a5979202c38574bf6fd4093e37ad",
+      "block": 1140982
+    },
+    "AOA": {
+      "approveTx": "0xd5002598c4cec285658a0a8381435e9164ffb22cc53ab444f94490927d0b93a0",
+      "addTx": "0xd2c1592b54f7e34cc0163104fd648db0d7eb440191bce5c49762b4031dc71263",
+      "block": 1140984
+    },
+    "ARS": {
+      "approveTx": "0xb1aea8672ab8fa6da49061c35c2a2d8ccb3563ee403f267df593c6e1c20ae618",
+      "addTx": "0xa3c1fc57ef348250d6d04cd62b3d65d313a49c0232328abad081d75c7afe54e2",
+      "block": 1140986
+    },
+    "AUD": {
+      "approveTx": "0x8fbf484e29df945043a4820de6df4ed0b9b9ec15d315ab5ee0ab0b7c0b3327ed",
+      "addTx": "0x15eaaef9c44a8f0a4cf9edd0ec5a77246cc1ebd6178105d29704e164758b005e",
+      "block": 1141061
+    },
+    "AZN": {
+      "approveTx": "0xcd079b995b849292c8919115817da64a9ddd66942db84fdd75a0fb59fd20197c",
+      "addTx": "0x20be75a8d01216044b1034fc851b10deb681d83501c5bbedc41b24b1b0991d5e",
+      "block": 1141063
+    },
+    "BDT": {
+      "approveTx": "0xdd82bb6abb43cd43986035fc435d8801b63b6d1d0ce82a8ba4a66dde33cdfbce",
+      "addTx": "0x0b7721fce5aa82721ec99de1c8eabcb3cc62aeeb459c5cebdb98f710506cc18d",
+      "block": 1141160
+    },
+    "BRL": {
+      "approveTx": "0xd9026c6af8cc68198a02b35e32535a40c94f461ca755f2c409469077c014db11",
+      "addTx": "0xba943152e456b1a71ac251dc485cf19e7e557c599ef655fd6c9d401c6d684cf4",
+      "block": 1141162
+    },
+    "BYN": {
+      "approveTx": "0x70ebe222b30a89f7cd40dce7ff93f5f41f0645e8c9582991abf0884fea55a6f6",
+      "addTx": "0xf0c1404414ba7adc0dcff17ac3971b19e12cbd7a3cc6a3cdfc15cf26e4b4dbb1",
+      "block": 1141164
+    },
+    "CAD": {
+      "approveTx": "0xea0a31b2c557862851e2bb4c59f42aa823e78f9bc9b9a79018879d9203b353c8",
+      "addTx": "0x3a826fdf800c6ef05cd63d4455b58e281954222a353b49b1772b112307e2b4d5",
+      "block": 1141167
+    },
+    "CHF": {
+      "approveTx": "0xfeffacf83cee088ae1ce95a1b8c3ca05c030ea1708fcfcc03f530e212749c9b5",
+      "addTx": "0x657753d89e5e6361cfb236be33d1dcdfe06c60414062bfc72a5bbf6a1ced6c96",
+      "block": 1141169
+    },
+    "CLP": {
+      "approveTx": "0xcd0f78ad040c15974d230e7845060c6c04258d381755d20ab267070a50decfe4",
+      "addTx": "0xfcda5550a6729ec050225dea5f99c57d7bcf424449eb4b234dc4a67aa787cbe0",
+      "block": 1141173
+    },
+    "CNY": {
+      "approveTx": "0x9d463f9672f573a9c378526632cef4859747bbf966a52f321c59a19d6490b38e",
+      "addTx": "0x8025e926dbce68a84ab7ee11526f80dab46a403d80787e1687f2a5252a68de8b",
+      "block": 1141175
+    },
+    "COP": {
+      "approveTx": "0xa97735c66cd75b3414253db6d20b46be10f0f244f29fdef8dff100e92e3e19d6",
+      "addTx": "0x0d2a0e76a8bb63222b4182d686dee66c1870c76bef3c1788cb3c9c0a1f925790",
+      "block": 1141178
+    },
+    "CRC": {
+      "approveTx": "0xfe1dc8dece2d1121b6fde3c1c681a28f3499f2d73fa38ada9531f6f17d53aa75",
+      "addTx": "0xaef10d35f58a9cdd766f7e5c42504c5b449433e3f4a09f8c077413428625bc2f",
+      "block": 1141180
+    },
+    "CZK": {
+      "approveTx": "0x2b0037cb411bfe7de1c8b89f4e234e42814b4b05fcfb45b135502abc77578b8b",
+      "addTx": "0xba46917e80be57c8a8edc13ca97c2388046a89537a4edc331bf980453b1669e5",
+      "block": 1141183
+    },
+    "DKK": {
+      "approveTx": "0x8d2ea99ccfa0bc96b99231d37bb2c31fb94bd7beac14c251630357bcbd527b84",
+      "addTx": "0x47c117b22e9cde6607400720e2416b69b69044b0851f3e376458a16afb895829",
+      "block": 1141185
+    },
+    "DOP": {
+      "approveTx": "0x47194ef363dc93f651da7814b5f0dad3a0e0994265c6f7e3f301dedadcd69d17",
+      "addTx": "0x82ae63b62f50e011f773ea30a7874582015f985aad7e7f695beeaf02a17798ff",
+      "block": 1141188
+    },
+    "DZD": {
+      "approveTx": "0xa89ece96c9447e6b4f927a1706d28c129b551da81890eb4fcd5161b60a723763",
+      "addTx": "0xe47c8b044b1888f2192827cdb4d82eaf27d3e9aae513d2f9def8073d8c975900",
+      "block": 1141190
+    },
+    "EGP": {
+      "approveTx": "0x47e8f1892c3fa5e551b5f8750ccefb53b9cbf47354ec4cc69bded5a41f81ca3a",
+      "addTx": "0x14cc6d58ea26345319e7f92ee4aa37cbe599125906998d3f1211201b9953a44f",
+      "block": 1141193
+    },
+    "EUR": {
+      "approveTx": "0x7907b0ba8a40a8fdc6e9ea539156ad4122c3e16458349b980cc5271999852e34",
+      "addTx": "0x1fa6848d2689fd03f005aa54b1b90db088a6aaaa5a93da2c8c6afe78994a6c42",
+      "block": 1141195
+    },
+    "GBP": {
+      "approveTx": "0x84597e060ff265c5f37aaa917bbe78a2b87534683241b264ce96ad59580d2a44",
+      "addTx": "0x1b60b7c1b14680fce961815b63169e4c78d2e0fe4f212c5f8e272e5248c8daca",
+      "block": 1141198
+    },
+    "GHS": {
+      "approveTx": "0xecacb175e19f2846e33c3f94158a9fb050d86bd1afffdee95d3293a0d7b7bbee",
+      "addTx": "0x502248204848466645ba57b27fabcf21389095ee5c9dd0f45208afd2f3ea2933",
+      "block": 1141200
+    },
+    "GTQ": {
+      "approveTx": "0xb6e2ea101d9bf300a02199d474553bc23031f4e0efbbd1daa4aa56eca231fce6",
+      "addTx": "0xb0d847ebf62dd62d5545e1f4f34fd446fde3d875ecccc3e9a143d667ae275065",
+      "block": 1141203
+    },
+    "HKD": {
+      "approveTx": "0x956ada7ca644484778ce9be68e9f2721e7b4139aebfafe793859c778e5a019ff",
+      "addTx": "0xfaba0fda8982a535376fc875a4b4f5cf54dccaab2d4f93853a3ba4588d8d03ee",
+      "block": 1141220
+    },
+    "HUF": {
+      "approveTx": "0x35f705b409cf91dabce8bbefd3059a76042d5b016b35e0f0812d60f1fdf3f568",
+      "addTx": "0x00695b3c27dbdd536d767e952d10e01d44afaa11603a62491a8ca070938f768b",
+      "block": 1141223
+    },
+    "IDR": {
+      "approveTx": "0x1b979ffbfd3d28661b8b5559aa0ce8058944aff9cb3ccf7ee0dfc17978be5d6c",
+      "addTx": "0x52198f1576115bdbd82dcb4a927a6cbb41f2d201ebe6b78faeb9c9bb3479e001",
+      "block": 1141225
+    },
+    "ILS": {
+      "approveTx": "0x32383aa01450a842ad6e911c82b9b4aff213926a57d3d7ebc1c7f166f0596ccf",
+      "addTx": "0xccd54d86d77fa9c1064e9c446f6b0b5c45cd953f84982da66d82862dac58c6d3",
+      "block": 1141228
+    },
+    "INR": {
+      "approveTx": "0x39b24bd4a19fc864d858b2dd2c432299ea7900cc580906d532a0111c6bf404e1",
+      "addTx": "0xba510ca40658a795aaa7989bdd3cb54590f1321df566518934326c3782d81c4d",
+      "block": 1141230
+    },
+    "IQD": {
+      "approveTx": "0xfea1c715f038f7f8db5d4f27fc607ccfa078e43494648d52a9bb310913d3c6be",
+      "addTx": "0x2c4721d53da63840db567b48ca76bd72b2db75b3cce34ce67ce8d88b06fba676",
+      "block": 1141234
+    },
+    "JPY": {
+      "approveTx": "0xf961b7520a75ea7804aed55c8f54001b83fc08c3a51405b90f12379c98c6a76e",
+      "addTx": "0x0adda66b8070d9f447be62e6dca5101b0a743633cfbd92488d7121fa1093a8be",
+      "block": 1141236
+    },
+    "KES": {
+      "approveTx": "0xd205b88b4ab16800000000000000000000000000000000000000000000000000",
+      "addTx": "0xf48b93354b553e00000000000000000000000000000000000000000000000000",
+      "block": 1141238,
+      "note": "add#1 성공 확인(준비금 wei 일치). 기록의 해시는 축약 — 인덱서 nonce 1283/1284 참조"
+    },
+    "KRW": {
+      "approveTx": "0x17c254bf074f31f18086a50f5de071afa6eaef8cf1d6a761b4e0cf7ba74372e1",
+      "addTx": "0x4fd14c90214b9ab72de3a896a4824b88f431530f12265c7d2c6035d42c960bc3",
+      "block": 1141269
+    },
+    "KWD": {
+      "approveTx": "0xcc5eb22deae0f0965c5f7872b70030e906ab4d883254bd00a6e13eff702a66fa",
+      "addTx": "0x049118e314723d217c036e175f2bc3136efb1dc575483de82bf5cd38d1f01404",
+      "block": 1141271
+    },
+    "KZT": {
+      "approveTx": "0xca93ccac98f6151adbe0fb35c6a11cd70c8f8fe320f04e11219d0c86c2f3c95c",
+      "addTx": "0x1e6270f1569e4d0ebef5c2d1ca61568bf81261abb8acc20a68ada5c18b41dcfd",
+      "block": 1141273
+    },
+    "LKR": {
+      "approveTx": "0xbd472f5100d49a15ce4e4502c3e70b8745754b705f280363b86e8d8fe687000e",
+      "addTx": "0xe57cc703a3c7c197f1d741007e1c4950b5892cbfc5e89e6374318040f42484eb",
+      "block": 1141275
+    },
+    "MAD": {
+      "approveTx": "0x4febb3876686863325980fc5f38974b4d2e2e141dcad6b911f9467216b330b82",
+      "addTx": "0x4d2f2645573a1e602897bac9b8cf3b88cd00c293d3dbd147941dff4f09990785",
+      "block": 1141277
+    },
+    "MXN": {
+      "approveTx": "0xb9077f4c135bc80e2665032c1380ff9680c62df5f531195664860fdc3e222492",
+      "addTx": "0x9c924a7260cca897cf059eda05a01549f009bb5b0df2ff176232da99e81021c7",
+      "block": 1141279
+    },
+    "MYR": {
+      "approveTx": "0xebdb3b157ecca559ee3d9ed643f997de47fa9b01823659aee5fe34fbdcf2a5dc",
+      "addTx": "0x7820650aa7df4d4466b27ef690a1b9c6aca5d8c64c3f628bc8b8b69d951df815",
+      "block": 1141281
+    },
+    "NGN": {
+      "approveTx": "0x2791c663cd38d593b2075eac745d24dc0e7c8bf8f7005843e85fa6d9e69b43b9",
+      "addTx": "0xaa992c51a7ce03305a2fd6bb5c6cd427700ffed49be1d2d31d6cfe06a9292cf2",
+      "block": 1141283
+    },
+    "NOK": {
+      "approveTx": "0xd196d08f8d61f7ca77e79c7e42f16e2da62115e312165d751ace11f6dee59d2e",
+      "addTx": "0x6cf1b778cb97fc96147a5b8c0d2396659c2ffa995df6b67772783fed68f486bb",
+      "block": 1141285
+    },
+    "NZD": {
+      "approveTx": "0x494c5b6d9954c2f24f086039f954ba2ac179352795c995867b7637e51e533f68",
+      "addTx": "0xc04b545c685864ccb8258619730759c94dff3cfc01a88cd867b36dedd516c8e1",
+      "block": 1141287
+    },
+    "OMR": {
+      "approveTx": "0x72052550acd07d6e03047d1b8aa2239f72c488a5029bb9d93dba7ba33de0dab6",
+      "addTx": "0x6f067720fedfc1a677cc148c57375a7220f710fe0cec37b0eddf6f0f4e50a6bb",
+      "block": 1141289
+    },
+    "PEN": {
+      "approveTx": "0xb5c9e3ae42f6e9eae54b94d9c6bbeb4f007583e968ef788c67f356d22319e36f",
+      "addTx": "0x42a3a238e52012c2fd8b50b97e1ccf3d83edf1c71764ef83129d3b896a1bfb7a",
+      "block": 1141291
+    },
+    "PHP": {
+      "approveTx": "0x25d721cc48ec39af95ad0f0d1e5fbe8373d85d14823fe72d54c17118094a3d1b",
+      "addTx": "0x7a8e1ebe1aefc1c3ba908fc41be2cdb8b47fd37a4459c128fa2368f92fa5c9d9",
+      "block": 1141293
+    },
+    "PKR": {
+      "approveTx": "0x9eff94724770b22ee5a497eb92d46f2562433fdd23a61acbc17566b0621411ea",
+      "addTx": "0xaae0e60c65f28cfb0c4c7d8c2a4f83c11078b6070c570f9fda22e576c62d7099",
+      "block": 1141295
+    },
+    "PLN": {
+      "approveTx": "0x8214481653768619b3861784b4947160a1c90228e3e22143f3f238880b319b20",
+      "addTx": "0x3f1b4065fb205bd5dee16fc7b5f50b24da3699fd645b4e29e11781d36c068374",
+      "block": 1141297
+    },
+    "QAR": {
+      "approveTx": "0x81ddee54e9cb047be4bfbf1feed31f292582d8f28b74cc59c0bae38b391eaa6a",
+      "addTx": "0x8e05a6da12b25ef90bd0aa2e2b4f6e4d47c07c05bf2680abcc3271c19b2dd359",
+      "block": 1141299
+    },
+    "RON": {
+      "approveTx": "0xa33ef7e8d66547b83cbc6b149c9b8a9d6e681b193e0ece153a0d52dc22cf9ea2",
+      "addTx": "0x93716aaa2e503d589c6f520555d635c87c731e5d4ec37c6d3d3c93bb132816e4",
+      "block": 1141302
+    },
+    "RSD": {
+      "approveTx": "0x398090709a8329338b91e10765b12ac0197251a32582a924ca2bc1bb3f1c4339",
+      "addTx": "0x8d3a3499af51be651b8f935da35bb0ca3480645955505944b1119701dbe1c41e",
+      "block": 1141311
+    },
+    "RUB": {
+      "approveTx": "0x08693ecf44c68eafb9ee6aba9788f124313474fc963609816c333f16db100277",
+      "addTx": "0xb551f60c60ee9bc307cabbb7cda7a94c1c7c3cfe671ac9ba19ebc591c93ecbdc",
+      "block": 1141313
+    },
+    "SAR": {
+      "approveTx": "0x2da253d616518d098988f8176d9ee2705355863fbcc58d8705b97d5b94b3b607",
+      "addTx": "0x3314afb33fdb72cd676eb5212e73f59ff90a267b5f7461b122672d56f3740ceb",
+      "block": 1141315
+    },
+    "SEK": {
+      "approveTx": "0x7c2758084c9d975c1d8e3d689064aac056146c1cd9446d69cfff2a1a5939f54c",
+      "addTx": "0x14f0cead978047aafd9afd27878ad7772f4e151ec1d2a08865b901c65951bb76",
+      "block": 1141317
+    },
+    "SGD": {
+      "approveTx": "0x2d80b59b6eda4ad216857e8de7aa616de0cf02447ac982cdb557633bf1cb78ff",
+      "addTx": "0x5d9795f95c718546d5099b10ee71f74be8e0d9dae75b75754cbc0c7613a70830",
+      "block": 1141319
+    },
+    "THB": {
+      "approveTx": "0x8a2b80c9b3a9961e867e0acb683aaee9e3deb601b1de18443ea68cd7827bb7a6",
+      "addTx": "0xfc2f4bf5814fe90e62c7d10eed7cd3768354687c396ffa9cd2f2b223903ed62d",
+      "block": 1141321
+    },
+    "TRY": {
+      "approveTx": "0xc76b43fd9d063a7159b101e300c227c3ae8a8fc64637ac54953927a170c2a0c8",
+      "addTx": "0xffc2d1415150bb7e16a30945501d1017558a018c6be8cd88221aa1b459cc072b",
+      "block": 1141324
+    },
+    "TWD": {
+      "approveTx": "0xf67c11475c90b49eb6743a477212e96a524f03d463b69e2d6c3a423f6f776b32",
+      "addTx": "0x09934bd7cb56524e9ecab77c4917b477f5703e7f0d4f2e131e904b7043c8ab92",
+      "block": 1141327
+    },
+    "TZS": {
+      "approveTx": "0xe111af082186aaf9aeb7231da60834876311a2c75f67d8df39b5d0d0cf81c2cc",
+      "addTx": "0x550e004407934b2e05e852d91870cf38476a06a2551e922206e39e58bdcf7a9d",
+      "block": 1141329
+    },
+    "UAH": {
+      "approveTx": "0x1cbaae61634590ba85fd7be824674b10045af8a1c144bd8cdd677dc13f229588",
+      "addTx": "0x238dfc5f3f5235987c1f46059b0ab94033b85ba532abcc1b5a1c51361193ecf6",
+      "block": 1141331
+    },
+    "USD": {
+      "approveTx": "0x580a37259809495eea5fade31dd3e160fa0c2228374f0eb6db09030810b65c7c",
+      "addTx": "0xb4420b12f155bec3744f92d4b2f783d6aff40871d039f48800f9be4c761aa467",
+      "block": 1141333
+    },
+    "UYU": {
+      "approveTx": "0x84cf0415d2ab9981b43bd42ed0c54f013a0dd10d5772bb9e3505ae454dc7d9e9",
+      "addTx": "0x7b14a07bedf152fa605206b22e01a6e54cedac7f962684513a8340ca75a57a35",
+      "block": 1141335
+    },
+    "UZS": {
+      "approveTx": "0xaeeb775daeb65aba25505abc5251415c23d8c2db9008f5102caf3e3b4ab643fd",
+      "addTx": "0x1acffe0418b986abb9ee840c983ca6022b7bcc8f90e8c31f6a0d64367e5aa235",
+      "block": 1141337
+    },
+    "VND": {
+      "approveTx": "0x3f74b24445f040670cf6c9a187e2bc63b58621966037bdee58de29b1b0097495",
+      "addTx": "0x112094c7f352b2c524916acd97149007b018beddaebf87b2103131429779b0a8",
+      "block": 1141339
+    },
+    "XOF": {
+      "approveTx": "0xbc9b7066ba0de12475d95dca1a720d70c1da51c9ed448c0ccdfe888aafcbc667",
+      "addTx": "0x71b2b850b4f580f769163785b401ec2343d5050d495586035f6f4e3fd9bac8e4",
+      "block": 1141341
+    },
+    "ZAR": {
+      "approveTx": "0xa90e8cc32c5ea282201e4dd309750944d5e3829c39a1e2423537fc8c9b915cf2",
+      "addTx": "0xd595b381386cf8f81e83f14fa243365e67435c7eed9aa806d00e51fa9a3f0fc0",
+      "block": 1141344
+    }
+  }
+}
