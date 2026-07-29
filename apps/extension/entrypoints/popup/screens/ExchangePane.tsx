@@ -21,6 +21,7 @@
 
 import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import type { ChainAdapter, TransferIntent } from '@byeorin/wallet-sdk/core';
+import { discoverPortableTokens } from '@byeorin/wallet-sdk/core';
 import { rateByAddress, TTL_AMM_NATIVE } from '@byeorin/wallet-sdk/evm';
 import { ShellError } from '@byeorin/shell-core';
 import { useT } from '@byeorin/i18n/react';
@@ -273,18 +274,42 @@ export function ExchangePane({
   const [swapStatus, setSwapStatus] = useState<TxStatus>({ kind: 'idle' });
 
   const isTtl = chainKey === TTL_CHAIN_KEY;
-  const tokenOptions: readonly PortableTokenBalance[] = tokens ?? [];
+
+  // 상위(sendTokens)가 비어 있으면 이 화면이 직접 발견한다.
+  //
+  // 상위 목록은 홈 카드가 채우는데, 발견이 끝나기 전에 교환으로 이동하면
+  // 카드가 unmount 되며 결과가 버려지고 다시 채울 주체가 없었다 — 실기기에서
+  // "토큰 목록 불러오는 중 / 풀 조회 중" 두 스피너가 영원히 돌던 원인.
+  // 66 종은 registry 빌트인이라 이 조회는 RPC 잔액 읽기만 한다.
+  const [localTokens, setLocalTokens] = useState<readonly PortableTokenBalance[] | null>(null);
+  const effTokens = tokens ?? localTokens;
+  useEffect(() => {
+    if (!isTtl || tokens !== null) return;
+    let cancelled = false;
+    const accounts = walletStore.listAccounts();
+    const activeIdx = accounts.findIndex((a) => a.active);
+    if (activeIdx < 0) return;
+    const addr = walletStore.getAccountAt(activeIdx, adapter).address;
+    void discoverPortableTokens(adapter, addr).then((ts) => {
+      if (!cancelled) setLocalTokens(ts);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isTtl, tokens, adapter]);
+
+  const tokenOptions: readonly PortableTokenBalance[] = effTokens ?? [];
   const effectiveToKey: string = toKey ?? tokenOptions[0]?.id ?? 'native';
 
   // 풀 1회 조회 — 자산 쌍 변경마다 fetch 하지 않고 메모리에서 매칭 (ZION 과 동일).
   useEffect(() => {
-    if (!isTtl || client === null || tokens === null) return;
+    if (!isTtl || client === null || effTokens === null) return;
     let cancelled = false;
     setPools(null);
     setPoolErr(null);
     client
       // 어느 토큰의 풀을 물을지는 화면이 안다 — 자동 발견된 66종의 id 를 넘긴다.
-      .listPools(tokens.map((tk) => tk.id))
+      .listPools(effTokens.map((tk) => tk.id))
       .then((ps) => {
         if (cancelled) return;
         setPools(ps);
@@ -298,7 +323,7 @@ export function ExchangePane({
     return () => {
       cancelled = true;
     };
-  }, [client, isTtl, tokens]);
+  }, [client, isTtl, effTokens]);
 
   // 선택 자산 — 심볼/decimals/잔액이 여기서 하나로 확정된다.
   const fromAsset = useMemo(
@@ -706,7 +731,7 @@ export function ExchangePane({
           {t('swap.pool_load_failed', { reason: poolErr })}
         </p>
       )}
-      {tokens === null && <p className="muted small">{t('exchange.tokens_loading')}</p>}
+      {effTokens === null && <p className="muted small">{t('exchange.tokens_loading')}</p>}
 
       {/* 보낼 자산 */}
       <label className="label" htmlFor="exchange-from">

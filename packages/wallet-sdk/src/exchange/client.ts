@@ -128,8 +128,34 @@ export interface TtlAmmClientOptions {
 
 /** JSON-RPC 응답 최소 형태. */
 interface JsonRpcResponse {
+  id?: number | string | null;
   result?: Hex;
   error?: { code: number; message: string };
+}
+
+/**
+ * 동시성 상한 map. 순서는 입력 순서대로 보존한다.
+ * 하나가 던지면 전체가 거부된다 — listPools 의 기존 Promise.all 의미와 같다.
+ */
+async function mapLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      for (;;) {
+        const i = next++;
+        if (i >= items.length) return;
+        out[i] = await fn(items[i]!);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return out;
 }
 
 /**
@@ -170,13 +196,18 @@ export class TtlAmmClient {
    * 반면 RPC 자체의 실패는 그대로 던진다 — 빈 목록으로 위장하지 않는다.
    */
   async listPools(tokens: string[]): Promise<TtlAmmPool[]> {
-    const snapshots = await Promise.all(
-      tokens.map(async (token): Promise<TtlAmmPool | undefined> => {
+    // 동시성 상한 — 66 종이면 eth_call ~194 건이다. 전부 동시에 쏘면 TTL RPC
+    // (프록시)가 burst 에서 응답을 섞는 것을 실측했다 (창세 배포 때 send 응답에
+    // 직전 estimateGas 값이 온 사례). 8 개 창으로 흘려보낸다.
+    const snapshots = await mapLimit(
+      tokens,
+      8,
+      async (token): Promise<TtlAmmPool | undefined> => {
         const tokenAddr = requireAddress(token, `listPools token '${token}'`);
         const pair = await this.readPairAddress(tokenAddr);
         if (pair === undefined) return undefined;
         return this.readPool(pair, tokenAddr);
-      }),
+      },
     );
     return snapshots.filter((p): p is TtlAmmPool => p !== undefined);
   }
@@ -478,12 +509,16 @@ export class TtlAmmClient {
 
   /** JSON-RPC eth_call. HTTP 실패·RPC error·빈 응답 모두 명확히 던진다. */
   private async ethCall(to: Hex, data: Hex): Promise<Hex> {
+    const id = this.rpcId++;
     const res = await this.fetcher(this.rpcUrl, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      // connection: close — 이 RPC 프록시는 keep-alive 재사용 연결에서 응답을
+      // 섞는다 (실측). 브라우저 fetch 는 이 헤더를 무시하므로(금지 헤더) 거기서는
+      // 아래 id 검증이 방어선이다.
+      headers: { 'content-type': 'application/json', connection: 'close' },
       body: JSON.stringify({
         jsonrpc: '2.0',
-        id: this.rpcId++,
+        id,
         method: 'eth_call',
         params: [{ to, data }, 'latest'],
       }),
@@ -492,6 +527,13 @@ export class TtlAmmClient {
       throw new Error(`ttl-amm: RPC HTTP ${res.status} ${res.statusText}`);
     }
     const json = (await res.json()) as JsonRpcResponse;
+    // 섞인 응답 검출 — 다른 요청의 결과를 이 호출의 결과로 쓰면 견적이 다른
+    // 풀의 준비금으로 계산될 수 있다. 조용히 틀리느니 시끄럽게 실패한다.
+    if (json.id !== undefined && json.id !== id) {
+      throw new Error(
+        `ttl-amm: RPC 응답이 섞였다 (보낸 id ${id}, 받은 id ${String(json.id)})`,
+      );
+    }
     if (json.error) {
       throw new Error(
         `ttl-amm: eth_call 실패 — ${json.error.message} (code ${json.error.code})`,
