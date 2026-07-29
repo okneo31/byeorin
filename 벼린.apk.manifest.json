@@ -1,15 +1,15 @@
 {
   "artifact": "벼린.apk",
-  "sha256": "bf2436b172a4df0dcc7e451eb94f5b67c2dc8eb9d92525796b3d51cc4d7182ce",
-  "sizeBytes": 5261688,
-  "versionName": "0.5.4",
-  "versionCode": 5,
+  "sha256": "3377092cf4f4f40aa004ce7cb59838a2e2fffb42bfc31aa93a6d1a6a631e9df0",
+  "sizeBytes": 5273044,
+  "versionName": "0.5.5",
+  "versionCode": 6,
   "signer": {
     "certSha256": "303f801bb44af8c494b6e89844fbe86c36bd6f48ab404a4b6c0228fa3f103480"
   },
   "source": {
-    "commit": "b44bc8009b247ef8e9e12494aa776ebe51910966",
-    "commitShort": "b44bc80",
+    "commit": "267939119954ffbaefc87dbfd1b626d623dbe072",
+    "commitShort": "2679391",
     "branch": "main",
     "workingTreeClean": true
   },
@@ -25,13 +25,5 @@
     "integrity": "이 해시와 일치하는 파일은 우리가 배포한 그 파일이다.",
     "authenticity": "이 인증서 지문으로 서명된 APK 만 벼린이 만든 것이다.",
     "notClaimed": "재현 빌드는 아직 보장하지 않는다 — 같은 커밋으로 빌드해도 바이트가 다를 수 있다."
-  },
-  "anchor": {
-    "chainId": 7777,
-    "txHash": "0xca7039ea1a962db4bfb616dbbb5230c60d98f459a87ac6d14a1ac5a01b2e59fd",
-    "publisher": "0x52B5dE96dC298f98a0cDf9E694De1Cc55c28f533",
-    "blockNumber": 1126124,
-    "payload": "byeorin:release:1|sha256=bf2436b172a4df0dcc7e451eb94f5b67c2dc8eb9d92525796b3d51cc4d7182ce|v=0.5.4+5|commit=b44bc8009b247ef8e9e12494aa776ebe51910966",
-    "note": "이 앵커는 \"publisher 가 이 해시를 공표했다\" 만 증명한다. 소스↔바이너리 대응은 재현 빌드가 필요하다."
   }
 }
