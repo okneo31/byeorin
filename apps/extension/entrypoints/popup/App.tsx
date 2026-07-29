@@ -27,7 +27,12 @@ import {
   type SelfAddressInput,
 } from '@byeorin/shell-core';
 import { LocaleSwitch, useT } from '@byeorin/i18n/react';
-import type { DiscoveredBalance, EvmAdapter } from '@byeorin/wallet-sdk/evm';
+import type { EvmAdapter } from '@byeorin/wallet-sdk/evm';
+import {
+  discoverPortableTokens,
+  supportsTokens,
+  type PortableTokenBalance,
+} from '@byeorin/wallet-sdk/core';
 // 벼린 환율 — TTL 통화토큰의 가치는 Binance 시세가 아니라 이 스냅샷에서 온다.
 // 주소로 찾는다: 심볼로 찾으면 tUSD 가 대문자화되어 TrueUSD(TUSD)와 충돌한다.
 import { rateByAddress, rateByIso, tokenAmountToTtl } from '@byeorin/wallet-sdk/evm';
@@ -178,7 +183,7 @@ export function App() {
   // BTC ↔ USD 토글 — 모든 활성 계정 카드가 공유 (사용자가 한 번 USD 켜면 체인 바꿔도 유지).
   // 송금 화면이 쓸 자산 정보 — ActiveAccountCard 가 이미 조회한 값을 끌어올린다.
   // 카드는 mode==='home' 에서만 마운트되므로 App 이 들고 있어야 send 화면에서 산다.
-  const [sendTokens, setSendTokens] = useState<DiscoveredBalance[] | null>(null);
+  const [sendTokens, setSendTokens] = useState<PortableTokenBalance[] | null>(null);
   const [sendNativeBalance, setSendNativeBalance] = useState<bigint | null>(null);
 
   // 주소록 — 저장은 chrome.storage.local 평문 JSON (공개키 파생물인 주소만 담는다).
@@ -545,6 +550,7 @@ export function App() {
         <TokenListPane
           tokens={sendTokens}
           chainKey={activeChainKey}
+          supported={supportsTokens(effectiveAdapter)}
           onBack={() => setMode('home')}
         />
       )}
@@ -686,7 +692,7 @@ function AccountListCard({
   onAddressbook: () => void;
   onActivity: () => void;
   onTokens: () => void;
-  onTokensChange: (rows: DiscoveredBalance[] | null) => void;
+  onTokensChange: (rows: PortableTokenBalance[] | null) => void;
   onNativeBalanceChange: (b: bigint | null) => void;
   onLock: () => void;
   chainSpecs: ChainSpec[] | null;
@@ -821,7 +827,7 @@ function ActiveAccountCard({
   onActivity: () => void;
   onTokens: () => void;
   /** 발견한 ERC-20 잔액을 상위(App)로 흘려보낸다 — 송금 화면이 재조회 없이 쓴다. */
-  onTokensChange: (rows: DiscoveredBalance[] | null) => void;
+  onTokensChange: (rows: PortableTokenBalance[] | null) => void;
   /** native 잔액을 상위로. 송금 화면의 잔액 초과 검사에 쓰인다. */
   onNativeBalanceChange: (b: bigint | null) => void;
   onLock: () => void;
@@ -848,7 +854,7 @@ function ActiveAccountCard({
   const [zionBalances, setZionBalances] = useState<Record<string, bigint> | null>(null);
   // EVM 체인의 자동 발견 토큰. 다른 체인일 때 null. includeZero 토글에 따라
   // 양수 잔액만 / 빌트인 4종 전부 보여줌.
-  const [evmTokens, setEvmTokens] = useState<DiscoveredBalance[] | null>(null);
+  const [evmTokens, setEvmTokens] = useState<PortableTokenBalance[] | null>(null);
   const [showZeroTokens, setShowZeroTokens] = useState(false);
   // 조회는 항상 전체. 여기서만 거른다 — 토글이 RPC 를 유발하지 않는다.
   const visibleEvmTokens = (evmTokens ?? []).filter(
@@ -956,31 +962,22 @@ function ActiveAccountCard({
   // 양수 잔액 토큰만 노출 — 0 인 USDC 같은 건 list 에 안 보임. RPC 호출은
   // 빌트인 토큰 수만큼(체인당 3~4개) 발생, maxRpcCalls 안전망 50.
   useEffect(() => {
-    if (!chainAddress || !activeChainKey.startsWith('evm:')) {
-      setEvmTokens(null);
-      return;
-    }
-    // adapter 가 EvmAdapter 가 아니면 (이론상 불가, 방어) 노출 안 함.
-    const a = adapter as unknown as { chain?: { id?: number } };
-    if (!a.chain || typeof a.chain.id !== 'number') {
+    if (!chainAddress) {
       setEvmTokens(null);
       return;
     }
     let cancelled = false;
     setEvmTokens(null);
-    // 항상 전체를 받는다. 토글은 표시 단계에서만 거른다.
-    //   - includeZero 를 토글에 묶으면 켤 때마다 RPC 를 다시 때린다.
-    //   - 상위(App)로 올라가는 목록도 잔액>0 만 담겨, 토큰 목록 화면이 66 종을
-    //     검색한다는 목적 자체가 성립하지 않는다.
-    void discoverEvmTokens(adapter as unknown as EvmAdapter, chainAddress, {
-      includeZero: true,
-    })
-      .then((tokens) => {
-        if (!cancelled) setEvmTokens(tokens);
-      })
-      .catch(() => {
-        if (!cancelled) setEvmTokens([]);
-      });
+    // **체인을 묻지 않는다.** 어댑터가 토큰을 알면 돌려주고 모르면 빈 배열이다.
+    // 예전에는 여기서 `evm:` 를 검사해 비-EVM 체인의 토큰을 아예 조회하지 않았다.
+    // 그래서 Solana SPL·TRON TRC-20·Cosmos denom 은 지갑에 존재하지 않는 것이나
+    // 마찬가지였다.
+    //
+    // discoverPortableTokens 는 실패해도 던지지 않고 빈 배열을 준다 — 토큰 목록
+    // 때문에 지갑이 안 열리면 안 된다.
+    void discoverPortableTokens(adapter, chainAddress).then((tokens) => {
+      if (!cancelled) setEvmTokens(tokens);
+    });
     return () => {
       cancelled = true;
     };
@@ -1154,28 +1151,28 @@ function ActiveAccountCard({
                   {visibleEvmTokens.map((row) => {
                     // 갈림길 하나: 주소가 벼린 환율에 있으면 TTL 환산, 없으면
                     // 기존 Binance/USD 경로. 심볼은 판단에 쓰지 않는다.
-                    const rate = rateByAddress(row.token.address);
-                    const ttl = tokenAmountToTtl(row.balance, row.token.decimals, rate);
+                    const rate = rateByAddress(row.id);
+                    const ttl = tokenAmountToTtl(row.balance, row.decimals, rate);
                     // 벼린 토큰 심볼을 달았지만 주소가 스냅샷에 없는 토큰 —
                     // 대문자화하면 스테이블 목록에 걸려 "1 달러" 로 보인다
                     // (tUSD → TUSD → TrueUSD). 값을 모르는 것이므로 비워 둔다.
                     const lookalike =
                       rate === null &&
-                      /^t[A-Z]{3}$/.test(row.token.symbol) &&
-                      rateByIso(row.token.symbol.slice(1)) !== null;
+                      /^t[A-Z]{3}$/.test(row.symbol) &&
+                      rateByIso(row.symbol.slice(1)) !== null;
                     const usd =
-                      rate !== null || lookalike ? null : tokenToUsd(row.token.symbol, prices);
+                      rate !== null || lookalike ? null : tokenToUsd(row.symbol, prices);
                     const usdValue =
                       usd !== null && row.balance > 0n
-                        ? baseUnitToNumber(row.balance, row.token.decimals) * usd
+                        ? baseUnitToNumber(row.balance, row.decimals) * usd
                         : null;
                     return (
-                      <li key={row.token.address} className="zion-assets__row">
-                        <span className="zion-assets__symbol" title={row.token.name}>
-                          {row.token.symbol}
+                      <li key={row.id} className="zion-assets__row">
+                        <span className="zion-assets__symbol" title={row.name}>
+                          {row.symbol}
                         </span>
                         <span className="zion-assets__amount">
-                          {formatAmount(row.balance, row.token.decimals)}
+                          {formatAmount(row.balance, row.decimals)}
                           {ttl !== null && row.balance > 0n ? (
                             <span className="zion-assets__usd">
                               {t('tokens.value_ttl', { v: formatTtl(ttl) })}
@@ -1203,13 +1200,6 @@ function ActiveAccountCard({
                   onClick={() => setShowZeroTokens((v) => !v)}
                 >
                   {showZeroTokens ? '잔액 0 숨기기' : '전체 보기'}
-                </button>
-                <button
-                  type="button"
-                  className="zion-assets__toggle"
-                  onClick={onTokens}
-                >
-                  {t('tokens.title')}
                 </button>
                 <button
                   type="button"
@@ -1327,6 +1317,12 @@ function ActiveAccountCard({
         {/* 활동 내역 — 비-EVM 에서도 눌러 "미지원" 안내를 볼 수 있게 막지 않는다. */}
         <button className="btn-ghost btn-sm" onClick={onActivity}>
           {t('activity.title')}
+        </button>
+        {/* 토큰 목록 — **체인을 가리지 않는다.** 어댑터가 토큰을 몰라도 화면에
+            들어가 그 이유를 읽을 수 있어야 한다. 예전에는 이 버튼이 EVM 블록
+            안에 있어 비-EVM 체인에서는 존재조차 하지 않았다. */}
+        <button className="btn-ghost btn-sm" onClick={onTokens}>
+          {t('tokens.title')}
         </button>
         <button className="btn-ghost btn-sm" onClick={onAddresses}>
           {t('addresses.title')}

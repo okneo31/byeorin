@@ -1,5 +1,12 @@
 // TokenListPane — 토큰 목록 전용 화면 (검색 · 보기/가리기 · 벼린 환율 가치).
 //
+// **모든 체인에서 같은 화면이다.** 예전에는 `chainKey.startsWith('evm:')` 로
+// 화면 전체를 막았지만 이제는 막지 않는다. 토큰은 체인 무관 형식
+// (`PortableTokenBalance`)으로 들어오고, 어댑터가 토큰을 모르는 체인이면 상위가
+// `supported={false}` 를 내려 "지원하지 않음" 한 줄만 그린다 — 화면에 **도달은
+// 한다.** 도달조차 못 하면 사용자는 지갑이 고장난 것인지 그 체인이 원래 토큰을
+// 안 다루는 것인지 구분할 수 없다.
+//
 // TTL 체인에 통화 스테이블이 66 종 발행돼 있고 지갑이 그걸 자동 감지한다.
 // 활성 계정 카드의 간단한 목록은 "지금 뭘 갖고 있나" 를 훑는 용도라 66 줄을
 // 감당하지 못한다. 그래서 훑기와 다루기를 화면으로 분리했다 — 카드는 그대로
@@ -20,7 +27,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ChromeLocalBackend } from '@byeorin/shell-core';
-import type { DiscoveredBalance } from '@byeorin/wallet-sdk/evm';
 import { useT } from '@byeorin/i18n/react';
 import { formatAssetAmount } from '../lib/token-send.js';
 import {
@@ -34,17 +40,27 @@ import {
   selectTokenView,
   withHidden,
   type HiddenMap,
+  type PortableTokenBalance,
   type TokenRow,
 } from '../lib/token-visibility.js';
 
 export interface TokenListPaneProps {
   /**
-   * 상위가 이미 조회한 ERC-20 잔액. `null` = 아직 조회 중(로딩 3상태의 하나).
-   * 이 화면은 절대 직접 조회하지 않는다.
+   * 상위가 이미 조회한 토큰 잔액 (`discoverPortableTokens` 의 결과 그대로).
+   * `null` = 아직 조회 중(로딩 3상태의 하나). 이 화면은 절대 직접 조회하지 않는다.
    */
-  tokens: DiscoveredBalance[] | null;
+  tokens: PortableTokenBalance[] | null;
   /** 활성 체인 키. 가리기 상태를 체인별로 저장하는 데 쓴다. */
   chainKey: string;
+  /**
+   * 이 체인의 어댑터가 토큰을 다룰 수 있는가 — 상위가 wallet-sdk 의
+   * `supportsTokens(adapter)` 를 그대로 넘긴다.
+   *
+   * 빈 배열만으로는 "보유 토큰이 없다" 와 "이 체인은 토큰을 모른다" 를 구분할 수
+   * 없어서 따로 받는다. 넘기지 않으면(undefined) 지원하는 것으로 보고 평소 흐름을
+   * 탄다 — 기존 호출부가 그대로 동작하게 하기 위해서다.
+   */
+  supported?: boolean;
   /** 상위의 조회 실패 사유. 있으면 에러 상태로 그린다. */
   error?: string | null;
   /** 있으면 새로고침 버튼을 그린다. 재조회는 상위 책임. */
@@ -55,6 +71,7 @@ export interface TokenListPaneProps {
 export function TokenListPane({
   tokens,
   chainKey,
+  supported = true,
   error = null,
   onRefresh,
   onBack,
@@ -96,21 +113,20 @@ export function TokenListPane({
   const [persistFailed, setPersistFailed] = useState(false);
 
   function toggleHidden(row: TokenRow): void {
-    const next = withHidden(hidden, chainKey, row.address, !row.hidden);
+    const next = withHidden(hidden, chainKey, row.id, !row.hidden);
     setHidden(next);
     void saveHidden(backend, next).then((ok) => {
       if (!ok) setPersistFailed(true);
     });
   }
 
-  const isEvm = chainKey.startsWith('evm:');
-
   return (
     <section className="card">
       <h2 className="create-step__title">{t('tokens.title')}</h2>
       <p className="create-step__lead">{t('tokens.lead')}</p>
 
-      {!isEvm ? (
+      {/* 체인이 토큰을 모르는 경우. 화면은 열리고, 이유만 말한다. */}
+      {!supported ? (
         <p className="empty-state">{t('tokens.unsupported')}</p>
       ) : error ? (
         <p className="error" role="alert">
@@ -323,8 +339,17 @@ function TokenRowItem({
               })}
             </p>
           )}
-          <p className="token-basis__addr addr small muted" title={row.address}>
-            {row.address}
+          {/* 잔액의 출처. 체인에서 직접 읽은 값과 인덱서가 말해준 값은 신뢰도가
+              다르므로 숫자 옆이 아니라 근거 자리에 사실대로 적는다.
+              (문구가 하드코딩인 이유: i18n 카탈로그는 이 작업의 소유 범위 밖이라
+               `tokens.basis_source` / `tokens.basis_source_onchain` 키를 추가하지
+               못했다. 키가 생기면 t() 로 바꾼다.) */}
+          <div className="token-basis__row">
+            <dt>잔액 출처</dt>
+            <dd>{row.source ?? '체인에서 직접 읽음'}</dd>
+          </div>
+          <p className="token-basis__addr addr small muted" title={row.id}>
+            {row.id}
           </p>
         </dl>
       )}

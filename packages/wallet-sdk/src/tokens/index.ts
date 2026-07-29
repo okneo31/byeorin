@@ -15,3 +15,9 @@ export {
   fetchTtlScanTokens,
   type FetchTtlScanTokensOptions,
 } from './ttlscan.js';
+export {
+  discoverPortableTokens,
+  supportsTokens,
+  type PortableTokenBalance,
+  type TokenCapableAdapter,
+} from './portable.js';

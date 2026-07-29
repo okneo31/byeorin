@@ -565,7 +565,9 @@ export const en: Catalog = {
   // ---------- token list / Byeorin rates ----------
   'tokens.lead': 'Currency tokens detected on the TTL chain. Search to find one, hide the ones you don\'t want to see.',
   'tokens.error': 'Could not load the token list. ({reason})',
-  'tokens.unsupported': 'The token list is available on EVM chains only.',
+  'tokens.unsupported': 'Tokens are not supported on this chain yet.',
+  'tokens.basis_source': 'Balance source',
+  'tokens.basis_source_onchain': 'Read directly from the chain',
   'tokens.search_label': 'Search',
   'tokens.search_placeholder': 'Symbol · currency code · country (e.g. tKRW, USD, Korea)',
   'tokens.search_empty': 'No token matches \'{query}\'.',

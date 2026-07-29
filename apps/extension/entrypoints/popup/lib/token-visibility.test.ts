@@ -3,9 +3,12 @@
 // 렌더링은 테스트하지 않는다(확장 vitest 는 environment: node, jsdom 없음).
 // 대신 화면이 위임한 판단 — 무엇이 보이고, 어떤 순서이고, 무엇이 저장되는지 —
 // 를 전부 여기서 고정한다.
+//
+// 입력은 체인 무관 `PortableTokenBalance` 다. EVM 주소만 넣고 테스트하면 "EVM
+// 전용" 이라는 낡은 전제가 다시 굳으므로, 비-EVM 식별자(Solana base58 mint,
+// Cosmos denom)로도 같은 규칙이 도는지 함께 고정한다.
 
 import { describe, expect, it } from 'vitest';
-import type { DiscoveredBalance } from '@byeorin/wallet-sdk/evm';
 import { unresolvedRates } from '@byeorin/wallet-sdk/evm';
 import {
   EMPTY_HIDDEN,
@@ -28,6 +31,7 @@ import {
   type HiddenMap,
   type HiddenTokensBackend,
   type MetaResolver,
+  type PortableTokenBalance,
   type TokenMeta,
 } from './token-visibility.js';
 
@@ -36,18 +40,18 @@ const CHAIN = 'evm:ttl';
 // 주소는 체크섬 표기(대문자 섞임)로 둔다 — 소문자 정규화가 실제로 도는지 보려고.
 function token(
   symbol: string,
-  address: string,
+  id: string,
   balance: bigint,
   decimals = 18,
-): DiscoveredBalance {
+  source?: string,
+): PortableTokenBalance {
   return {
-    token: {
-      address: address as `0x${string}`,
-      symbol,
-      name: `${symbol} stable`,
-      decimals,
-    },
+    id,
+    symbol,
+    name: `${symbol} stable`,
+    decimals,
     balance,
+    ...(source === undefined ? {} : { source }),
   };
 }
 
@@ -106,10 +110,10 @@ const META: Record<string, TokenMeta> = {
   },
 };
 
-const resolve: MetaResolver = (_address, symbol) =>
+const resolve: MetaResolver = (_id, symbol) =>
   META[symbol] ?? { rate: null, iso: null, country: null, unresolvedReason: null };
 
-const TOKENS: DiscoveredBalance[] = [
+const TOKENS: PortableTokenBalance[] = [
   token('tUSD', A_USD, 0n),
   token('tKRW', A_KRW, 3_000_000_000_000_000_000_000_000n), // 3,000,000 tKRW
   token('tTWD', A_TWD, 5_000_000_000_000_000_000n), // 5 tTWD, 환율 없음
@@ -274,8 +278,71 @@ describe('buildTokenRows', () => {
     expect(usd.ttl).toBe(0);
   });
 
-  it('key 는 소문자 주소', () => {
-    expect(rows.every((r) => r.key === r.address.toLowerCase())).toBe(true);
+  it('key 는 소문자 식별자 — id 는 원본 표기 그대로 남는다', () => {
+    expect(rows.every((r) => r.key === r.id.toLowerCase())).toBe(true);
+    expect(rows.map((r) => r.id)).toEqual(expect.arrayContaining([A_KRW]));
+  });
+
+  it('source 를 그대로 물려준다 — 없으면 null (체인에서 직접 읽음)', () => {
+    const withSource = buildTokenRows(
+      [
+        token('tKRW', A_KRW, 1n, 18, 'ttlscan'),
+        token('tUSD', A_USD, 1n), // 출처 표기 없음
+      ],
+      EMPTY_HIDDEN,
+      CHAIN,
+      resolve,
+    );
+    expect(withSource.find((r) => r.symbol === 'tKRW')?.source).toBe('ttlscan');
+    expect(withSource.find((r) => r.symbol === 'tUSD')?.source).toBeNull();
+  });
+});
+
+// ────────── 체인 무관 식별자 ──────────
+//
+// 이 블록이 "토큰 = EVM" 이라는 전제가 되돌아오는 것을 막는다. 규칙(가리기 ·
+// 검색 · 정렬 · 가치 빈자리)이 EVM 주소가 아닌 식별자에서도 똑같이 돌아야 한다.
+
+describe('비-EVM 식별자', () => {
+  const MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'; // Solana SPL mint
+  const DENOM = 'ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2';
+
+  const rows = buildTokenRows(
+    [token('USDC', MINT, 1_000_000n, 6, 'solana-rpc'), token('ATOM', DENOM, 5n, 6)],
+    EMPTY_HIDDEN,
+    'solana:mainnet',
+  );
+
+  it('환율이 없으므로 가치 자리를 비운다 — 0 이나 추정치로 채우지 않는다', () => {
+    expect(rows.every((r) => r.ttl === null)).toBe(true);
+    expect(rows.every((r) => r.meta.rate === null)).toBe(true);
+  });
+
+  it('가리기가 대소문자 구분 없이 왕복한다 (base58 식별자 포함)', () => {
+    const map = withHidden(EMPTY_HIDDEN, 'solana:mainnet', MINT, true);
+    expect(isHidden(map, 'solana:mainnet', MINT)).toBe(true);
+    const back = withHidden(map, 'solana:mainnet', MINT, false);
+    expect(isHidden(back, 'solana:mainnet', MINT)).toBe(false);
+  });
+
+  it('검색은 심볼과 식별자 조각으로 걸린다', () => {
+    const usdc = rows.find((r) => r.symbol === 'USDC')!;
+    expect(matchesQuery(usdc, 'usdc')).toBe(true);
+    expect(matchesQuery(usdc, MINT.slice(0, 8).toLowerCase())).toBe(true);
+    expect(matchesQuery(usdc, 'zzz')).toBe(false);
+  });
+
+  it('기본 리졸버는 EVM 주소 형식이 아닌 식별자를 추측하지 않는다', () => {
+    // 심볼이 우연히 통화토큰과 같아도(다른 체인의 동명 토큰) 그 나라 통화로
+    // 둔갑시키면 안 된다.
+    const first = unresolvedRates()[0];
+    const symbol = first ? first.symbol : 'tKRW';
+    expect(defaultMetaResolver(MINT, symbol)).toEqual({
+      rate: null,
+      iso: null,
+      country: null,
+      unresolvedReason: null,
+    });
   });
 });
 

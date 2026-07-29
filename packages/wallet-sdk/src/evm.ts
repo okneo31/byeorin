@@ -51,3 +51,10 @@ export {
   type UnresolvedRate,
   type RateInputs,
 } from './rates/index.js';
+
+export {
+  discoverPortableTokens,
+  supportsTokens,
+  type PortableTokenBalance,
+  type TokenCapableAdapter,
+} from './tokens/portable.js';

@@ -35,6 +35,7 @@ const CHAIN_ARBITRUM = 42_161;
 const CHAIN_OPTIMISM = 10;
 const CHAIN_BASE = 8_453;
 const CHAIN_BSC = 56;
+const CHAIN_AVALANCHE = 43_114;
 const CHAIN_TTL = 7_777;
 
 /**
@@ -215,6 +216,79 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       coingeckoId: 'dai',
     },
   ],
+  // Avalanche C-Chain. 빌트인이 0 종이라 이 체인에서는 토큰이 하나도 안 보였다.
+  //
+  // 주소는 전부 두 곳 이상에서 대조했다 — Trader Joe 토큰 리스트
+  // (raw.githubusercontent.com/traderjoe-xyz/joe-tokenlists/main/mc.tokenlist.json)
+  // 와 CoinGecko Avalanche 리스트(tokens.coingecko.com/avalanche/all.json), 일부는
+  // Snowtrace 의 컨트랙트 라벨까지. decimals 도 같은 두 리스트에서 일치를 확인했다.
+  //
+  // 브릿지 자산(`.e`)을 네이티브 발행분과 **둘 다** 넣는다. 이름이 비슷하다고 하나만
+  // 넣으면 다른 쪽을 들고 있는 사용자에게는 잔액이 0 으로 보인다. 둘은 서로 다른
+  // 컨트랙트이고 서로 교환되지 않는다.
+  [CHAIN_AVALANCHE]: [
+    {
+      // Circle 이 C-Chain 에 직접 발행한 네이티브 USDC (Snowtrace 라벨 "Circle: USDC Token").
+      address: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E',
+      symbol: 'USDC',
+      name: 'USD Coin',
+      decimals: 6,
+      coingeckoId: 'usd-coin',
+    },
+    {
+      // Tether 네이티브 발행분 (Snowtrace 라벨 "Tether: Tether Token", 심볼 USDt).
+      address: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7',
+      symbol: 'USDT',
+      name: 'Tether USD',
+      decimals: 6,
+      coingeckoId: 'tether',
+    },
+    {
+      address: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7',
+      symbol: 'WAVAX',
+      name: 'Wrapped AVAX',
+      decimals: 18,
+      coingeckoId: 'wrapped-avax',
+    },
+    {
+      // Avalanche Bridge 로 넘어온 구 USDC. 네이티브 USDC 와 별개 컨트랙트다.
+      address: '0xA7D7079b0FEaD91F3e65f86E8915Cb59c1a4C664',
+      symbol: 'USDC.e',
+      name: 'USD Coin (Bridged)',
+      decimals: 6,
+      coingeckoId: 'usd-coin',
+    },
+    {
+      address: '0xc7198437980c041c805A1EDcbA50c1Ce5db95118',
+      symbol: 'USDT.e',
+      name: 'Tether USD (Bridged)',
+      decimals: 6,
+      coingeckoId: 'tether',
+    },
+    {
+      address: '0x49D5c2BdFfac6CE2BFdB6640F4F80f226bc10bAB',
+      symbol: 'WETH.e',
+      name: 'Wrapped Ether (Bridged)',
+      decimals: 18,
+      coingeckoId: 'weth',
+    },
+    {
+      // decimals 8 — 다른 스테이블과 달리 여기만 8 이다. 18 로 넣으면 잔액이
+      // 10^10 배로 어긋난다.
+      address: '0x50b7545627a5162F82A992c33b87aDc75187B218',
+      symbol: 'WBTC.e',
+      name: 'Wrapped BTC (Bridged)',
+      decimals: 8,
+      coingeckoId: 'wrapped-bitcoin',
+    },
+    {
+      address: '0xd586E7F844cEa2F87f50152665BCbc2C279D8d70',
+      symbol: 'DAI.e',
+      name: 'Dai Stablecoin (Bridged)',
+      decimals: 18,
+      coingeckoId: 'dai',
+    },
+  ],
   [CHAIN_TTL]: [],
 };
 
@@ -284,5 +358,6 @@ export const BUILTIN_CHAIN_IDS = {
   optimism: CHAIN_OPTIMISM,
   base: CHAIN_BASE,
   bsc: CHAIN_BSC,
+  avalanche: CHAIN_AVALANCHE,
   ttl: CHAIN_TTL,
 } as const;

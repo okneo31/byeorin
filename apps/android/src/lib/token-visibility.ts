@@ -2,11 +2,16 @@
 //
 // 확장판(apps/extension/entrypoints/popup/lib/token-visibility.ts)의 복사본이다.
 // 안드로이드 셸에는 vitest 설정이 없어 테스트는 확장 쪽 token-visibility.test.ts 가
-// 계속 들고 있다 — 두 파일은 로직이 같으므로 그 테스트(38 개)가 이쪽도 덮는다.
+// 계속 들고 있다 — 두 파일은 로직이 같으므로 그 테스트가 이쪽도 그대로 덮는다.
 // 저장 백엔드를 인터페이스(`HiddenTokensBackend`)로 받는 구조라 셸 의존이 하나도
 // 없다: wallet-sdk 뿐. 확장은 ChromeLocalBackend, 안드로이드는 LocalStorageBackend
 // 를 주입한다 — 둘 다 shell-core 가 같은 Promise 표면으로 내주므로 이 파일은
 // 그 차이를 알 필요가 없다.
+//
+// **체인 무관이다.** 입력은 EVM 전용 `DiscoveredBalance` 가 아니라 wallet-sdk 의
+// 체인 무관 토큰 잔액(`PortableTokenBalance`)이다. EVM 컨트랙트 주소든 Solana
+// mint 든 Cosmos denom 이든 같은 형식으로 들어오므로 이 모듈에도, 화면에도
+// 체인별 분기가 없다.
 //
 // TTL 체인에 통화 스테이블이 66 종 발행돼 있다. 목록 화면이 쓸 판단(무엇을
 // 보여줄지, 어떤 순서로, 검색어에 걸리는지)을 전부 여기로 뺐다. UI 를 렌더하지
@@ -18,16 +23,44 @@
 //
 // 환율은 재구현하지 않는다 — wallet-sdk 의 `rateByAddress` / `tokenAmountToTtl`
 // 을 그대로 쓴다. 다만 테스트에서 스냅샷 실제 주소에 묶이지 않도록 조회 함수를
-// 주입 가능하게 열어 뒀다.
+// 주입 가능하게 열어 뒀다. 벼린 환율은 TTL 체인의 통화토큰 66 종에만 있으므로
+// 그 밖의 토큰은 가치 자리를 **비운다** — 0 이나 추정치를 넣지 않는다.
 
 import {
   rateByAddress,
   tokenAmountToTtl,
   authoritativeDecimals,
   unresolvedRates,
-  type DiscoveredBalance,
   type TokenRate,
 } from '@byeorin/wallet-sdk/evm';
+
+// ────────── 체인 무관 토큰 잔액 ──────────
+
+/**
+ * wallet-sdk `packages/wallet-sdk/src/tokens/portable.ts` 의 `PortableTokenBalance`
+ * 와 **구조가 같은** 선언.
+ *
+ * 왜 import 하지 않는가: 그 타입이 아직 wallet-sdk 의 공개 barrel(`./core`,
+ * `./evm`)에 노출돼 있지 않아 `@byeorin/wallet-sdk/*` 로 가져올 수 없다. 셸의
+ * typecheck 는 wallet-sdk 를 다시 빌드하지 않고 기존 `dist/*.d.ts` 로 해석하므로
+ * 지금 import 하면 타입 검사가 깨진다.
+ *
+ * TypeScript 는 구조적 타입이라 SDK 의 `PortableTokenBalance[]` 를 그대로 넘겨도
+ * 문제없이 맞는다. barrel 에 노출되면 이 선언을 지우고 한 줄로 바꾸면 된다:
+ *   `import type { PortableTokenBalance } from '@byeorin/wallet-sdk/core';`
+ */
+export interface PortableTokenBalance {
+  /** 체인 안에서 이 토큰을 가리키는 식별자. TransferIntent.asset 에 그대로 쓴다. */
+  id: string;
+  symbol: string;
+  name: string;
+  /** base unit → 표시 단위 변환에 쓰는 자릿수. */
+  decimals: number;
+  /** base unit 잔액. */
+  balance: bigint;
+  /** 값의 출처가 체인 자체가 아니라 인덱서/외부 API 인 경우 그 이름. */
+  source?: string;
+}
 
 // ────────── 저장 형태 ──────────
 
@@ -35,9 +68,9 @@ import {
 export const HIDDEN_TOKENS_KEY = 'nd:hidden-tokens';
 
 /**
- * 체인키 → 가린 토큰 주소(소문자) 목록.
+ * 체인키 → 가린 토큰 식별자(소문자) 목록.
  *
- * 체인별로 나누는 이유: 같은 주소가 다른 체인에서 다른 토큰이다. 한 체인에서
+ * 체인별로 나누는 이유: 같은 문자열이 다른 체인에서 다른 토큰이다. 한 체인에서
  * 가린 게 다른 체인의 토큰까지 지우면 안 된다.
  */
 export type HiddenMap = Readonly<Record<string, readonly string[]>>;
@@ -83,11 +116,17 @@ export function serializeHidden(map: HiddenMap): string {
   return JSON.stringify(out);
 }
 
-/** 해당 체인에서 이 주소가 가려져 있는가. 주소 대소문자는 무시(EVM 체크섬 흡수). */
-export function isHidden(map: HiddenMap, chainKey: string, address: string): boolean {
+/**
+ * 해당 체인에서 이 토큰이 가려져 있는가.
+ *
+ * 대소문자를 무시한다 — EVM 체크섬 주소를 흡수하기 위해서다. Solana mint 처럼
+ * 대소문자가 의미를 갖는 식별자도 저장·비교가 **양쪽 다** 소문자로 정규화되므로
+ * 판정은 일관된다(표시는 원본 문자열을 그대로 쓴다).
+ */
+export function isHidden(map: HiddenMap, chainKey: string, id: string): boolean {
   const list = map[chainKey];
   if (!list) return false;
-  return list.includes(address.toLowerCase());
+  return list.includes(id.toLowerCase());
 }
 
 /**
@@ -99,10 +138,10 @@ export function isHidden(map: HiddenMap, chainKey: string, address: string): boo
 export function withHidden(
   map: HiddenMap,
   chainKey: string,
-  address: string,
+  id: string,
   hidden: boolean,
 ): HiddenMap {
-  const key = address.toLowerCase();
+  const key = id.toLowerCase();
   const current = map[chainKey] ?? [];
   const has = current.includes(key);
   if (hidden === has) return map; // 변화 없음 — 참조까지 유지해 불필요한 렌더 방지
@@ -113,7 +152,7 @@ export function withHidden(
   return out;
 }
 
-/** 해당 체인에서 가린 주소 목록. */
+/** 해당 체인에서 가린 토큰 식별자 목록. */
 export function hiddenAddresses(map: HiddenMap, chainKey: string): readonly string[] {
   return map[chainKey] ?? [];
 }
@@ -176,9 +215,12 @@ export interface TokenMeta {
 
 /** 목록 한 줄이 표시에 필요한 사실 전부. */
 export interface TokenRow {
-  /** 원본 표기 주소(체크섬). 화면·링크용. */
-  readonly address: string;
-  /** 소문자 주소 — 비교·저장·React key 용. */
+  /**
+   * 체인 안에서 이 토큰을 가리키는 식별자, 원본 표기 그대로.
+   * EVM 은 체크섬 주소, Solana 는 base58 mint, Cosmos 는 denom …
+   */
+  readonly id: string;
+  /** 소문자 id — 비교·저장·React key 용. */
   readonly key: string;
   readonly symbol: string;
   readonly name: string;
@@ -188,10 +230,15 @@ export interface TokenRow {
   readonly meta: TokenMeta;
   /** 잔액의 TTL 환산. 환율이 없으면 null. */
   readonly ttl: number | null;
+  /**
+   * 이 잔액을 누가 말해줬는가. 체인에서 직접 읽었으면 null, 인덱서/외부 API 가
+   * 준 값이면 그 이름. 신뢰도가 다르므로 화면이 근거 패널에 그대로 노출한다.
+   */
+  readonly source: string | null;
 }
 
-/** 주소/심볼 → 통화 메타. 기본 구현은 벼린 스냅샷 조회. */
-export type MetaResolver = (address: string, symbol: string) => TokenMeta;
+/** 토큰 식별자/심볼 → 통화 메타. 기본 구현은 벼린 스냅샷 조회. */
+export type MetaResolver = (id: string, symbol: string) => TokenMeta;
 
 const NO_META: TokenMeta = {
   rate: null,
@@ -200,16 +247,24 @@ const NO_META: TokenMeta = {
   unresolvedReason: null,
 };
 
+/** EVM 컨트랙트 주소 형식. 벼린 환율 스냅샷의 색인 키가 이 형식이다. */
+const EVM_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+
 /**
  * 기본 메타 조회.
  *
+ * 0) 식별자가 EVM 주소 형식이 아니면 곧바로 포기한다. 벼린 환율 스냅샷은 TTL
+ *    체인의 ERC-20 주소로만 색인돼 있어 Solana mint·Cosmos denom 은 있을 수
+ *    없고, 아래 2) 의 심볼 조회가 다른 체인의 동명 토큰을 엉뚱한 나라 통화로
+ *    둔갑시키는 것도 여기서 막힌다.
  * 1) 주소로 환율을 찾는다 — 심볼로 찾지 않는 이유는 심볼이 겹칠 수 있어서다
  *    (tUSD 가 TrueUSD 와 충돌한 전례).
  * 2) 없으면 `unresolved` 목록을 심볼로 뒤진다. 여기엔 주소가 없다. 대만 tTWD 가
  *    실제로 이 경로를 탄다 — 환율은 못 내지만 국가/사유는 보여줄 수 있다.
  */
-export function defaultMetaResolver(address: string, symbol: string): TokenMeta {
-  const rate = rateByAddress(address);
+export function defaultMetaResolver(id: string, symbol: string): TokenMeta {
+  if (!EVM_ADDRESS_RE.test(id)) return NO_META;
+  const rate = rateByAddress(id);
   if (rate) {
     return {
       rate,
@@ -231,31 +286,34 @@ export function defaultMetaResolver(address: string, symbol: string): TokenMeta 
 }
 
 /**
- * DiscoveredBalance[] → TokenRow[].
+ * PortableTokenBalance[] → TokenRow[].
  *
  * 정렬·필터는 여기서 하지 않는다(별도 함수). 이 단계는 "사실 붙이기" 만 한다.
+ * 어느 체인에서 왔는지 묻지 않는다 — 입력 형식이 하나이므로 분기가 없다.
  */
 export function buildTokenRows(
-  tokens: readonly DiscoveredBalance[],
+  tokens: readonly PortableTokenBalance[],
   hidden: HiddenMap,
   chainKey: string,
   resolveMeta: MetaResolver = defaultMetaResolver,
 ): TokenRow[] {
-  return tokens.map((row) => {
-    const meta = resolveMeta(row.token.address, row.token.symbol);
+  return tokens.map((tok) => {
+    const meta = resolveMeta(tok.id, tok.symbol);
     return {
-      address: row.token.address,
-      key: row.token.address.toLowerCase(),
-      symbol: row.token.symbol,
-      name: row.token.name,
-      // 익스플로러가 준 decimals 를 그대로 표시에 쓰지 않는다. 스냅샷에 있는
-      // 토큰은 스냅샷 값이 이긴다 — 안 그러면 익스플로러가 장악됐을 때
-      // 보여지는 수량이 임의 배율로 부푼다.
-      decimals: authoritativeDecimals(row.token.address, row.token.decimals),
-      balance: row.balance,
-      hidden: isHidden(hidden, chainKey, row.token.address),
+      id: tok.id,
+      key: tok.id.toLowerCase(),
+      symbol: tok.symbol,
+      name: tok.name,
+      // 익스플로러/인덱서가 준 decimals 를 그대로 표시에 쓰지 않는다. 스냅샷에
+      // 있는 토큰은 스냅샷 값이 이긴다 — 안 그러면 출처가 장악됐을 때 보여지는
+      // 수량이 임의 배율로 부푼다. 스냅샷에 없으면(대부분의 비-TTL 토큰) 받은
+      // 값을 그대로 쓴다.
+      decimals: authoritativeDecimals(tok.id, tok.decimals),
+      balance: tok.balance,
+      hidden: isHidden(hidden, chainKey, tok.id),
       meta,
-      ttl: tokenAmountToTtl(row.balance, row.token.decimals, meta.rate),
+      ttl: tokenAmountToTtl(tok.balance, tok.decimals, meta.rate),
+      source: tok.source ?? null,
     };
   });
 }
@@ -263,11 +321,14 @@ export function buildTokenRows(
 // ────────── 검색 ──────────
 
 /**
- * 검색어 매칭 — 심볼 · 통화 ISO · 국가명 · 토큰 풀네임 · 주소 앞자리.
+ * 검색어 매칭 — 심볼 · 통화 ISO · 국가명 · 토큰 풀네임 · 식별자 조각.
  *
  * 66 종 중에서 사용자가 아는 단서는 대개 "tKRW" 아니면 "Korea" 다. 둘 다 걸리게
  * 한다. 공백으로 나눈 여러 단어는 **모두** 만족해야 한다(AND) — 좁혀 들어가는
  * 검색이 자연스럽다.
+ *
+ * `source` 는 검색 대상에 넣지 않는다. 인덱서 이름("ttlscan")으로 목록이 통째로
+ * 걸리면 검색이 좁혀지지 않고 넓어진다 — 사용자가 찾는 단서가 아니다.
  */
 export function matchesQuery(row: TokenRow, query: string): boolean {
   const q = query.trim().toLowerCase();

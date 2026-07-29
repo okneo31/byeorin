@@ -17,7 +17,59 @@ import {
   toUncompressedSecp256k1,
 } from '../crypto/secp.js';
 import type { Address, TransferIntent, TxHash } from '../types.js';
+import type {
+  PortableTokenBalance,
+  TokenCapableAdapter,
+} from '../tokens/portable.js';
 import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
+
+/**
+ * denom 하나의 표시 정보.
+ *
+ * **왜 체인에서 안 읽고 여기서 들고 있나:** Cosmos 의 `x/bank` DenomMetadata 는
+ * 선택 사항이고, ZION 을 포함한 많은 체인이 아예 등록하지 않는다
+ * (`ZionWallet.MD` §"DenomMetadata 없음"). 즉 **decimals 를 체인에 물어볼 수
+ * 없다.** 관례상 `u` 접두는 micro(6) 를 뜻하지만 그건 관례일 뿐이고 ZION 의
+ * `ubtc`(8) 하나만으로도 이미 깨진다 — 그래서 추측하지 않고 알려진 값만 쓴다.
+ */
+export interface CosmosDenomMetadata {
+  symbol: string;
+  name?: string;
+  /** base unit → 표시 단위 자릿수. 추측값이 아니라 확인된 값만 넣는다. */
+  decimals: number;
+}
+
+/**
+ * ZION Phase 1 의 4 종 자산. 출처: `ZionWallet.MD` §2 (Keplr `currencies` 와
+ * `chain/x/bankext/types/keys.go`).
+ *
+ * `ubtc` 는 8, `ueth` 는 **6**(표준 ETH 의 18 이 아니다) — denom 접두만 보고
+ * 유추하면 둘 다 틀린다. 그래서 표로 박아 둔다.
+ */
+const ZION_DENOM_METADATA: Readonly<Record<string, CosmosDenomMetadata>> = {
+  utrg: { symbol: 'kWR', name: 'Turing', decimals: 6 },
+  ubtc: { symbol: 'BTC', name: 'Bitcoin (ZION peg)', decimals: 8 },
+  uusdt: { symbol: 'USDT', name: 'Tether USD', decimals: 6 },
+  ueth: { symbol: 'ETH', name: 'Ethereum', decimals: 6 },
+};
+
+/** 내장 denom 표를 가진 체인들. chainId 로 고른다. */
+const BUILTIN_DENOM_METADATA: Readonly<
+  Record<string, Readonly<Record<string, CosmosDenomMetadata>>>
+> = {
+  zion: ZION_DENOM_METADATA,
+};
+
+/**
+ * Cosmos SDK 의 denom 문법 (`types/coin.go` 의 `reDnmString`).
+ * `intent.asset` 이 denom 인지 판별하는 데 쓴다.
+ */
+const DENOM_RE = /^[a-zA-Z][a-zA-Z0-9/:._-]{2,127}$/;
+
+/** decimals 출처 표시 — 화면이 "체인이 말한 값"과 구분할 수 있게 남긴다. */
+const SOURCE_ADAPTER_NATIVE = 'cosmos:adapter-config';
+const SOURCE_BUILTIN = 'cosmos:builtin-denom-table';
+const SOURCE_OPTION = 'cosmos:denomMetadata-option';
 
 export interface CosmosAdapterOptions {
   /** Bech32 chain id, e.g. 'cosmoshub-4', 'osmosis-1', 'celestia', 'pacific-1', 'injective-1'. */
@@ -63,6 +115,16 @@ export interface CosmosAdapterOptions {
    * this opt-in explicit.
    */
   evmAddressing?: boolean;
+  /**
+   * denom → 표시 정보. `discoverTokens` 가 이 표에 있는 denom 만 돌려준다
+   * (내장 표와 native denom 제외).
+   *
+   * **여기 없는 denom 은 조용히 버려진다.** decimals 를 모른 채 6 을 넣으면
+   * 잔액이 자릿수째로 거짓이 되고, 화면은 그게 거짓인지 알 방법이 없다. 항목이
+   * 안 보이는 건 사용자가 알아채지만 100 배 틀린 잔액은 못 알아챈다 — 그래서
+   * 못 보여주는 쪽을 고른다. `ibc/...` denom 을 보이게 하려면 여기에 넣어라.
+   */
+  denomMetadata?: Readonly<Record<string, CosmosDenomMetadata>>;
 }
 
 /**
@@ -100,7 +162,7 @@ const MSG_SEND_TYPE_URL = '/cosmos.bank.v1beta1.MsgSend';
  * Signer (HW or SoftSigner) — we only build & broadcast.
  */
 export class CosmosAdapter
-  implements ChainAdapter<CosmosUnsignedTx, CosmosSignedTx>
+  implements ChainAdapter<CosmosUnsignedTx, CosmosSignedTx>, TokenCapableAdapter
 {
   readonly id: string;
   readonly displayName: string;
@@ -114,6 +176,19 @@ export class CosmosAdapter
   readonly defaultGas: number;
   readonly defaultFee: bigint;
   readonly evmAddressing: boolean;
+
+  /**
+   * 이 체인에서 decimals 를 확실히 아는 denom 들. 생성자에서 한 번 만들고
+   * 고정된다 — 조회 때마다 우선순위를 다시 따지지 않게.
+   *
+   * 우선순위: `denomMetadata` 옵션 > 내장 표(ZION 등) > native denom.
+   * 호출자가 명시한 값이 가장 세다 — 체인이 내장 표와 다르게 갈 수 있으므로
+   * 코드를 고치지 않고도 바로잡을 길을 남긴다.
+   */
+  private readonly denomMeta: ReadonlyMap<
+    string,
+    CosmosDenomMetadata & { source: string }
+  >;
 
   /**
    * Proto `Registry` for tx-body encoding. Read-only by convention — pass
@@ -144,6 +219,36 @@ export class CosmosAdapter
         this.registry.register(typeUrl, type);
       }
     }
+
+    // denom 표를 낮은 우선순위부터 쌓는다 — 나중에 넣은 게 이긴다.
+    const meta = new Map<string, CosmosDenomMetadata & { source: string }>();
+    meta.set(this.denom, {
+      symbol: this.denom,
+      name: this.denom,
+      decimals: this.decimals,
+      source: SOURCE_ADAPTER_NATIVE,
+    });
+    const builtin = BUILTIN_DENOM_METADATA[opts.chainId];
+    if (builtin) {
+      for (const [denom, m] of Object.entries(builtin)) {
+        meta.set(denom, { ...m, source: SOURCE_BUILTIN });
+      }
+    }
+    if (opts.denomMetadata) {
+      for (const [denom, m] of Object.entries(opts.denomMetadata)) {
+        if (!Number.isInteger(m.decimals) || m.decimals < 0) continue;
+        meta.set(denom, { ...m, source: SOURCE_OPTION });
+      }
+    }
+    this.denomMeta = meta;
+  }
+
+  /**
+   * 이 어댑터가 decimals 를 확실히 아는 denom 목록. 화면이 "왜 이 denom 은
+   * 안 보이나"를 설명할 수 있도록 열어 둔다.
+   */
+  knownDenoms(): readonly string[] {
+    return [...this.denomMeta.keys()];
   }
 
   derivationPath(account = 0, index = 0): string {
@@ -202,6 +307,46 @@ export class CosmosAdapter
     }
   }
 
+  /**
+   * 보유 denom 을 전부 돌려준다 — `/cosmos/bank/v1beta1/balances/{address}`
+   * (StargateClient 의 ABCI 등가) **한 번**이면 목록이 다 나온다. EVM 처럼
+   * 컨트랙트를 하나씩 물어볼 필요가 없다.
+   *
+   * **native denom 도 포함한다.** Cosmos 에서 native 는 "특별한 것"이 아니라
+   * 그냥 denom 하나이고, 잔액 API 도 그렇게 준다. 화면이 native 를 따로 그리고
+   * 있다면 `id !== adapter.denom` 로 걸러라.
+   *
+   * **decimals 를 모르는 denom 은 뺀다.** 왜 그렇게 골랐는지는
+   * `CosmosAdapterOptions.denomMetadata` 주석 참고. `ibc/...` denom 도 여기에
+   * 걸린다 — 원 자산을 알려면 denom-trace 를 따로 조회해야 하는데 하지 않으므로
+   * `denomMetadata` 로 알려주지 않는 한 나오지 않는다.
+   *
+   * 실패는 던지지 않고 빈 배열.
+   */
+  async discoverTokens(owner: string): Promise<PortableTokenBalance[]> {
+    let coins: Array<{ denom: string; amount: bigint }>;
+    try {
+      coins = await this.getAllBalances(owner);
+    } catch {
+      return [];
+    }
+    const out: PortableTokenBalance[] = [];
+    for (const coin of coins) {
+      const meta = this.denomMeta.get(coin.denom);
+      if (!meta) continue;
+      if (coin.amount < 0n) continue;
+      out.push({
+        id: coin.denom,
+        symbol: meta.symbol,
+        name: meta.name ?? meta.symbol,
+        decimals: meta.decimals,
+        balance: coin.amount,
+        source: meta.source,
+      });
+    }
+    return out;
+  }
+
   async buildTransfer(
     intent: TransferIntent,
     ctx: TxContext,
@@ -209,6 +354,14 @@ export class CosmosAdapter
     // Standard kWR/uatom/etc. send → one MsgSend. All Cosmos chains accept
     // this; ZION's bankext SendRestriction mirrors it to the Available bucket
     // automatically (see ZionWallet.MD §7).
+    //
+    // 토큰 송금도 **같은 MsgSend** 다 — Cosmos 에서 native 와 토큰은 구조가
+    // 다르지 않고 `amount[].denom` 만 다르다. 그래서 새 메서드 없이
+    // `intent.asset` 을 denom 으로 읽는 한 줄이면 끝난다.
+    //
+    // 수수료(`defaultFee`)는 `this.denom` 그대로다. 보내는 자산이 바뀌어도
+    // 가스는 체인의 기축 denom 으로 낸다.
+    const denom = resolveTransferDenom(intent.asset, this.denom);
     return this.buildTx(
       [
         {
@@ -216,7 +369,7 @@ export class CosmosAdapter
           value: {
             fromAddress: ctx.sender,
             toAddress: intent.to,
-            amount: [{ denom: this.denom, amount: intent.amount.toString() }],
+            amount: [{ denom, amount: intent.amount.toString() }],
           },
         },
       ],
@@ -376,6 +529,32 @@ export class CosmosAdapter
 /* ------------------------------------------------------------------ */
 /* helpers                                                             */
 /* ------------------------------------------------------------------ */
+
+/**
+ * `intent.asset` → 보낼 denom.
+ *
+ * 비어 있으면 native — 기존 송금 경로와 **바이트 단위로 동일**하다.
+ *
+ * 값이 있는데 denom 문법이 아니면 **native 로 조용히 되돌리지 않고 던진다.**
+ * 사용자가 BTC 를 고른 화면에서 kWR 이 나가는 게 최악이다. 실패는 시끄러워야
+ * 한다. (다른 체인용 마커 — 예: EVM 의 `asset: 'erc20'` — 가 잘못 흘러들어온
+ * 경우도 여기서 걸리는 게 낫다. 그런 값은 체인에 없는 denom 이라 어차피
+ * broadcast 에서 실패하지만, 서명 전에 막는 편이 안전하다.)
+ */
+function resolveTransferDenom(
+  asset: string | undefined,
+  nativeDenom: string,
+): string {
+  if (asset === undefined) return nativeDenom;
+  const trimmed = asset.trim();
+  if (trimmed.length === 0) return nativeDenom;
+  if (!DENOM_RE.test(trimmed)) {
+    throw new Error(
+      `cosmos: intent.asset must be a denom (e.g. 'ubtc', 'ibc/...'), got ${JSON.stringify(asset)}`,
+    );
+  }
+  return trimmed;
+}
 
 /**
  * Hand-encode the proto message:

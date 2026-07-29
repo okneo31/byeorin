@@ -574,7 +574,9 @@ export const ko: Catalog = {
   // ---------- token list / Byeorin rates ----------
   'tokens.lead': 'TTL 체인이 감지한 통화 토큰. 검색해서 찾고, 안 보고 싶은 건 가린다.',
   'tokens.error': '토큰 목록을 불러오지 못했습니다. ({reason})',
-  'tokens.unsupported': '토큰 목록은 EVM 체인에서만 볼 수 있습니다.',
+  'tokens.unsupported': '이 체인은 아직 토큰을 지원하지 않습니다.',
+  'tokens.basis_source': '잔액 출처',
+  'tokens.basis_source_onchain': '체인에서 직접 읽음',
   'tokens.search_label': '검색',
   'tokens.search_placeholder': '심볼 · 통화 코드 · 국가 (예: tKRW, USD, Korea)',
   'tokens.search_empty': '\'{query}\' 에 맞는 토큰이 없습니다.',

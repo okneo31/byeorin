@@ -6,10 +6,12 @@ import {
   Ed25519Signature,
   Network,
   type AccountAuthenticator,
+  type InputEntryFunctionData,
   type SimpleTransaction,
   generateSigningMessageForTransaction,
 } from '@aptos-labs/ts-sdk';
 import { sha3_256 } from '@noble/hashes/sha3';
+import type { PortableTokenBalance, TokenCapableAdapter } from '../tokens/portable.js';
 import type { Address, TransferIntent, TxHash } from '../types.js';
 import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
 
@@ -18,7 +20,41 @@ export type AptosNetwork = 'mainnet' | 'testnet' | 'devnet';
 export interface AptosAdapterOptions {
   network?: AptosNetwork;
   fullnode?: string;
+  /**
+   * 인덱서(GraphQL) URL. Fungible Asset(FA) 잔액 조회에만 쓴다.
+   * `null` 을 주면 인덱서를 아예 쓰지 않고 **체인 직접 조회(Coin)만** 한다.
+   */
+  indexer?: string | null;
+  /** fetch 주입 — 테스트에서 가짜 응답을 넣는 용도. */
+  fetch?: typeof fetch;
+  /** 토큰 조회 1회 상한(ms). 기본 8000. 지갑 첫 화면을 막으면 안 된다. */
+  tokenTimeoutMs?: number;
 }
+
+/** fullnode REST base. `/v1` 까지 포함한다. */
+const DEFAULT_FULLNODE: Record<AptosNetwork, string> = {
+  mainnet: 'https://fullnode.mainnet.aptoslabs.com/v1',
+  testnet: 'https://fullnode.testnet.aptoslabs.com/v1',
+  devnet: 'https://fullnode.devnet.aptoslabs.com/v1',
+};
+
+/** Aptos Labs 인덱서 GraphQL 엔드포인트. */
+const DEFAULT_INDEXER: Record<AptosNetwork, string> = {
+  mainnet: 'https://api.mainnet.aptoslabs.com/v1/graphql',
+  testnet: 'https://api.testnet.aptoslabs.com/v1/graphql',
+  devnet: 'https://api.devnet.aptoslabs.com/v1/graphql',
+};
+
+/** 계정 리소스 한 번에 받을 개수 상한. */
+const RESOURCE_PAGE = 200;
+/** 리소스 페이지 최대 반복 (무한 루프 방지). */
+const RESOURCE_MAX_PAGES = 10;
+/** 인덱서에서 받을 FA 잔액 최대 개수. */
+const FA_LIMIT = 100;
+
+/** native APT 의 두 얼굴 — legacy coin type 과 FA metadata 주소. */
+const APT_COIN_TYPE = '0x1::aptos_coin::AptosCoin';
+const APT_FA_METADATA = '0xa';
 
 export interface AptosUnsignedTx {
   /** SimpleTransaction (BCS-serializable RawTransaction wrapper). */
@@ -55,13 +91,21 @@ const NETWORK_MAP: Record<AptosNetwork, Network> = {
  * 32-byte message — Aptos uses raw Ed25519 signature semantics where the inner
  * hash IS the message.
  */
-export class AptosAdapter implements ChainAdapter<AptosUnsignedTx, AptosSignedTx> {
+export class AptosAdapter
+  implements ChainAdapter<AptosUnsignedTx, AptosSignedTx>, TokenCapableAdapter
+{
   readonly curve = 'ed25519' as const;
   readonly coinType = 637;
   readonly id: string;
   readonly displayName: string;
   readonly network: AptosNetwork;
+  /** 토큰 조회에 쓰는 fullnode REST base (체인 직접). */
+  readonly fullnodeUrl: string;
+  /** FA 조회에 쓰는 인덱서 URL. null 이면 FA 조회를 하지 않는다. */
+  readonly indexerUrl: string | null;
+  readonly tokenTimeoutMs: number;
   private readonly aptos: Aptos;
+  private readonly fetchImpl: typeof fetch | undefined;
 
   constructor(opts: AptosAdapterOptions = {}) {
     this.network = opts.network ?? 'mainnet';
@@ -73,6 +117,202 @@ export class AptosAdapter implements ChainAdapter<AptosUnsignedTx, AptosSignedTx
       fullnode: opts.fullnode,
     });
     this.aptos = new Aptos(config);
+    this.fullnodeUrl = (opts.fullnode ?? DEFAULT_FULLNODE[this.network]).replace(
+      /\/+$/,
+      '',
+    );
+    this.indexerUrl =
+      opts.indexer === null
+        ? null
+        : (opts.indexer ?? DEFAULT_INDEXER[this.network]);
+    this.tokenTimeoutMs = opts.tokenTimeoutMs ?? 8_000;
+    this.fetchImpl =
+      opts.fetch ??
+      (globalThis.fetch ? globalThis.fetch.bind(globalThis) : undefined);
+  }
+
+  /**
+   * 이 계정이 가진 토큰 전부 — legacy Coin + Fungible Asset(FA).
+   *
+   * **두 갈래를 쓰고, 출처를 구분해 표시한다:**
+   *   1. Coin (`0x1::coin::CoinStore<T>`) — fullnode 계정 리소스를 직접 훑는다.
+   *      체인 직접 조회이므로 `source` 를 비워 둔다.
+   *   2. FA (`0x1::fungible_asset`) — 소유자의 primary store 는 객체(object) 안에
+   *      들어 있어서, **metadata 주소를 미리 모르면 체인만으로는 열거할 수 없다.**
+   *      그래서 인덱서 GraphQL 을 쓴다. 이 항목은 `source: 'aptos-indexer'` 로
+   *      남긴다 — 남이 말해준 값이라는 뜻이다.
+   *
+   * 같은 자산이 양쪽에 나오면 **체인 직접 조회가 이긴다.**
+   * native APT 는 목록에서 뺀다 — `getBalance` 가 이미 주는 값이라 중복이다.
+   */
+  async discoverTokens(owner: string): Promise<PortableTokenBalance[]> {
+    const [coins, fas] = await Promise.all([
+      this.discoverCoinStores(owner),
+      this.discoverFungibleAssets(owner),
+    ]);
+    const byId = new Map<string, PortableTokenBalance>();
+    for (const t of coins) byId.set(t.id, t);
+    for (const t of fas) if (!byId.has(t.id)) byId.set(t.id, t);
+    return [...byId.values()];
+  }
+
+  /**
+   * fullnode 계정 리소스에서 `0x1::coin::CoinStore<T>` 를 훑는다 — 체인 직접 조회.
+   *
+   * decimals/symbol 은 `0x1::coin::CoinInfo<T>` 에서 읽는다. CoinInfo 는 T 를
+   * 선언한 모듈의 계정에 있으므로, coin type 앞부분의 주소로 한 번 더 요청한다.
+   * **못 읽으면 그 항목을 버린다.** decimals 를 추측하면 잔액이 자릿수째로 거짓이 된다.
+   */
+  private async discoverCoinStores(
+    owner: string,
+  ): Promise<PortableTokenBalance[]> {
+    try {
+      const stores: { coinType: string; balance: bigint }[] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < RESOURCE_MAX_PAGES; page++) {
+        const url =
+          `${this.fullnodeUrl}/accounts/${owner}/resources?limit=${RESOURCE_PAGE}` +
+          (cursor ? `&start=${encodeURIComponent(cursor)}` : '');
+        const res: Response = await this.httpGet(url);
+        if (!res.ok) break;
+        const body: unknown = await res.json();
+        if (!Array.isArray(body)) break;
+        for (const raw of body) {
+          const parsed = parseCoinStore(raw);
+          if (parsed) stores.push(parsed);
+        }
+        cursor = res.headers?.get?.('x-aptos-cursor') ?? null;
+        if (!cursor || body.length === 0) break;
+      }
+
+      const settled = await Promise.allSettled(
+        stores
+          .filter((s) => s.coinType !== APT_COIN_TYPE)
+          .map(async (s): Promise<PortableTokenBalance | null> => {
+            const info = await this.fetchCoinInfo(s.coinType);
+            if (!info) return null;
+            return {
+              id: s.coinType,
+              symbol: info.symbol,
+              name: info.name,
+              decimals: info.decimals,
+              balance: s.balance,
+              // source 없음 = 체인에서 직접 읽은 값.
+            };
+          }),
+      );
+      const out: PortableTokenBalance[] = [];
+      for (const r of settled) {
+        if (r.status === 'fulfilled' && r.value) out.push(r.value);
+      }
+      return out;
+    } catch {
+      return [];
+    }
+  }
+
+  /** `0x1::coin::CoinInfo<T>` 조회. 못 읽거나 decimals 가 정수가 아니면 null. */
+  private async fetchCoinInfo(
+    coinType: string,
+  ): Promise<{ symbol: string; name: string; decimals: number } | null> {
+    const moduleAddr = coinType.split('::')[0];
+    if (!moduleAddr) return null;
+    const resourceType = `0x1::coin::CoinInfo<${coinType}>`;
+    const url = `${this.fullnodeUrl}/accounts/${moduleAddr}/resource/${encodeURIComponent(resourceType)}`;
+    try {
+      const res = await this.httpGet(url);
+      if (!res.ok) return null;
+      const body = (await res.json()) as { data?: unknown };
+      const data = body?.data as
+        | { decimals?: unknown; name?: unknown; symbol?: unknown }
+        | undefined;
+      if (!data) return null;
+      const decimals = toDecimals(data.decimals);
+      if (decimals === null) return null;
+      const symbol = nonEmptyString(data.symbol);
+      if (symbol === null) return null;
+      return { symbol, name: nonEmptyString(data.name) ?? symbol, decimals };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 인덱서 GraphQL 에서 FA 잔액. 체인이 아니라 **인덱서가 말해준 값**이다.
+   *
+   * `current_fungible_asset_balances` 는 FA(v2) 와 coin(v1) 을 모두 담고 있다.
+   * v1 행도 버리지 않는다 — 체인 직접 조회가 실패했을 때의 대체 경로가 되고,
+   * 둘 다 성공하면 `discoverTokens` 의 중복 제거에서 체인 값이 이긴다.
+   */
+  private async discoverFungibleAssets(
+    owner: string,
+  ): Promise<PortableTokenBalance[]> {
+    const endpoint = this.indexerUrl;
+    if (!endpoint) return [];
+    const query = `query ByeorinFaBalances($owner: String!, $limit: Int!) {
+  current_fungible_asset_balances(
+    where: { owner_address: { _eq: $owner }, amount: { _gt: "0" } }
+    limit: $limit
+  ) {
+    asset_type
+    amount
+    metadata { name symbol decimals }
+  }
+}`;
+    try {
+      const res = await this.httpPost(endpoint, {
+        query,
+        variables: { owner, limit: FA_LIMIT },
+      });
+      if (!res.ok) return [];
+      const body = (await res.json()) as {
+        data?: { current_fungible_asset_balances?: unknown };
+      };
+      const rows = body?.data?.current_fungible_asset_balances;
+      if (!Array.isArray(rows)) return [];
+      const out: PortableTokenBalance[] = [];
+      for (const raw of rows) {
+        const token = parseFaRow(raw);
+        if (token) out.push(token);
+      }
+      return out;
+    } catch {
+      return [];
+    }
+  }
+
+  /** GET + AbortController 타임아웃. fetch 가 없으면 실패로 본다. */
+  private async httpGet(url: string): Promise<Response> {
+    const f = this.fetchImpl;
+    if (!f) throw new Error('aptos: fetch unavailable');
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), this.tokenTimeoutMs);
+    try {
+      return await f(url, {
+        headers: { accept: 'application/json' },
+        signal: ctl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** POST(JSON) + AbortController 타임아웃. */
+  private async httpPost(url: string, payload: unknown): Promise<Response> {
+    const f = this.fetchImpl;
+    if (!f) throw new Error('aptos: fetch unavailable');
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), this.tokenTimeoutMs);
+    try {
+      return await f(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify(payload),
+        signal: ctl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   derivationPath(account = 0, index = 0): string {
@@ -115,10 +355,8 @@ export class AptosAdapter implements ChainAdapter<AptosUnsignedTx, AptosSignedTx
     }
     const rawTxn = await this.aptos.transaction.build.simple({
       sender: ctx.sender,
-      data: {
-        function: '0x1::aptos_account::transfer',
-        functionArguments: [intent.to, intent.amount],
-      },
+      // asset 이 비어 있으면 **native APT — 기존 entry function 그대로.**
+      data: buildTransferPayload(intent),
     });
     return { rawTxn, senderPubkey };
   }
@@ -164,6 +402,132 @@ export class AptosAdapter implements ChainAdapter<AptosUnsignedTx, AptosSignedTx
     });
     return pending.hash;
   }
+}
+
+// ── 토큰 (Coin / FA) 유틸 ──────────────────────────────────────
+
+/**
+ * `intent.asset` 을 보고 entry function 을 고른다.
+ *
+ *   asset 없음        → `0x1::aptos_account::transfer`           (native APT, 기존 경로)
+ *   `0x…::mod::T`     → `0x1::aptos_account::transfer_coins<T>`  (legacy Coin)
+ *   `0x…` (주소만)    → `0x1::primary_fungible_store::transfer`  (FA)
+ *
+ * 셋 다 수신자 쪽 저장소가 없으면 알아서 만들어 준다.
+ * 형식을 모르면 **던진다** — 조용히 native 로 떨어지면 "토큰을 보낸 줄 알았는데
+ * APT 가 나간" 사고가 된다.
+ */
+function buildTransferPayload(intent: TransferIntent): InputEntryFunctionData {
+  const asset = intent.asset?.trim();
+  if (!asset) {
+    return {
+      function: '0x1::aptos_account::transfer',
+      functionArguments: [intent.to, intent.amount],
+    };
+  }
+  if (isCoinType(asset)) {
+    return {
+      function: '0x1::aptos_account::transfer_coins',
+      typeArguments: [asset],
+      functionArguments: [intent.to, intent.amount],
+    };
+  }
+  if (isAccountAddress(asset)) {
+    return {
+      function: '0x1::primary_fungible_store::transfer',
+      typeArguments: ['0x1::fungible_asset::Metadata'],
+      functionArguments: [asset, intent.to, intent.amount],
+    };
+  }
+  throw new Error(
+    `aptos: unsupported asset "${asset}" — expected coin type "0x…::mod::T" or FA metadata address`,
+  );
+}
+
+/** `0xADDR::module::Struct` 형태인가 (제네릭 인자 포함 가능). */
+function isCoinType(v: string): boolean {
+  return /^0x[0-9a-fA-F]{1,64}::[A-Za-z_][\w]*::[A-Za-z_][\w]*(<.+>)?$/.test(v);
+}
+
+/** `0x` + 1~64 hex. */
+function isAccountAddress(v: string): boolean {
+  return /^0x[0-9a-fA-F]{1,64}$/.test(v);
+}
+
+/** 계정 리소스 1건이 CoinStore 면 { coinType, balance }, 아니면 null. */
+function parseCoinStore(
+  raw: unknown,
+): { coinType: string; balance: bigint } | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const r = raw as { type?: unknown; data?: unknown };
+  if (typeof r.type !== 'string') return null;
+  const m = /^0x1::coin::CoinStore<(.+)>$/.exec(r.type);
+  const coinType = m?.[1];
+  if (!coinType) return null;
+  const data = r.data as { coin?: { value?: unknown } } | undefined;
+  const value = data?.coin?.value;
+  const balance = toBigIntAmount(value);
+  if (balance === null) return null;
+  return { coinType, balance };
+}
+
+/** 인덱서 FA 행 1건 → PortableTokenBalance. 메타를 못 얻으면 null. */
+function parseFaRow(raw: unknown): PortableTokenBalance | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const r = raw as {
+    asset_type?: unknown;
+    amount?: unknown;
+    metadata?: { name?: unknown; symbol?: unknown; decimals?: unknown } | null;
+  };
+  if (typeof r.asset_type !== 'string' || r.asset_type.length === 0) return null;
+  // native APT 는 목록에서 뺀다 — getBalance 가 이미 주는 값이다.
+  if (r.asset_type === APT_COIN_TYPE) return null;
+  if (isAccountAddress(r.asset_type) && normalizeAddress(r.asset_type) === normalizeAddress(APT_FA_METADATA)) {
+    return null;
+  }
+  const balance = toBigIntAmount(r.amount);
+  if (balance === null) return null;
+  // decimals 를 못 얻으면 추측하지 않고 버린다.
+  const decimals = toDecimals(r.metadata?.decimals);
+  if (decimals === null) return null;
+  const symbol = nonEmptyString(r.metadata?.symbol);
+  if (symbol === null) return null;
+  return {
+    id: r.asset_type,
+    symbol,
+    name: nonEmptyString(r.metadata?.name) ?? symbol,
+    decimals,
+    balance,
+    // 체인이 아니라 인덱서가 말해준 값이다. 숨기지 않는다.
+    source: 'aptos-indexer',
+  };
+}
+
+/** `0xa` 처럼 짧게 쓴 주소를 64자리로 맞춘다 (동일 자산 판별용). */
+function normalizeAddress(v: string): string {
+  return '0x' + v.slice(2).toLowerCase().padStart(64, '0');
+}
+
+/** 문자열/숫자 잔액 → bigint. 음수·소수·형식 오류면 null. */
+function toBigIntAmount(v: unknown): bigint | null {
+  if (typeof v === 'number') {
+    if (!Number.isInteger(v) || v < 0) return null;
+    return BigInt(v);
+  }
+  if (typeof v !== 'string' || !/^\d+$/.test(v)) return null;
+  return BigInt(v);
+}
+
+/** decimals 는 0~36 정수만. 아니면 null (= 항목을 버린다). */
+function toDecimals(v: unknown): number | null {
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > 36) {
+    return null;
+  }
+  return v;
+}
+
+function nonEmptyString(v: unknown): string | null {
+  return typeof v === 'string' && v.length > 0 ? v : null;
 }
 
 function bytesToHex(b: Uint8Array): string {

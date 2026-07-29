@@ -1,19 +1,21 @@
 // SendPane.tsx — 송금 화면.
 //
-// App.tsx 안에 있던 SendPane 을 그대로 옮겨온 뒤 **ERC-20 토큰 분기** 를 더했다.
+// App.tsx 안에 있던 SendPane 을 그대로 옮겨온 뒤 **토큰 분기** 를 더했다.
 // native 경로는 손대지 않았다 — 자산 셀렉터를 건드리지 않으면 예전과 완전히
 // 동일하게 동작한다.
 //
 // 단계: 'compose' (자산/주소/금액 입력) → 'review' (요약 + 확정) → 'sent' / 'error'.
 //
-// 토큰 목록은 **직접 조회하지 않는다.** ActiveAccountCard 가 이미 discoverTokens
-// 로 가져온 DiscoveredBalance[] 를 props 로 받는다 — 같은 화면에서 같은 RPC 를 두
-// 번 때리지 않기 위해서다. 비-EVM 체인이면 null 이 들어오고, 그때는 자산 셀렉터
-// 자체를 그리지 않는다.
+// **자산 선택은 체인과 무관하다.** 예전에는 `chainKey.startsWith('evm:')` 로
+// 셀렉터를 가렸지만 이제 판단 기준은 하나뿐이다: 상위가 넘긴 토큰 목록이 비어
+// 있지 않은가. 토큰이 있으면 그리고, 없으면 안 그린다 — 어느 체인이든 같다.
+//
+// 토큰 목록은 **직접 조회하지 않는다.** 상위가 이미 `discoverPortableTokens` 로
+// 가져온 값을 props 로 받는다 — 같은 화면에서 같은 RPC 를 두 번 때리지 않기
+// 위해서다.
 
 import { useMemo, useState } from 'react';
-import type { ChainAdapter } from '@byeorin/wallet-sdk/core';
-import type { DiscoveredBalance } from '@byeorin/wallet-sdk/evm';
+import type { ChainAdapter, TransferIntent } from '@byeorin/wallet-sdk/core';
 import { ShellError, type Addressbook } from '@byeorin/shell-core';
 import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../../../src/lib/wallet-service.js';
@@ -22,9 +24,10 @@ import {
   buildTransferIntent,
   formatAssetAmount,
   parseAssetAmount,
-  resolveAsset,
   type AssetKey,
+  type SelectedAsset,
 } from '../lib/token-send.js';
+import type { PortableTokenBalance } from '../lib/token-visibility.js';
 
 export interface SendPaneProps {
   onBack: () => void;
@@ -33,10 +36,11 @@ export interface SendPaneProps {
   nativeDecimals: number;
   chainKey: string;
   /**
-   * ActiveAccountCard 가 발견한 ERC-20 잔액. 비-EVM 체인이거나 아직 조회 전이면
-   * null/undefined — 그 경우 native 전용 화면이 된다 (기존 동작).
+   * 상위가 발견한 토큰 잔액 (`discoverPortableTokens` 결과 그대로, 체인 무관).
+   * 아직 조회 전이거나 이 체인이 토큰을 모르면 null/빈 배열 — 그 경우 native
+   * 전용 화면이 된다 (기존 동작).
    */
-  tokens?: readonly DiscoveredBalance[] | null;
+  tokens?: readonly PortableTokenBalance[] | null;
   /** native 잔액(base-unit). 알 수 없으면 null — 잔액 초과 검사를 건너뛴다. */
   nativeBalance?: bigint | null;
   /**
@@ -79,15 +83,15 @@ export function SendPane({
   const trimmedTo = to.trim();
   const trimmedAmount = amount.trim();
 
-  // 토큰 셀렉터는 EVM + 발견된 토큰이 있을 때만. 비-EVM 은 native 만 보낸다.
-  const tokenOptions: readonly DiscoveredBalance[] = isEvm && tokens ? tokens : [];
+  // 토큰 셀렉터의 유일한 조건: 받은 목록이 비어 있지 않은가. 체인은 묻지 않는다.
+  const tokenOptions: readonly PortableTokenBalance[] = tokens ?? [];
   const showAssetPicker = tokenOptions.length > 0;
 
   // 선택 자산 — 심볼/decimals/잔액이 여기서 하나로 확정된다. native 18 과 토큰
   // decimals 를 섞지 않기 위해 아래 파싱·표시는 전부 이 값만 본다.
   const asset = useMemo(
     () =>
-      resolveAsset(
+      selectAsset(
         showAssetPicker ? assetKey : 'native',
         nativeSymbol,
         nativeDecimals,
@@ -135,8 +139,8 @@ export function SendPane({
       setStatus({ kind: 'error', message: amountErrorText(result.reason) });
       return;
     }
-    // native 면 예전과 같은 { to, amount }, ERC-20 이면 Erc20.transfer calldata.
-    const intent = buildTransferIntent(asset, trimmedTo, result.value, adapter);
+    // native 면 예전과 같은 { to, amount }. 토큰이면 체인에 맞는 형식.
+    const intent = buildAssetIntent(asset, trimmedTo, result.value, adapter, isEvm);
     setStatus({ kind: 'pending' });
     try {
       // 활성 체인 어댑터로 송금 — defaultAdapter(TTL) 아님.
@@ -241,7 +245,7 @@ export function SendPane({
           : t('send.lead_native', { symbol: asset.symbol })}
       </p>
 
-      {/* 자산 선택 — EVM + 발견된 토큰이 있을 때만. 비-EVM 은 아예 안 그린다. */}
+      {/* 자산 선택 — 발견된 토큰이 있으면 그린다. 체인은 조건이 아니다. */}
       {showAssetPicker && (
         <>
           <label className="label" htmlFor="send-asset">
@@ -258,9 +262,9 @@ export function SendPane({
             <option value="native">
               {t('send.asset_native_option_symbol', { symbol: nativeSymbol })}
             </option>
-            {tokenOptions.map((row) => (
-              <option key={row.token.address} value={row.token.address}>
-                {row.token.symbol} · {formatAssetAmount(row.balance, row.token.decimals)}
+            {tokenOptions.map((tok) => (
+              <option key={tok.id} value={tok.id}>
+                {tok.symbol} · {formatAssetAmount(tok.balance, tok.decimals)}
               </option>
             ))}
           </select>
@@ -332,6 +336,73 @@ export function SendPane({
       </button>
     </section>
   );
+}
+
+/**
+ * 자산 키 → SelectedAsset. token-send.ts 의 `resolveAsset` 과 같은 규칙이되
+ * 입력이 EVM 전용 `DiscoveredBalance` 가 아니라 체인 무관 `PortableTokenBalance` 다.
+ *
+ * 목록에 없는 키(토큰 목록이 갱신되며 사라진 경우 등)는 native 로 되돌린다 —
+ * "정체를 모르는 자산으로 송금" 이라는 상태를 만들지 않기 위해서다.
+ *
+ * `kind: 'erc20'` 은 token-send.ts 가 쓰는 기존 이름일 뿐이고 여기서는 "native 가
+ * 아님(= 토큰)" 이라는 뜻이다. Solana SPL 도 Cosmos denom 도 이 값을 갖는다.
+ * `address` 에는 `PortableTokenBalance.id` 가 그대로 들어간다.
+ */
+function selectAsset(
+  key: AssetKey,
+  nativeSymbol: string,
+  nativeDecimals: number,
+  nativeBalance: bigint | null,
+  tokens: readonly PortableTokenBalance[],
+): SelectedAsset {
+  if (key !== 'native') {
+    const hit = tokens.find((tok) => tok.id.toLowerCase() === key.toLowerCase());
+    if (hit) {
+      return {
+        kind: 'erc20',
+        symbol: hit.symbol,
+        decimals: hit.decimals,
+        address: hit.id,
+        balance: hit.balance,
+      };
+    }
+  }
+  return {
+    kind: 'native',
+    symbol: nativeSymbol,
+    decimals: nativeDecimals,
+    address: null,
+    balance: nativeBalance,
+  };
+}
+
+/**
+ * 선택 자산 → TransferIntent.
+ *
+ * native 는 예전 그대로 `{ to, amount }` — 이 경로는 한 글자도 바뀌지 않았다.
+ *
+ * 토큰의 원칙 형식은 체인 무관 하나다: `{ to: 받는 주소, amount, asset: 토큰 id }`.
+ * 어댑터의 `buildTransfer` 가 `asset` 을 보고 자기 체인의 토큰 전송을 만든다.
+ *
+ * **EVM 만 예외로 남긴다.** 현재 `EvmAdapter.buildTransfer` 는 `intent.asset` 을
+ * 읽지 않고 `intent.data`(calldata) 만 본다. EVM 에서 원칙 형식을 넣으면 ERC-20 이
+ * 아니라 native 코인이 그대로 나간다 — 자산을 잃는 회귀다. 그래서 EVM 토큰은
+ * 기존 `buildTransferIntent`(Erc20.transfer calldata) 경로를 그대로 쓴다.
+ * EvmAdapter 가 `asset` 을 읽게 되면 이 분기(아래 `if (isEvm)`) 를 지우면 된다.
+ */
+function buildAssetIntent(
+  asset: SelectedAsset,
+  to: string,
+  value: bigint,
+  adapter: ChainAdapter,
+  isEvm: boolean,
+): TransferIntent {
+  if (asset.kind === 'native' || asset.address === null) {
+    return buildTransferIntent(asset, to, value, adapter);
+  }
+  if (isEvm) return buildTransferIntent(asset, to, value, adapter);
+  return { to, amount: value, asset: asset.address };
 }
 
 /** App.tsx 의 shortenAddress 와 같은 규칙. App.tsx 를 건드리지 않으려 복제했다. */
