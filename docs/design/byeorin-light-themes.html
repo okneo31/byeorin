@@ -1,0 +1,211 @@
+<title>벼린 라이트 테마 시안 3종</title>
+<style>
+  :root{
+    --page-bg:#ECEDEF; --page-ink:#1C1D20; --page-muted:#5F6268;
+    --page-card:#FFFFFF; --page-line:#D8DADE; --brand:#E2571F;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --page-bg:#131417; --page-ink:#ECEDEF; --page-muted:#9A9DA4;
+           --page-card:#1D1F23; --page-line:#33363C; }
+  }
+  :root[data-theme="dark"]{ --page-bg:#131417; --page-ink:#ECEDEF; --page-muted:#9A9DA4;
+           --page-card:#1D1F23; --page-line:#33363C; }
+  :root[data-theme="light"]{ --page-bg:#ECEDEF; --page-ink:#1C1D20; --page-muted:#5F6268;
+           --page-card:#FFFFFF; --page-line:#D8DADE; }
+
+  body{ margin:0; background:var(--page-bg); color:var(--page-ink);
+    font-family:"Apple SD Gothic Neo","Malgun Gothic","Segoe UI",system-ui,sans-serif;
+    line-height:1.55; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:40px 20px 72px; }
+  header.top h1{ font-size:26px; margin:0 0 6px; letter-spacing:-.01em; text-wrap:balance; }
+  header.top p{ margin:0; color:var(--page-muted); max-width:62ch; }
+  .kicker{ font-size:12px; letter-spacing:.14em; color:var(--brand); font-weight:700; margin-bottom:10px; }
+
+  .grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+    gap:28px; margin-top:36px; }
+  .proposal{ background:var(--page-card); border:1px solid var(--page-line);
+    border-radius:14px; padding:22px; display:flex; flex-direction:column; gap:16px; }
+  .proposal h2{ margin:0; font-size:18px; }
+  .proposal h2 small{ color:var(--page-muted); font-weight:400; font-size:13px; margin-left:8px; }
+  .mood{ font-size:13.5px; color:var(--page-muted); margin:0; }
+
+  /* ── 폰 목업 공통 ── */
+  .phone{ border-radius:26px; padding:18px 16px 14px; box-shadow:0 10px 28px rgba(0,0,0,.13);
+    display:flex; flex-direction:column; gap:12px; min-height:470px;
+    font-size:13px; border:1px solid rgba(0,0,0,.06); }
+  .p-head{ display:flex; align-items:center; gap:9px; font-weight:800; font-size:15px; }
+  .ring{ width:26px; height:26px; border-radius:50%; flex:none;
+    border:3px solid var(--em-ring); background:var(--em-fill);
+    display:flex; align-items:center; justify-content:center; }
+  .ring b{ width:10px; height:6px; background:var(--em-anvil); border-radius:1px 1px 3px 3px; }
+  .bal{ border-radius:14px; padding:14px; }
+  .bal .lab{ font-size:11px; letter-spacing:.09em; opacity:.75; }
+  .bal .num{ font-size:23px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+  .bal .sub{ font-size:11.5px; opacity:.75; }
+  .btns{ display:flex; gap:8px; }
+  .btns span{ flex:1; text-align:center; padding:9px 0; border-radius:9px; font-weight:700; font-size:12.5px; }
+  .rows{ display:flex; flex-direction:column; gap:7px; }
+  .row{ display:flex; justify-content:space-between; align-items:center;
+    padding:9px 11px; border-radius:10px; font-variant-numeric:tabular-nums; }
+  .row .sym{ font-weight:700; }
+  .row .val{ text-align:right; font-size:12px; line-height:1.35; }
+  .row .val small{ display:block; opacity:.65; font-size:10.5px; }
+  .foot{ margin-top:auto; text-align:center; font-size:10.5px; opacity:.6; }
+
+  /* ── 안 1 · 아침 대장간 ── */
+  .t1 .phone{ background:#FBF6EF; color:#241D15;
+    --em-ring:#E2571F; --em-fill:#FFFFFF; --em-anvil:#33302B; }
+  .t1 .bal{ background:#FFFFFF; border:1px solid #EBDFCE; }
+  .t1 .bal .num{ color:#241D15; } .t1 .bal .num em{ color:#E2571F; font-style:normal; }
+  .t1 .b-pri{ background:#E2571F; color:#FFF8F1; }
+  .t1 .b-sec{ background:#F6E9D8; color:#7A4A22; }
+  .t1 .row{ background:#FFFFFF; border:1px solid #F0E6D6; }
+  .t1 .row .sym{ color:#8A5A2B; }
+
+  /* ── 안 2 · 백강(白鋼) ── */
+  .t2 .phone{ background:#F3F6F9; color:#131C24;
+    --em-ring:#F05423; --em-fill:#FFFFFF; --em-anvil:#22303C; }
+  .t2 .bal{ background:linear-gradient(135deg,#FFFFFF 60%,#EAF1F7); border:1px solid #DCE5EC; }
+  .t2 .bal .num em{ color:#F05423; font-style:normal; }
+  .t2 .b-pri{ background:#F05423; color:#FFF6F1; }
+  .t2 .b-sec{ background:#E2EBF2; color:#31556E; }
+  .t2 .row{ background:#FFFFFF; border:1px solid #E2E9EF; }
+  .t2 .row .sym{ color:#3D6E8C; }
+
+  /* ── 안 3 · 새싹 민트 ── */
+  .t3 .phone{ background:#EFF8F2; color:#14251C;
+    --em-ring:#E2571F; --em-fill:#FFFFFF; --em-anvil:#28352C; }
+  .t3 .bal{ background:#FFFFFF; border:1px solid #D9EDE0; }
+  .t3 .bal .num em{ color:#1E7A56; font-style:normal; }
+  .t3 .b-pri{ background:#E2571F; color:#FFF6F0; }
+  .t3 .b-sec{ background:#DCF0E4; color:#1E6647; }
+  .t3 .row{ background:#FFFFFF; border:1px solid #E0EFE6; }
+  .t3 .row .sym{ color:#1E7A56; }
+
+  .chips{ display:flex; gap:6px; flex-wrap:wrap; }
+  .chip{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--page-muted);
+    border:1px solid var(--page-line); border-radius:999px; padding:3px 9px 3px 4px;
+    font-variant-numeric:tabular-nums; }
+  .chip i{ width:15px; height:15px; border-radius:50%; border:1px solid rgba(0,0,0,.12); }
+  .pts{ margin:0; padding-left:18px; font-size:13px; color:var(--page-muted); }
+  .pts li{ margin:3px 0; }
+  .note{ margin-top:34px; padding:16px 18px; border:1px solid var(--page-line);
+    border-radius:12px; font-size:13.5px; color:var(--page-muted); background:var(--page-card); }
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="kicker">벼린 · 라이트 테마 시안</div>
+  <h1>"상콤한 밝은 느낌" — 3안 비교</h1>
+  <p>현재 다크(#0B0B0D + 주황) 셸을 밝게 뒤집는 세 방향입니다. 세 안 모두 단조 주황을
+  브랜드 축으로 유지하고, 바탕의 온도만 다르게 갑니다. 숫자·화면 구성은 실제 지갑 홈 그대로입니다.</p>
+</header>
+
+<div class="grid">
+
+  <!-- 안 1 -->
+  <section class="proposal t1">
+    <h2>안 1 · 아침 대장간 <small>따뜻한 아이보리</small></h2>
+    <p class="mood">동트는 대장간의 온기. 크림 바탕에 단조 주황이 그대로 살아, 지금 브랜드에서 가장 가까운 밝은 판.</p>
+    <div class="phone">
+      <div class="p-head"><span class="ring"><b></b></span>벼린</div>
+      <div class="bal">
+        <div class="lab">잔액 · TTL 체인</div>
+        <div class="num">49.9963 <em>TTL</em></div>
+        <div class="sub">≈ 12,332.09 tUSD</div>
+      </div>
+      <div class="btns"><span class="b-pri">보내기</span><span class="b-sec">받기</span><span class="b-sec">교환</span></div>
+      <div class="rows">
+        <div class="row"><span class="sym">tUSD</span><span class="val">246.6480<small>1 TTL 기준</small></span></div>
+        <div class="row"><span class="sym">tKRW</span><span class="val">342,406.15<small>1 TTL 기준</small></span></div>
+        <div class="row"><span class="sym">tJPY</span><span class="val">14,741.03<small>1 TTL 기준</small></span></div>
+      </div>
+      <div class="foot">비수탁 지갑 · 키는 사용자에게 · v0.6</div>
+    </div>
+    <div class="chips">
+      <span class="chip"><i style="background:#FBF6EF"></i>#FBF6EF 바탕</span>
+      <span class="chip"><i style="background:#FFFFFF"></i>#FFFFFF 카드</span>
+      <span class="chip"><i style="background:#241D15"></i>#241D15 글자</span>
+      <span class="chip"><i style="background:#E2571F"></i>#E2571F 주황</span>
+      <span class="chip"><i style="background:#F6E9D8"></i>#F6E9D8 보조면</span>
+    </div>
+    <ul class="pts">
+      <li>브랜드 연속성 최대 — 다크판과 오가도 같은 지갑으로 읽힘</li>
+      <li>따뜻한 톤이라 "노동·장인" 정체성과 결이 같음</li>
+      <li>흰 카드 + 크림 바탕이라 명암 위계가 부드러움</li>
+    </ul>
+  </section>
+
+  <!-- 안 2 -->
+  <section class="proposal t2">
+    <h2>안 2 · 백강(白鋼) <small>서늘한 스틸 화이트</small></h2>
+    <p class="mood">갓 담금질한 흰 쇠. 푸른기 도는 흰 바탕 + 강철 파랑 보조 — 셋 중 가장 "금융앱답게" 명료.</p>
+    <div class="phone">
+      <div class="p-head"><span class="ring"><b></b></span>벼린</div>
+      <div class="bal">
+        <div class="lab">잔액 · TTL 체인</div>
+        <div class="num">49.9963 <em>TTL</em></div>
+        <div class="sub">≈ 12,332.09 tUSD</div>
+      </div>
+      <div class="btns"><span class="b-pri">보내기</span><span class="b-sec">받기</span><span class="b-sec">교환</span></div>
+      <div class="rows">
+        <div class="row"><span class="sym">tUSD</span><span class="val">246.6480<small>1 TTL 기준</small></span></div>
+        <div class="row"><span class="sym">tKRW</span><span class="val">342,406.15<small>1 TTL 기준</small></span></div>
+        <div class="row"><span class="sym">tJPY</span><span class="val">14,741.03<small>1 TTL 기준</small></span></div>
+      </div>
+      <div class="foot">비수탁 지갑 · 키는 사용자에게 · v0.6</div>
+    </div>
+    <div class="chips">
+      <span class="chip"><i style="background:#F3F6F9"></i>#F3F6F9 바탕</span>
+      <span class="chip"><i style="background:#FFFFFF"></i>#FFFFFF 카드</span>
+      <span class="chip"><i style="background:#131C24"></i>#131C24 글자</span>
+      <span class="chip"><i style="background:#F05423"></i>#F05423 주황</span>
+      <span class="chip"><i style="background:#3D6E8C"></i>#3D6E8C 강철</span>
+    </div>
+    <ul class="pts">
+      <li>숫자 가독성 최상 — 시세·잔액 화면이 가장 또렷</li>
+      <li>주황이 차가운 바탕 위에서 제일 튐 (버튼 주목도 ↑)</li>
+      <li>보조색(강철 파랑)이 링크·정보 표시에 쓸 자리를 만들어 줌</li>
+    </ul>
+  </section>
+
+  <!-- 안 3 -->
+  <section class="proposal t3">
+    <h2>안 3 · 새싹 민트 <small>상콤한 그린 화이트</small></h2>
+    <p class="mood">요청하신 "상콤"에 정면으로 응답하는 판. 민트 바탕 + 깊은 초록 보조 — 가장 경쾌하고 젊은 인상.</p>
+    <div class="phone">
+      <div class="p-head"><span class="ring"><b></b></span>벼린</div>
+      <div class="bal">
+        <div class="lab">잔액 · TTL 체인</div>
+        <div class="num">49.9963 <em>TTL</em></div>
+        <div class="sub">≈ 12,332.09 tUSD</div>
+      </div>
+      <div class="btns"><span class="b-pri">보내기</span><span class="b-sec">받기</span><span class="b-sec">교환</span></div>
+      <div class="rows">
+        <div class="row"><span class="sym">tUSD</span><span class="val">246.6480<small>1 TTL 기준</small></span></div>
+        <div class="row"><span class="sym">tKRW</span><span class="val">342,406.15<small>1 TTL 기준</small></span></div>
+        <div class="row"><span class="sym">tJPY</span><span class="val">14,741.03<small>1 TTL 기준</small></span></div>
+      </div>
+      <div class="foot">비수탁 지갑 · 키는 사용자에게 · v0.6</div>
+    </div>
+    <div class="chips">
+      <span class="chip"><i style="background:#EFF8F2"></i>#EFF8F2 바탕</span>
+      <span class="chip"><i style="background:#FFFFFF"></i>#FFFFFF 카드</span>
+      <span class="chip"><i style="background:#14251C"></i>#14251C 글자</span>
+      <span class="chip"><i style="background:#E2571F"></i>#E2571F 주황</span>
+      <span class="chip"><i style="background:#1E7A56"></i>#1E7A56 초록</span>
+    </div>
+    <ul class="pts">
+      <li>세 안 중 가장 밝고 산뜻 — "무겁다"는 인상을 확실히 지움</li>
+      <li>초록 = 잔액 증가·성공 상태와 자연스럽게 연결</li>
+      <li>주황 버튼이 포인트로 남아 브랜드는 유지됨</li>
+    </ul>
+  </section>
+</div>
+
+<div class="note">
+  <b>적용 방식(공통):</b> 어느 안이든 셸 CSS 변수(바탕·카드·글자·주황·보조면 5개 축)만 갈아끼우는
+  작업이라 화면 구조는 그대로입니다. 선택 즉시 확장·안드로이드 양쪽에 반영하고 v0.5.13 으로 냅니다.
+  다크판을 남겨 라이트/다크 토글로 갈 수도 있고, 라이트로 완전히 갈아탈 수도 있습니다 — 그것도 함께 정해 주세요.
+</div>
+</div>

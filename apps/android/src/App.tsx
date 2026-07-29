@@ -852,6 +852,43 @@ export function App() {
   );
 }
 
+// ────────── ThemeSwitch ──────────
+//
+// 화면 모드 3상: 시스템 따라가기(기본) / 라이트 / 다크.
+// 토큰은 styles.css 가 정한다 — 시스템은 prefers-color-scheme 미디어 쿼리,
+// 수동 선택은 <html data-theme> 로 그 위에 이긴다. 선택은 localStorage.
+const THEME_MODE_KEY = 'byeorin:theme';
+type ThemeMode = 'system' | 'light' | 'dark';
+function ThemeSwitch() {
+  const t = useT();
+  const [mode, setMode] = useState<ThemeMode>(() => {
+    const v = localStorage.getItem(THEME_MODE_KEY);
+    return v === 'light' || v === 'dark' ? v : 'system';
+  });
+  useEffect(() => {
+    const root = document.documentElement;
+    if (mode === 'system') {
+      delete root.dataset.theme;
+    } else {
+      root.dataset.theme = mode;
+    }
+    localStorage.setItem(THEME_MODE_KEY, mode);
+  }, [mode]);
+  return (
+    <select
+      className="chain-select"
+      aria-label={t('theme.label')}
+      title={t('theme.label')}
+      value={mode}
+      onChange={(e) => setMode(e.target.value as ThemeMode)}
+    >
+      <option value="system">{t('theme.system')}</option>
+      <option value="light">{t('theme.light')}</option>
+      <option value="dark">{t('theme.dark')}</option>
+    </select>
+  );
+}
+
 // ────────── BrandHeader ──────────
 //
 // Playwright smoke 가 `header.brand >> text=벼린` 으로 셀렉트하므로 구조는 유지.
@@ -872,6 +909,7 @@ function BrandHeader({ t }: { t: (k: string) => string }) {
         <span className="brand__wordmark">{brandName}</span>
       </div>
       <div className="brand__right">
+        <ThemeSwitch />
         <LocaleSwitch showLabel={false} />
       </div>
     </header>

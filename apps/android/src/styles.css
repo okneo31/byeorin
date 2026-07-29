@@ -36,6 +36,55 @@
   --popup-inset-hilite: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
+/*
+ * ── 라이트 테마 · 새싹 민트 (2026-07-30 사용자 선택: 안 3) ─────────
+ * 기본은 위의 다크 토큰. 시스템이 라이트이면(수동 '다크' 지정이 없는 한)
+ * 아래가 이기고, 사용자가 수동으로 '라이트'를 고르면 시스템과 무관하게
+ * 이긴다. 구조·간격은 그대로 — 색 토큰만 갈아끼운다.
+ * 민트 화이트 바탕 + 흰 카드 + 깊은 초록 보조 + 단조 주황 CTA.
+ */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --popup-bg:         #eff8f2;
+    --popup-surface-1:  #ffffff;
+    --popup-surface-2:  #e9f4ee;
+    --popup-border:     #cbe4d6;
+    --popup-border-soft:#dcede3;
+    --popup-text:       #17271e;
+    --popup-muted:      #5e7a6c;
+    --popup-red:        #e2571f;
+    --popup-red-soft:   #c1490f;
+    --popup-yellow-soft:#8a6d00;
+    --popup-sweat:      #1e6e8c;
+    --popup-good:       #1e7a56;
+    --popup-on-emphasis:#fff6f0;
+    --popup-cta-from:   #e2571f;
+    --popup-cta-to:     #c64712;
+    --popup-cta-border: #b03f0e;
+    --popup-inset-hilite: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  }
+}
+:root[data-theme='light'] {
+  --popup-bg:         #eff8f2;
+  --popup-surface-1:  #ffffff;
+  --popup-surface-2:  #e9f4ee;
+  --popup-border:     #cbe4d6;
+  --popup-border-soft:#dcede3;
+  --popup-text:       #17271e;
+  --popup-muted:      #5e7a6c;
+  --popup-red:        #e2571f;
+  --popup-red-soft:   #c1490f;
+  --popup-yellow-soft:#8a6d00;
+  --popup-sweat:      #1e6e8c;
+  --popup-good:       #1e7a56;
+  --popup-on-emphasis:#fff6f0;
+  --popup-cta-from:   #e2571f;
+  --popup-cta-to:     #c64712;
+  --popup-cta-border: #b03f0e;
+  --popup-inset-hilite: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+
 * {
   box-sizing: border-box;
 }
@@ -239,13 +288,13 @@ button:disabled {
 
 /* Primary — 빨간 인장 CTA. 위쪽 살짝 밝은 1픽셀 highlight 로 입체감. */
 .btn-primary {
-  background: linear-gradient(180deg, #c41e1e 0%, #a01818 100%);
+  background: linear-gradient(180deg, var(--popup-cta-from, #c41e1e) 0%, var(--popup-cta-to, #a01818) 100%);
   color: #ffffff;
   font-weight: 700;
   /* CTA 는 베이스보다 한 단계 더 크게 (16px) — 첫 화면에서 우선 행동 명확화. */
   font-size: 16px;
   min-height: 44px;
-  border-color: #8e1414;
+  border-color: var(--popup-cta-border, #8e1414);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 .btn-primary:hover:not(:disabled) {
@@ -1006,7 +1055,7 @@ input.verify-row__input {
   letter-spacing: -0.01em;
 }
 .activity-row__dir--out { color: var(--popup-red-soft); }
-.activity-row__dir--in  { color: #6fcf7f; }
+.activity-row__dir--in  { color: var(--popup-good, #6fcf7f); }
 
 .activity-row__time {
   flex: 0 0 auto;
@@ -1029,7 +1078,7 @@ input.verify-row__input {
   white-space: nowrap;
 }
 .activity-row__amount--out { color: var(--popup-text); }
-.activity-row__amount--in  { color: #6fcf7f; }
+.activity-row__amount--in  { color: var(--popup-good, #6fcf7f); }
 
 .activity-row__symbol {
   font-size: 11px;
@@ -1319,7 +1368,7 @@ textarea,
   border-radius: 8px;
   border: 1px solid var(--popup-red-soft);
   background: var(--popup-red-soft);
-  color: #1a0a0a;
+  color: var(--popup-on-emphasis, #1a0a0a);
   font-family: inherit;
   font-size: 14px;
   font-weight: 700;
