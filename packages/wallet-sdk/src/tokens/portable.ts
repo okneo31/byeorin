@@ -70,6 +70,28 @@ export interface TokenCapableAdapter {
    * 안 된다. 부분 실패(일부 토큰만 조회 성공)도 성공한 것만 돌려준다.
    */
   discoverTokens(owner: string): Promise<PortableTokenBalance[]>;
+
+  /**
+   * 식별자 하나를 받아 그 토큰이 무엇인지 체인에서 읽는다. **수동 추가용.**
+   *
+   * 자동 발견이 못 찾는 토큰이 늘 있다. 인덱서가 모르거나, 목록 API 가 상한에
+   * 걸렸거나, 방금 발행됐거나. 그때 사용자가 식별자를 직접 넣을 길이 있어야 한다.
+   *
+   * `id` 형식은 `PortableTokenBalance.id` 와 같다 (EVM 컨트랙트 주소, Solana
+   * mint, Cosmos denom, …). 반환값의 `id` 도 정규화된 형태로 돌려줘야 조회와
+   * 송금이 같은 문자열을 보게 된다.
+   *
+   * 규칙:
+   *   - **decimals 를 못 읽으면 null.** 추측해서 18 을 넣지 않는다. 자릿수가
+   *     틀리면 잔액이 통째로 거짓이 되는데, 사용자는 그걸 알아채지 못한다.
+   *   - 그 체인의 토큰이 아니거나 존재하지 않으면 null.
+   *   - **던져도 된다.** discoverTokens 와 달리 이건 사용자가 명시적으로 요청한
+   *     동작이라, 왜 실패했는지 알려주는 편이 낫다. 화면이 메시지를 보여준다.
+   *
+   * `owner` 는 잔액을 함께 채우기 위한 것이다. 잔액을 못 구하면 0n 으로 두되
+   * 메타데이터는 채워 돌려준다 — 등록 자체는 되어야 한다.
+   */
+  readToken?(id: string, owner: string): Promise<PortableTokenBalance | null>;
 }
 
 /** 이 어댑터가 토큰 조회를 할 수 있는가. */
@@ -120,4 +142,30 @@ function isValidTokenBalance(v: unknown): v is PortableTokenBalance {
     typeof t.balance === 'bigint' &&
     t.balance >= 0n
   );
+}
+
+/**
+ * 식별자 하나를 체인에서 읽어 토큰 정보를 얻는다. **수동 추가용.**
+ *
+ * discoverPortableTokens 와 달리 **던진다.** 사용자가 명시적으로 요청한 동작이라
+ * 조용히 실패하면 왜 안 됐는지 알 수 없다 — 화면이 이유를 보여줘야 한다.
+ */
+export async function readPortableToken(
+  adapter: unknown,
+  id: string,
+  owner: string,
+): Promise<PortableTokenBalance | null> {
+  if (!supportsTokens(adapter) || typeof adapter.readToken !== 'function') {
+    return null;
+  }
+  const out = await adapter.readToken(id, owner);
+  if (out === null || out === undefined) return null;
+  // 어댑터가 이상한 값을 줘도 레지스트리를 오염시키지 않는다. 특히 decimals —
+  // 자릿수가 틀리면 잔액이 통째로 거짓이 되는데 사용자는 알아채지 못한다.
+  return isValidTokenBalance(out) ? out : null;
+}
+
+/** 이 어댑터가 수동 토큰 추가를 지원하는가. */
+export function supportsManualToken(adapter: unknown): boolean {
+  return supportsTokens(adapter) && typeof adapter.readToken === 'function';
 }

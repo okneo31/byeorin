@@ -28,6 +28,8 @@ import { LocaleSwitch, useT } from '@byeorin/i18n/react';
 import type { EvmAdapter } from '@byeorin/wallet-sdk/evm';
 import {
   discoverPortableTokens,
+  readPortableToken,
+  supportsManualToken,
   supportsTokens,
   type PortableTokenBalance,
 } from '@byeorin/wallet-sdk/core';
@@ -39,6 +41,8 @@ import {
   discoverEvmTokens,
   loadCustomTokensFromStorage,
   loadTtlScanTokens,
+  addManualToken,
+  loadManualTokens,
   walletStore,
 } from './wallet-service.js';
 import {
@@ -122,6 +126,143 @@ const ZION_ASSETS: readonly ZionAsset[] = [
   { denom: 'uusdt', symbol: 'USDT', decimals: 6 },
   { denom: 'ueth', symbol: 'ETH', decimals: 6 },
 ];
+
+// ────────── 수동 토큰 추가 ──────────
+//
+// 자동 발견이 못 찾는 토큰은 늘 있다 — 인덱서가 모르거나, 목록 API 상한에
+// 걸렸거나, 방금 발행됐거나. 그때 사용자가 식별자를 직접 넣을 길이 있어야 한다.
+//
+// **체인마다 토큰 식별자의 형식이 완전히 다르다.** 예전에는 입력칸이 `0x…` 로
+// 고정돼 있었고 비-EVM 체인에서는 "EVM 체인에서만 토큰 추가 가능합니다" 라고
+// 거절했다. 지금은 9 체인이 모두 토큰을 다루므로 그 문구는 거짓이다.
+//
+// 분기를 handleAddCustomToken 안에 흩뿌리지 않고 표 하나로 모은다 — 체인이 늘면
+// 이 표에 한 줄이 늘 뿐이고 추가 흐름 자체는 그대로다.
+
+interface ManualTokenHint {
+  /** 입력칸 위에 붙는 이름 — "무엇을 넣는가". */
+  label: string;
+  /** 입력칸 placeholder. 그 체인에서 실제로 통하는 형태만 적는다. */
+  placeholder: string;
+  /** 예시 한 줄. 형식을 말로 설명하는 것보다 실물 하나를 보여주는 편이 빠르다. */
+  example: string;
+  /**
+   * 체인에 물어보기 전에 형식만으로 걸러낼 수 있을 때의 검사.
+   *
+   * 없으면 검사하지 않는다 — **모르는 형식을 지레 거절하지 않는다.** 틀린 값은
+   * 체인이 답을 못 주는 것으로 드러나고, 그쪽이 우리가 어설픈 정규식으로 정상
+   * 토큰을 막는 것보다 낫다.
+   */
+  pattern?: RegExp;
+  patternError?: string;
+}
+
+const MANUAL_TOKEN_HINT_FALLBACK: ManualTokenHint = {
+  label: '토큰 식별자',
+  placeholder: '토큰 식별자',
+  example: '이 체인의 식별자 형식은 아직 안내가 없습니다. 체인 문서의 표기를 그대로 넣으세요.',
+};
+
+/**
+ * chainKey 의 계열 → 입력 안내.
+ *
+ * 키는 `evm:ttl` · `cosmos:zion` 처럼 `계열:체인` 이거나 `solana` 처럼 계열
+ * 하나뿐이다. 앞부분만 보면 둘 다 걸린다.
+ */
+const MANUAL_TOKEN_HINTS: Readonly<Record<string, ManualTokenHint>> = {
+  evm: {
+    label: 'ERC-20 컨트랙트 주소',
+    placeholder: '0x…',
+    example: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+    pattern: /^0x[0-9a-fA-F]{40}$/,
+    patternError: '컨트랙트 주소가 올바르지 않습니다 (0x + 40자리 16진수).',
+  },
+  solana: {
+    label: 'SPL mint 주소 (base58)',
+    placeholder: 'mint 주소',
+    example: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  },
+  tron: {
+    label: 'TRC-20 컨트랙트 주소',
+    placeholder: 'T…',
+    example: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+  },
+  cosmos: {
+    label: 'denom',
+    placeholder: 'utrg 또는 ibc/…',
+    example: 'utrg · ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2',
+  },
+  sui: {
+    label: 'coin type',
+    placeholder: '0x2::sui::SUI',
+    example: '0x2::sui::SUI',
+  },
+  aptos: {
+    label: 'coin type 또는 FA 주소',
+    placeholder: '0x1::aptos_coin::AptosCoin',
+    example: '0x1::aptos_coin::AptosCoin · FA 는 0x… 메타데이터 주소',
+  },
+  ton: {
+    label: 'jetton master 주소',
+    placeholder: 'EQ…',
+    example: 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs',
+  },
+  xrp: {
+    label: '발행 통화 (통화코드.발행자)',
+    placeholder: 'USD.r…',
+    example: 'USD.rhub8VRN55s94qWKDv6jmDy1pUykJzF3wq',
+  },
+};
+
+function manualTokenHint(chainKey: string): ManualTokenHint {
+  const family = chainKey.split(':')[0] ?? '';
+  return MANUAL_TOKEN_HINTS[family] ?? MANUAL_TOKEN_HINT_FALLBACK;
+}
+
+/**
+ * 이 어댑터가 EVM 이면 chainId, 아니면 null.
+ *
+ * **저장에만 쓴다.** 읽기는 체인을 묻지 않는다(readPortableToken). 커스텀 토큰을
+ * 재시작 후에도 기억하는 저장 계층이 지금은 EVM 레지스트리뿐이라, 어디에 넣을 수
+ * 있는지를 판단하는 자리로만 남겨 둔다.
+ */
+function evmChainIdOf(adapter: unknown): number | null {
+  const a = adapter as { chain?: { id?: unknown } };
+  const id = a.chain?.id;
+  return typeof id === 'number' ? id : null;
+}
+
+/** 세션 안에서만 기억하는 수동 추가 토큰. chainKey → 토큰 목록. */
+type ManualTokenMap = Readonly<Record<string, readonly PortableTokenBalance[]>>;
+const EMPTY_MANUAL_TOKENS: readonly PortableTokenBalance[] = [];
+
+/** 같은 식별자를 다시 넣으면 나중 것이 이긴다. 대소문자 무시 — EVM 주소 때문. */
+function mergeManualToken(
+  map: ManualTokenMap,
+  chainKey: string,
+  token: PortableTokenBalance,
+): ManualTokenMap {
+  const cur = map[chainKey] ?? EMPTY_MANUAL_TOKENS;
+  const rest = cur.filter((x) => x.id.toLowerCase() !== token.id.toLowerCase());
+  return { ...map, [chainKey]: [...rest, token] };
+}
+
+/**
+ * 자동 발견 목록 + 수동 추가분.
+ *
+ * 겹치면 자동 쪽이 이긴다 — 재조회로 갱신된 잔액이 추가 시점의 값보다 새롭다.
+ * `null`(조회 중)은 그대로 통과시킨다: 로딩 3상태를 수동 목록이 덮어써서
+ * "조회 중" 이 "빈 목록" 으로 보이면 안 된다.
+ */
+function withManualTokens(
+  discovered: PortableTokenBalance[] | null,
+  manual: readonly PortableTokenBalance[],
+): PortableTokenBalance[] | null {
+  if (discovered === null) return null;
+  if (manual.length === 0) return discovered;
+  const seen = new Set(discovered.map((x) => x.id.toLowerCase()));
+  return [...discovered, ...manual.filter((x) => !seen.has(x.id.toLowerCase()))];
+}
 
 // 가치 표시 — 잔액을 BTC 단위로 보여주고, 클릭하면 USD 토글.
 //
@@ -911,23 +1052,68 @@ function ActiveAccountCard({
   // 양수 잔액만 / 빌트인 4종 전부 보여줌.
   const [evmTokens, setEvmTokens] = useState<PortableTokenBalance[] | null>(null);
   const [showZeroTokens, setShowZeroTokens] = useState(false);
-  // 조회는 항상 전체. 여기서만 거른다 — 토글이 RPC 를 유발하지 않는다.
-  const visibleEvmTokens = (evmTokens ?? []).filter(
-    (t) => showZeroTokens || t.balance > 0n,
-  );
   // "토큰 추가" 모달: idle | 'open' (입력 폼) | 'adding' (RPC fetch 중)
   const [addTokenMode, setAddTokenMode] = useState<'idle' | 'open' | 'adding'>('idle');
   const [addTokenAddr, setAddTokenAddr] = useState('');
   const [addTokenErr, setAddTokenErr] = useState<string | null>(null);
+  // 추가 자체는 됐지만 다음 실행까지 남지 않는 경우의 사실 고지. 에러가 아니다 —
+  // 실패로 표시하면 사용자가 다시 넣게 되고, 감추면 사라지는 이유를 알 수 없다.
+  const [addTokenWarn, setAddTokenWarn] = useState<string | null>(null);
+  // 수동으로 추가한 토큰. **세션 안에서만 산다** — 재시작 후에도 기억하는 저장
+  // 계층이 지금은 EVM 레지스트리뿐이라, 비-EVM 은 여기가 유일한 자리다.
+  const [manualTokens, setManualTokens] = useState<ManualTokenMap>({});
+  // 저장된 수동 추가 토큰을 복원한다. 잔액은 저장하지 않았으므로 0 으로 두고,
+  // 자동 발견이 같은 토큰을 집으면 그쪽 잔액이 이긴다(withManualTokens).
+  useEffect(() => {
+    let cancelled = false;
+    void loadManualTokens().then((stored) => {
+      if (cancelled) return;
+      const restored: Record<string, PortableTokenBalance[]> = {};
+      for (const [chainKey, list] of Object.entries(stored)) {
+        restored[chainKey] = list.map((t) => ({
+          id: t.id,
+          symbol: t.symbol,
+          name: t.name,
+          decimals: t.decimals,
+          balance: 0n,
+          ...(t.source !== undefined ? { source: t.source } : {}),
+        }));
+      }
+      setManualTokens(restored);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // 토큰 추가 후 즉시 evmTokens 를 refresh — 트리거용 카운터.
   const [tokenListRev, setTokenListRev] = useState(0);
+
+  // 체인별 입력 안내 · 수동 추가 가능 여부 · 저장 가능 여부.
+  const tokenHint = manualTokenHint(activeChainKey);
+  const canAddToken = supportsManualToken(adapter);
+
+  const manualForChain = manualTokens[activeChainKey] ?? EMPTY_MANUAL_TOKENS;
+  // 화면과 상위(App)가 보는 목록은 "자동 발견 + 수동 추가" 다.
+  const allTokens = useMemo(
+    () => withManualTokens(evmTokens, manualForChain),
+    [evmTokens, manualForChain],
+  );
+  // 조회는 항상 전체. 여기서만 거른다 — 토글이 RPC 를 유발하지 않는다.
+  // ZION 은 바로 위에서 4종 자산 패널을 이미 그리므로 같은 denom 을 이 목록에서
+  // 뺀다. 패널 쪽을 없애지 않는 이유: 그쪽은 잔액 0 인 자산도 보여주는 자리다.
+  const visibleTokens = (allTokens ?? []).filter(
+    (row) =>
+      (showZeroTokens || row.balance > 0n) &&
+      !(activeChainKey === 'cosmos:zion' && ZION_ASSETS.some((a) => a.denom === row.id)),
+  );
 
   // 조회 결과를 상위(App)로 올린다. 이 카드는 mode==='home' 에서만 마운트되므로,
   // 송금 화면이 열리는 순간 카드가 사라져 값을 잃는다 — App 이 대신 들고 있어야
   // 송금 화면이 같은 RPC 를 두 번 때리지 않는다.
   useEffect(() => {
-    onTokensChange(evmTokens);
-  }, [evmTokens, onTokensChange]);
+    onTokensChange(allTokens);
+  }, [allTokens, onTokensChange]);
   useEffect(() => {
     onNativeBalanceChange(balance);
   }, [balance, onNativeBalanceChange]);
@@ -1039,28 +1225,85 @@ function ActiveAccountCard({
     };
   }, [chainAddress, adapter, activeChainKey, tokenListRev]);
 
+  // 체인이 바뀌면 추가 폼을 비운다. 다른 체인에서 남은 입력·안내가 이 체인의
+  // 사실처럼 보이면 안 된다 — 식별자 형식부터 다르다.
+  useEffect(() => {
+    setAddTokenMode('idle');
+    setAddTokenAddr('');
+    setAddTokenErr(null);
+    setAddTokenWarn(null);
+  }, [activeChainKey]);
+
+  /**
+   * 수동 토큰 추가 — **체인을 묻지 않는다.**
+   *
+   * 예전에는 `adapter.chain.id` 유무로 EVM 인지 보고 아니면 "EVM 체인에서만 토큰
+   * 추가 가능합니다" 로 거절했다. 9 체인이 모두 토큰을 다루는 지금 그 문구는
+   * 거짓이므로 지웠다. 읽기는 `readPortableToken` 하나로 통일하고, 형식 안내만
+   * 체인별 표에서 가져온다.
+   *
+   * `readPortableToken` 은 **던진다.** 사용자가 명시적으로 요청한 동작이라 조용히
+   * 실패하면 왜 안 됐는지 알 수 없다 — 이유를 그대로 화면에 올린다.
+   */
   async function handleAddCustomToken(): Promise<void> {
-    if (!addTokenAddr.trim() || !chainAddress) return;
-    const a = adapter as unknown as { chain?: { id?: number } };
-    if (!a.chain || typeof a.chain.id !== 'number') {
-      setAddTokenErr('EVM 체인에서만 토큰 추가 가능합니다.');
+    const id = addTokenAddr.trim();
+    if (!id || !chainAddress) return;
+    if (!canAddToken) {
+      // 버튼을 안 그리므로 정상 흐름에서는 도달하지 않는다. 도달하면 사실대로.
+      setAddTokenErr('이 체인의 어댑터는 토큰 수동 추가를 아직 지원하지 않습니다.');
       return;
     }
-    const addr = addTokenAddr.trim();
-    if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) {
-      setAddTokenErr('컨트랙트 주소가 올바르지 않습니다 (0x + 40자리 hex).');
+    // 형식 검사는 표가 가진 체인만 한다. 없는 체인은 체인에게 물어본다 —
+    // 어설픈 정규식으로 정상 토큰을 막느니 한 번 더 왕복하는 쪽이 낫다.
+    if (tokenHint.pattern && !tokenHint.pattern.test(id)) {
+      setAddTokenErr(tokenHint.patternError ?? '식별자 형식이 올바르지 않습니다.');
       return;
     }
     setAddTokenErr(null);
+    setAddTokenWarn(null);
     setAddTokenMode('adding');
     try {
-      await addCustomErc20(adapter as unknown as EvmAdapter, a.chain.id, addr);
+      const token = await readPortableToken(adapter, id, chainAddress);
+      if (token === null) {
+        // 던지지 않았는데 값이 없다 = 그 체인의 토큰이 아니거나 decimals 를 못
+        // 읽었다. 자릿수를 추측해 채우면 잔액이 통째로 거짓이 되므로 등록하지 않는다.
+        setAddTokenErr('이 체인의 토큰이 아니거나 자릿수를 읽지 못했습니다.');
+        setAddTokenMode('open');
+        return;
+      }
+      // 영속화 — 모든 체인 공통. chainKey 로 키를 잡는 저장소라 EVM 의 chainId
+      // 개념에 묶이지 않는다. 잔액은 저장하지 않는다(체인의 현재 상태라 저장하는
+      // 순간 거짓이 된다) — 식별자와 메타데이터만 남기고 잔액은 매번 다시 읽는다.
+      try {
+        await addManualToken(activeChainKey, {
+          id: token.id,
+          symbol: token.symbol,
+          name: token.name,
+          decimals: token.decimals,
+          ...(token.source !== undefined ? { source: token.source } : {}),
+        });
+        // EVM 은 레지스트리에도 넣어야 자동 발견이 다음번에 이 토큰을 집는다.
+        // (비-EVM 은 어댑터가 체인에서 직접 목록을 받아오므로 레지스트리가 없다.)
+        const evmChainId = evmChainIdOf(adapter);
+        if (evmChainId !== null) {
+          await addCustomErc20(adapter as unknown as EvmAdapter, evmChainId, token.id);
+        }
+      } catch (e) {
+        // 체인에서 읽는 데는 성공했다. 저장만 실패했으므로 목록에는 올리되
+        // 다음 실행에서 사라진다는 사실을 숨기지 않는다.
+        setAddTokenWarn(
+          `${token.symbol} 을(를) 추가했지만 저장하지 못했습니다 — 지갑을 다시 열면 사라집니다.` +
+            (e instanceof Error && e.message ? ` (${e.message})` : ''),
+        );
+      }
+      // 세션 목록에 먼저 넣는다 — 재조회가 늦거나 못 집어도 화면에는 바로 뜬다.
+      setManualTokens((cur) => mergeManualToken(cur, activeChainKey, token));
       setAddTokenAddr('');
       setAddTokenMode('idle');
       setTokenListRev((v) => v + 1); // discoverTokens 재실행
     } catch (e) {
       setAddTokenErr(
-        e instanceof Error ? e.message : '토큰 metadata 조회 실패 — 컨트랙트 주소 확인',
+        e instanceof Error && e.message ? e.message : '토큰을 읽지 못했습니다.',
       );
       setAddTokenMode('open');
     }
@@ -1197,14 +1440,18 @@ function ActiveAccountCard({
             </ul>
           )}
 
-          {/* EVM 체인 활성 시 ERC-20 자동 발견 토큰. 기본은 잔액 > 0 만 보여
-              첫 인상이 깔끔. "전체 보기" 토글 시 빌트인 4종 모두 노출 — 사용자가
-              어떤 토큰을 watch 가능한지 확인할 수 있다. ZION list 와 같은 스타일. */}
-          {activeChainKey.startsWith('evm:') && evmTokens !== null && (
+          {/* 자동 발견 토큰 + 수동 추가분. 기본은 잔액 > 0 만 보여 첫 인상이 깔끔.
+              "전체 보기" 토글 시 알려진 토큰 전부 노출 — 사용자가 어떤 토큰을 watch
+              가능한지 확인할 수 있다. ZION list 와 같은 스타일.
+
+              **체인으로 막지 않는다.** 예전에는 `evm:` 로 시작하는 체인에서만
+              그렸다. 어댑터가 토큰을 아는지(supportsTokens)만 묻는다 — 모르는
+              체인에서는 애초에 그릴 것이 없다. */}
+          {supportsTokens(adapter) && allTokens !== null && (
             <>
-              {visibleEvmTokens.length > 0 && (
+              {visibleTokens.length > 0 && (
                 <ul className="zion-assets">
-                  {visibleEvmTokens.map((row) => {
+                  {visibleTokens.map((row) => {
                     // 갈림길 하나: 주소가 벼린 환율에 있으면 TTL 환산, 없으면
                     // 기존 Binance/USD 경로. 심볼은 판단에 쓰지 않는다.
                     const rate = rateByAddress(row.id);
@@ -1257,21 +1504,28 @@ function ActiveAccountCard({
                 >
                   {showZeroTokens ? '잔액 0 숨기기' : '전체 보기'}
                 </button>
-                <button
-                  type="button"
-                  className="zion-assets__toggle"
-                  onClick={() => {
-                    setAddTokenMode('open');
-                    setAddTokenErr(null);
-                  }}
-                >
-                  + 토큰 추가
-                </button>
+                {/* 어댑터가 수동 추가를 못 하면 버튼 자체를 안 그린다. 눌러 놓고
+                    "EVM 체인에서만 가능" 같은 거짓 이유를 대지 않기 위해서다. */}
+                {canAddToken && (
+                  <button
+                    type="button"
+                    className="zion-assets__toggle"
+                    onClick={() => {
+                      setAddTokenMode('open');
+                      setAddTokenErr(null);
+                      setAddTokenWarn(null);
+                    }}
+                  >
+                    + {t('tokens.add')}
+                  </button>
+                )}
               </div>
-              {addTokenMode !== 'idle' && (
+              {canAddToken && addTokenMode !== 'idle' && (
                 <div className="add-token-form">
+                  {/* 라벨·placeholder·예시가 전부 체인에서 온다. 식별자 형식은
+                      체인마다 다르고, 틀린 안내는 없는 안내보다 나쁘다. */}
                   <label className="label" htmlFor="add-token-addr">
-                    컨트랙트 주소 (0x...)
+                    {tokenHint.label}
                   </label>
                   <input
                     id="add-token-addr"
@@ -1279,12 +1533,13 @@ function ActiveAccountCard({
                     className="verify-row__input"
                     value={addTokenAddr}
                     onChange={(e) => setAddTokenAddr(e.target.value)}
-                    placeholder="0x..."
+                    placeholder={tokenHint.placeholder}
                     spellCheck={false}
                     autoCapitalize="none"
                     autoCorrect="off"
                     disabled={addTokenMode === 'adding'}
                   />
+                  <p className="muted small">예: {tokenHint.example}</p>
                   {addTokenErr && <p className="error small">{addTokenErr}</p>}
                   <div className="add-token-form__actions">
                     <button
@@ -1307,11 +1562,13 @@ function ActiveAccountCard({
                       }}
                       disabled={addTokenMode === 'adding'}
                     >
-                      취소
+                      {t('common.cancel')}
                     </button>
                   </div>
                 </div>
               )}
+              {/* 추가는 됐지만 남지 않는 경우. 폼을 닫은 뒤에도 보여야 한다. */}
+              {addTokenWarn && <p className="warn small">{addTokenWarn}</p>}
             </>
           )}
 

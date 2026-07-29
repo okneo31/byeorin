@@ -8,6 +8,7 @@ import {
 } from 'xrpl';
 import type {
   AccountLinesRequest,
+  AccountLinesResponse,
   AccountLinesTrustline,
   IssuedCurrencyAmount,
   Payment,
@@ -160,6 +161,98 @@ export class XrpAdapter
       // 토큰 목록 때문에 지갑이 안 열리면 안 된다.
       return [];
     }
+  }
+
+  /**
+   * `CUR.issuer` 하나를 직접 읽는다 — **수동 토큰 추가용.**
+   *
+   * 식별자 판별은 송금과 **같은 `parseIssuedAsset`** 을 쓴다. 조회에서 통과한
+   * 문자열이 송금에서 거절당하는(또는 그 반대) 일이 생기지 않게 한다.
+   *
+   * 조회 경로도 목록과 같다: `account_lines` → `trustLineToToken`. 다만 `peer`
+   * 로 발행자를 좁혀 페이지를 덜 넘긴다 (같은 명령·같은 파서라 값은 동일하다).
+   *
+   * **decimals 는 언제나 15 다.** XRPL 에는 자릿수 개념이 자체가 없고 15 는
+   * 우리 표현 규약이다 (`XRP_ISSUED_DECIMALS` 주석 참고). 즉 "체인에서 못 읽어서
+   * 추측해야 하는 값" 이 아니라 **고정 상수**이므로, trust line 이 없어도 자릿수가
+   * 틀릴 위험이 없다.
+   *
+   * 그래서 **trust line 이 없으면 잔액 0 으로 등록한다.** 아직 안 받은 토큰을
+   * 미리 넣어 두는 것은 정상적인 사용이고, 등록해 둬야 화면에서 수신 준비
+   * (TrustSet) 로 이어갈 수 있다. 주의: trust line 없이는 실제로 받을 수 없다 —
+   * 등록은 목록에 넣는 것일 뿐 수신 준비가 아니다.
+   *
+   * 잔액이 음수인 줄(= 이 계정이 발행자라 빚진 상태)도 잔액 0 으로 등록한다.
+   * `PortableTokenBalance.balance` 가 음수를 담을 수 없어서다. 목록이 그 줄을
+   * 아예 빼는 것과 다르지만, 다른 것은 "보여줄지" 정책뿐이고 id·symbol·decimals
+   * 값 규칙은 같다.
+   */
+  async readToken(
+    id: string,
+    owner: string,
+  ): Promise<PortableTokenBalance | null> {
+    const parsed = parseIssuedAsset(id.trim());
+    if (!parsed) {
+      throw new Error(
+        `xrp: unsupported token id "${id}" — expected issued currency "CUR.issuer"`,
+      );
+    }
+    const line = await this.findTrustLine(owner, parsed.currency, parsed.issuer);
+    if (line) {
+      const token = trustLineToToken(line);
+      if (token) return token;
+    }
+    const symbol = decodeXrpCurrency(parsed.currency);
+    return {
+      id: `${parsed.currency}.${parsed.issuer}`,
+      symbol,
+      name: symbol,
+      decimals: XRP_ISSUED_DECIMALS,
+      balance: 0n,
+      // source 없음 = 체인에서 직접 확인한 결과(없음 포함).
+    };
+  }
+
+  /**
+   * 특정 발행자·통화의 trust line 하나를 찾는다. 없으면 null.
+   *
+   * `discoverTokens` 와 같은 `account_lines` 명령을 쓰되 `peer` 로 발행자를 좁힌다.
+   * 계정 자체가 없으면(actNotFound) trust line 도 없는 것이므로 null.
+   */
+  private async findTrustLine(
+    owner: string,
+    currency: string,
+    issuer: string,
+  ): Promise<AccountLinesTrustline | null> {
+    const client = await this.client();
+    let marker: unknown;
+    for (let page = 0; page < ACCOUNT_LINES_MAX_PAGES; page++) {
+      const req: AccountLinesRequest = {
+        command: 'account_lines',
+        account: owner,
+        ledger_index: 'validated',
+        limit: ACCOUNT_LINES_PAGE,
+        peer: issuer,
+        ...(marker !== undefined ? { marker } : {}),
+      };
+      let res: AccountLinesResponse;
+      try {
+        res = await withTimeout(client.request(req), this.tokenTimeoutMs, this.wsUrl);
+      } catch (err: unknown) {
+        // 계정이 아직 온체인에 없다 = trust line 도 없다. 그 외 오류는 던진다 —
+        // 사용자가 명시적으로 요청한 동작이라 이유를 알려주는 편이 낫다.
+        if (isActNotFound(err)) return null;
+        throw err;
+      }
+      const lines = res?.result?.lines;
+      if (!Array.isArray(lines)) return null;
+      for (const line of lines) {
+        if (line?.currency === currency && line?.account === issuer) return line;
+      }
+      marker = res.result.marker;
+      if (marker === undefined || marker === null) return null;
+    }
+    return null;
   }
 
   async buildTransfer(intent: TransferIntent, ctx: TxContext): Promise<XrpUnsignedTx> {

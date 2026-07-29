@@ -347,6 +347,59 @@ export class CosmosAdapter
     return out;
   }
 
+  /**
+   * denom 하나를 직접 읽는다 — **수동 토큰 추가용.**
+   *
+   * `discoverTokens` 와 **같은 두 가지 재료**만 쓴다. 그래서 두 경로가 갈라질
+   * 수 없다:
+   *   1. 표시 정보(symbol/name/decimals/source) → `this.denomMeta` 같은 맵.
+   *   2. 잔액 → `getAllBalances` 같은 호출. 목록에 그 denom 이 없다는 건 잔액이
+   *      0 이라는 뜻이므로 0n 으로 둔다 (by_denom 을 따로 치면 응답이 두
+   *      스냅샷으로 갈릴 수 있는데, 그럴 이유가 없다).
+   *
+   * **표에 없는 denom 은 null 이다.** Cosmos 는 decimals 를 체인에 물어볼 수 없어
+   * (`CosmosDenomMetadata` 주석 참고) 여기서 6 을 넣으면 그 순간부터 잔액이
+   * 자릿수째로 거짓이 된다. 지금 이 denom 을 등록할 유일한 길은 어댑터를 만들 때
+   * `denomMetadata` 옵션으로 자릿수를 알려 주는 것이다.
+   *
+   * denom 문법 자체가 아니면 **던진다** — 사용자가 방금 입력한 값이라 "왜 안
+   * 되는지" 를 알려주는 편이 조용한 null 보다 낫다.
+   */
+  async readToken(
+    id: string,
+    owner: string,
+  ): Promise<PortableTokenBalance | null> {
+    const denom = id.trim();
+    if (denom.length === 0 || !DENOM_RE.test(denom)) {
+      throw new Error(
+        `cosmos: token id must be a denom (e.g. 'ubtc', 'ibc/...'), got ${JSON.stringify(id)}`,
+      );
+    }
+    const meta = this.denomMeta.get(denom);
+    // decimals 를 모르면 추측하지 않는다. 목록에서 빼는 것과 같은 기준이다.
+    if (!meta) return null;
+
+    let balance = 0n;
+    try {
+      const coins = await this.getAllBalances(owner);
+      const found = coins.find((c) => c.denom === denom);
+      if (found && found.amount > 0n) balance = found.amount;
+    } catch {
+      // 잔액을 못 구해도 등록 자체는 되어야 한다 — 아직 안 받은 denom 을
+      // 미리 넣어 두는 것은 정상적인 사용이다.
+      balance = 0n;
+    }
+
+    return {
+      id: denom,
+      symbol: meta.symbol,
+      name: meta.name ?? meta.symbol,
+      decimals: meta.decimals,
+      balance,
+      source: meta.source,
+    };
+  }
+
   async buildTransfer(
     intent: TransferIntent,
     ctx: TxContext,

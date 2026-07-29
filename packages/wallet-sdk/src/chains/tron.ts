@@ -122,6 +122,8 @@ const SELECTOR_TRANSFER = 'transfer(address,uint256)';
 const SELECTOR_DECIMALS = 'decimals()';
 const SELECTOR_SYMBOL = 'symbol()';
 const SELECTOR_NAME = 'name()';
+/** 수동 추가에서만 쓴다. 목록 조회는 잔액을 TronGrid 계정 API 로 한꺼번에 받는다. */
+const SELECTOR_BALANCE_OF = 'balanceOf(address)';
 
 /** TronGrid `/v1/accounts/{addr}` 응답 중 우리가 쓰는 부분만 좁게 적는다. */
 interface TronGridAccountRow {
@@ -325,6 +327,98 @@ export class TronAdapter
   }
 
   /**
+   * 컨트랙트 주소 하나를 받아 그 TRC-20 이 무엇인지 체인에서 읽는다. **수동 추가용.**
+   *
+   * 호출 구성 — **계약 상수 호출 최대 4회, 순차.** 순서가 곧 우선순위다:
+   *   1. `decimals()`   — 없으면 이 토큰은 등록 자체가 불가능하다.
+   *   2. `balanceOf(owner)` — 화면에 숫자로 뜨는 값.
+   *   3. `symbol()`     — 없으면 주소 축약으로 대체된다.
+   *   4. `name()`       — 없으면 symbol 로 대체된다.
+   *
+   * **왜 목록 조회(`discoverTokens`)와 예산 정책이 다른가.**
+   * 실측(2026-07-29): 무키 TronGrid 는 연속 3 회까지만 받고 4 회째부터 거부하며
+   * 2 초를 기다려도 회복되지 않는다. 그래서 `discoverTokens` 는 토큰마다 `decimals`
+   * 한 번만 쓴다 — 토큰 수만큼 곱해지기 때문이다. 하지만 수동 추가는 **토큰 한
+   * 개짜리 단발 요청**이라 곱해지지 않는다. 사용자가 명시적으로 "이 토큰을 추가해
+   * 달라"고 한 한 건이므로, 예산을 아껴 주소 축약을 보여주는 것보다 symbol/name 까지
+   * 읽어 제대로 보여주는 편이 낫다.
+   *
+   * 그래도 4 회째(`name`)는 무키 환경에서 거부될 수 있다. 그 순서로 둔 이유가
+   * 그것이다 — 잘려도 잃는 것이 가장 적은 항목을 마지막에 둔다. 잔액을 계약에
+   * 직접 묻는 이유도 같다: TronGrid 목록은 수동 추가가 필요해진 바로 그 상황
+   * (목록에 안 나옴)에서 0 을 돌려주므로, 그 값을 잔액이라고 보여주면 거짓이 된다.
+   *
+   * 실패의 종류:
+   *   - **주소 형식/체크섬이 틀리면 던진다.** 사용자가 방금 붙여넣은 문자열이
+   *     주소가 아니라는 사실은 즉시 알려줘야 한다. `normalizeAddress` 가 base58check
+   *     검증과 왕복 일치까지 확인하므로 오타 주소는 여기서 걸린다.
+   *   - **decimals 를 못 읽으면 null.** TRC-20 이 아닌 계약이거나 존재하지 않는
+   *     주소가 여기 해당한다. 6/18 로 추측하지 않는다 — 자릿수가 틀리면 잔액이
+   *     통째로 거짓이 되는데 사용자는 그걸 알아채지 못한다.
+   */
+  async readToken(id: string, owner: string): Promise<PortableTokenBalance | null> {
+    // 던진다. 형식 오류는 사용자가 고칠 수 있는 문제이고, 이 경로는 사용자가
+    // 명시적으로 요청한 단발 동작이라 이유를 알려주는 편이 낫다.
+    const contract = this.normalizeAddress(id, 'token');
+    // owner 도 여기서 검증한다 — 상수 호출에 owner_address 가 필수라 우회할 수 없다.
+    const ownerAddr = this.normalizeAddress(owner, 'owner');
+
+    const decRaw = await this.constantCall(
+      ownerAddr.base58,
+      contract.base58,
+      SELECTOR_DECIMALS,
+    );
+    const decimalsBig = decRaw === null ? null : decodeAbiUint(decRaw);
+    if (decimalsBig === null || decimalsBig < 0n || decimalsBig > 36n) {
+      // 자릿수를 모르면 등록하지 않는다. (범위 밖 값도 신뢰할 수 없으므로 같은 처리.)
+      return null;
+    }
+
+    // **순차 호출.** 병렬로 쏘면 무키 TronGrid 의 연속 호출 한도를 즉시 넘겨
+    // 뒤쪽이 통째로 실패한다 — discoverTokens 가 같은 이유로 순차다.
+    const balRaw = await this.constantCall(
+      ownerAddr.base58,
+      contract.base58,
+      SELECTOR_BALANCE_OF,
+      // hex(41…) 로 넘긴다. base58 을 그대로 주면 인코더 구현에 따라 다른 주소가 된다.
+      [{ type: 'address', value: ownerAddr.hex }],
+    );
+    const balance = balRaw === null ? null : decodeAbiUint(balRaw);
+
+    const symRaw = await this.constantCall(
+      ownerAddr.base58,
+      contract.base58,
+      SELECTOR_SYMBOL,
+    );
+    const symbol = symRaw === null ? null : decodeAbiString(symRaw);
+
+    const nameRaw = await this.constantCall(
+      ownerAddr.base58,
+      contract.base58,
+      SELECTOR_NAME,
+    );
+    const name = nameRaw === null ? null : decodeAbiString(nameRaw);
+
+    const fallback = shortenAddress(contract.base58);
+    return {
+      // 그대로 TransferIntent.asset 에 넣으면 송금이 된다. 0x41… hex 로 넣었어도
+      // base58 정본으로 돌려줘 조회와 송금이 같은 문자열을 보게 한다.
+      id: contract.base58,
+      symbol: symbol ?? fallback,
+      name: name ?? symbol ?? fallback,
+      decimals: Number(decimalsBig),
+      // 잔액을 못 구해도 등록 자체는 되게 한다 — 아직 안 받은 토큰을 미리 등록하는
+      // 것은 정상이다. 다만 0 의 출처가 무엇인지는 source 에 남긴다.
+      balance: balance ?? 0n,
+      source: buildManualSource({
+        balanceFromContract: balance !== null,
+        symbolFromContract: symbol !== null,
+        nameFromContract: name !== null,
+      }),
+    };
+  }
+
+  /**
    * TronGrid 계정 API 에서 (컨트랙트, 잔액) 쌍을 뽑는다.
    *
    * 잔액 0 인 항목은 여기서 버린다 — 남기면 그것 때문에 계약 호출 3회가 더 나가고,
@@ -459,11 +553,17 @@ export class TronAdapter
     };
   }
 
-  /** 계약 상수 호출 1회. 실패하면 던지지 않고 null — 부분 실패를 허용한다. */
+  /**
+   * 계약 상수 호출 1회. 실패하면 던지지 않고 null — 부분 실패를 허용한다.
+   *
+   * `params` 는 기본 빈 배열이라 무인자 호출(decimals/symbol/name)은 예전 그대로다.
+   * `balanceOf(address)` 처럼 인자가 있는 호출만 넘겨 쓴다.
+   */
   private async constantCall(
     ownerBase58: string,
     contractBase58: string,
     selector: string,
+    params: ReadonlyArray<{ type: string; value: string }> = [],
   ): Promise<string | null> {
     try {
       const res: TronTriggerResult =
@@ -471,7 +571,7 @@ export class TronAdapter
           contractBase58,
           selector,
           {},
-          [],
+          [...params],
           // owner_address 는 상수 호출에도 필수다. 비워두면 노드가 거절한다.
           ownerBase58,
         );
@@ -608,6 +708,29 @@ function buildSource(o: {
   if (o.truncation) {
     parts.push(`truncated:${o.truncation.kept}/${o.truncation.total}`);
   }
+  return parts.join('; ');
+}
+
+/**
+ * 수동 추가(`readToken`)의 `source`.
+ *
+ * 목록 조회와 문자열을 나누는 이유: 이쪽은 목록도 잔액도 TronGrid 가 말해준 값이
+ * 아니라 **전부 계약에서 직접 읽은 값**이다. 신뢰도가 다르므로 같은 표기로
+ * 뭉뚱그리지 않는다. 무엇을 못 읽어 대체했는지도 같은 줄에 남긴다.
+ */
+function buildManualSource(o: {
+  balanceFromContract: boolean;
+  symbolFromContract: boolean;
+  nameFromContract: boolean;
+}): string {
+  const read = ['decimals'];
+  if (o.balanceFromContract) read.push('balanceOf');
+  if (o.symbolFromContract) read.push('symbol');
+  if (o.nameFromContract) read.push('name');
+  const parts = [`contract:${read.join(',')}`];
+  if (!o.balanceFromContract) parts.push('balance=0(조회실패)');
+  if (!o.symbolFromContract) parts.push('symbol=주소축약(읽기실패)');
+  if (!o.nameFromContract) parts.push('name=대체(읽기실패)');
   return parts.join('; ');
 }
 

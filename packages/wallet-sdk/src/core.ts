@@ -46,7 +46,9 @@ export type { ChainAdapter, TxContext, SignRequest } from './chains/chain.js';
 // 체인 무관 토큰 계층 — 9 체인이 같은 형식으로 토큰을 돌려준다.
 export {
   discoverPortableTokens,
+  readPortableToken,
   supportsTokens,
+  supportsManualToken,
   type PortableTokenBalance,
   type TokenCapableAdapter,
 } from './tokens/portable.js';

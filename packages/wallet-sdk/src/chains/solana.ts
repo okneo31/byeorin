@@ -386,6 +386,139 @@ export class SolanaAdapter
   }
 
   /**
+   * mint 주소 하나를 받아 그 SPL 토큰이 무엇인지 체인에서 읽는다. **수동 추가용.**
+   *
+   * 호출 구성 — **왕복 2회, 순차.** 합칠 수 없다:
+   *   1. mint 계정 → 소유 프로그램(Token vs Token-2022)과 decimals.
+   *   2. owner 의 ATA → 잔액. ATA 주소 유도에 **1번에서 얻은 프로그램 id 가
+   *      시드로 들어가므로** 1번을 먼저 끝내야 2번의 주소가 정해진다.
+   *
+   * **둘 다 읽기 fallback(`readEndpoints`)을 탄다.** 송금 경로(`writeConnection`)
+   * 와 달리 여기서 나온 값이 곧바로 서명되는 tx 가 되지 않으므로, 판단·실행 노드를
+   * 일치시킬 이유가 없고 엔드포인트 하나가 죽었다고 등록이 막힐 이유도 없다.
+   *
+   * 실패의 종류:
+   *   - **base58 mint 주소 형식이 아니면 던진다.** 사용자가 방금 붙여넣은 문자열이
+   *     주소가 아니라는 사실은 즉시 알려줘야 한다.
+   *   - mint 계정이 없거나 SPL 프로그램 소유가 아니면 null (이 체인의 토큰이 아님).
+   *   - **decimals 를 못 읽으면 null.** 6/9 로 추측하지 않는다 — 자릿수가 틀리면
+   *     잔액이 통째로 거짓이 되는데 사용자는 그걸 알아채지 못한다.
+   *
+   * ATA 가 없으면 잔액 0 이고 **에러가 아니다.** 아직 받은 적 없는 토큰을 미리
+   * 등록하는 것은 정상이고, 그때 ATA 는 첫 수령 시점에 생긴다.
+   *
+   * symbol/name 은 `discoverTokens` 와 **같은 규칙**을 쓴다: 온체인 mint 계정에는
+   * 사람이 읽을 이름이 없으므로 지어내지 않고 mint 주소를 축약해서 쓰고,
+   * 그 사실을 `source: 'mint-address'` 로 넘긴다.
+   */
+  async readToken(id: string, owner: string): Promise<PortableTokenBalance | null> {
+    let mintKey: PublicKey;
+    try {
+      mintKey = new PublicKey(id);
+    } catch {
+      throw new Error(
+        `solana: 토큰 식별자가 mint 주소(base58 32바이트)가 아닙니다: ${id}`,
+      );
+    }
+    // 정규화: 같은 mint 를 다른 표기로 등록하지 못하게 base58 정본으로 되돌린다.
+    // (PublicKey 는 앞의 '1' 개수 같은 표기 흔들림을 흡수한다.)
+    const mint = mintKey.toBase58();
+
+    const mintAccount = await callWithFallback(
+      this.readEndpoints,
+      (conn) => conn.getParsedAccountInfo(mintKey),
+      {
+        timeoutMs: this.readTimeoutMs,
+        label: `solana getParsedAccountInfo(mint ${mint})`,
+        ...(this.onRpcAttemptFailed
+          ? { onAttemptFailed: this.onRpcAttemptFailed }
+          : {}),
+      },
+    );
+    const mintInfo = mintAccount.value;
+    // 체인에 그런 계정이 없다 = 등록할 토큰이 없다.
+    if (!mintInfo) return null;
+
+    const tokenProgramId = mintInfo.owner;
+    // Token Program 과 Token-2022 둘 다 받는다. 원조만 보면 Token-2022 로 발행된
+    // 토큰은 "존재하지 않는 토큰"이 되어 수동 추가조차 막힌다.
+    if (
+      !tokenProgramId.equals(TOKEN_PROGRAM_ID) &&
+      !tokenProgramId.equals(TOKEN_2022_PROGRAM_ID)
+    ) {
+      return null;
+    }
+
+    const decimals = readMintDecimals(mintInfo.data);
+    if (decimals === null) return null;
+
+    const balance = await this.readAtaBalance(owner, mintKey, tokenProgramId, mint);
+
+    return {
+      id: mint, // 그대로 TransferIntent.asset 에 넣으면 송금이 된다.
+      // 온체인에 이름이 없다. discoverTokens 와 같은 규칙 — 지어내지 않는다.
+      symbol: abbreviateMint(mint),
+      name: mint,
+      decimals,
+      balance: balance ?? 0n,
+      // 잔액 조회가 실패한 경우에만 표기를 늘린다. ATA 가 없어서 0 인 것은
+      // 실패가 아니라 체인의 사실이므로 discoverTokens 와 같은 문자열을 준다.
+      source:
+        balance === null
+          ? `${MINT_DERIVED_LABEL_SOURCE}; balance=0(조회실패)`
+          : MINT_DERIVED_LABEL_SOURCE,
+    };
+  }
+
+  /**
+   * owner 의 ATA 잔액. 없으면 `0n`, **읽기 자체가 실패하면 `null`.**
+   *
+   * 둘을 구분하는 이유: "ATA 가 없어서 0" 은 체인의 사실이고 "RPC 가 죽어서 모름"
+   * 은 우리가 모른다는 뜻이다. 화면에 같은 0 으로 보이더라도 source 에서는
+   * 갈라져야 사용자가 잔액 0 을 믿을지 판단할 수 있다.
+   */
+  private async readAtaBalance(
+    owner: string,
+    mintKey: PublicKey,
+    tokenProgramId: PublicKey,
+    mint: string,
+  ): Promise<bigint | null> {
+    let ownerKey: PublicKey;
+    try {
+      ownerKey = new PublicKey(owner);
+    } catch {
+      // owner 가 주소가 아니면 잔액을 구할 길이 없다. 그래도 메타데이터는
+      // 유효하므로 등록 자체를 막지는 않는다.
+      return null;
+    }
+
+    const ata = deriveAssociatedTokenAddress(ownerKey, mintKey, tokenProgramId);
+    try {
+      const info = await callWithFallback(
+        this.readEndpoints,
+        (conn) => conn.getParsedAccountInfo(ata),
+        {
+          timeoutMs: this.readTimeoutMs,
+          label: `solana getParsedAccountInfo(ata ${ata.toBase58()})`,
+          ...(this.onRpcAttemptFailed
+            ? { onAttemptFailed: this.onRpcAttemptFailed }
+            : {}),
+        },
+      );
+      // ATA 가 아직 없다 = 이 토큰을 받은 적이 없다 = 0. 에러가 아니다.
+      if (!info.value) return 0n;
+
+      const parsed = parseSplTokenAccount(asRecord(info.value.data)?.['parsed']);
+      // 파싱이 안 되거나 mint 가 다르면(주소 충돌은 사실상 불가능하지만) 0 으로
+      // 두지 않고 "모름"으로 넘긴다 — 틀린 숫자보다 모른다고 말하는 편이 낫다.
+      if (!parsed || parsed.mint !== mint) return null;
+      return parsed.amount;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * `intent.asset` 이 있으면 SPL 토큰 송금, 없으면 기존 native SOL 송금.
    *
    * 새 메서드를 만들지 않고 여기서 분기하는 이유: 조회가 돌려준 `id`(mint)를

@@ -281,6 +281,159 @@ export class AptosAdapter
     }
   }
 
+  /**
+   * 식별자 하나를 직접 읽는다 — **수동 토큰 추가용.**
+   *
+   * **갈래를 고르는 규칙이 `buildTransferPayload` 와 완전히 같다** (`isCoinType`
+   * → legacy Coin, `isAccountAddress` → FA). 조회에서 Coin 으로 본 것을 송금에서
+   * FA 로 보내면 자산 사고이므로, 판별 함수를 새로 만들지 않고 그대로 쓴다.
+   *
+   *   `0x…::mod::T` → `0x1::coin::CoinInfo<T>` + `CoinStore<T>` (체인 직접, source 없음)
+   *   `0x…`        → 인덱서 GraphQL                            (`source: 'aptos-indexer'`)
+   *
+   * native APT 는 두 표기 모두 null 이다 — `discoverTokens` 가 목록에서 빼는 것과
+   * 같은 이유로, `getBalance` 가 이미 주는 값이라 토큰으로 등록할 대상이 아니다.
+   *
+   * 형식을 모르면 던진다 — 사용자가 방금 입력한 값이라 이유를 알려주는 편이 낫다.
+   */
+  async readToken(
+    id: string,
+    owner: string,
+  ): Promise<PortableTokenBalance | null> {
+    const asset = id.trim();
+    if (isCoinType(asset)) return this.readCoinToken(asset, owner);
+    if (isAccountAddress(asset)) return this.readFungibleAssetToken(asset, owner);
+    throw new Error(
+      `aptos: unsupported token id "${id}" — expected coin type "0x…::mod::T" or FA metadata address`,
+    );
+  }
+
+  /**
+   * legacy Coin 갈래 — 체인 직접 조회.
+   *
+   * 메타는 `discoverCoinStores` 가 쓰는 `fetchCoinInfo` 를 그대로 재사용한다.
+   * 잔액은 `0x1::coin::CoinStore<T>` 리소스 하나를 집어 `parseCoinStore` 로 읽는다
+   * — 목록 경로가 리소스 전체를 훑으며 쓰는 것과 **같은 파서**다.
+   *
+   * CoinStore 가 없으면(= 아직 이 코인을 register 하지 않은 계정) 잔액 0 으로
+   * 등록한다. 등록과 보유는 다른 문제다.
+   */
+  private async readCoinToken(
+    coinType: string,
+    owner: string,
+  ): Promise<PortableTokenBalance | null> {
+    if (coinType === APT_COIN_TYPE) return null;
+    const info = await this.fetchCoinInfo(coinType);
+    // decimals 를 못 읽으면 추측하지 않는다.
+    if (!info) return null;
+
+    let balance = 0n;
+    let resolvedId = coinType;
+    try {
+      const resourceType = `0x1::coin::CoinStore<${coinType}>`;
+      const url = `${this.fullnodeUrl}/accounts/${owner}/resource/${encodeURIComponent(resourceType)}`;
+      const res = await this.httpGet(url);
+      if (res.ok) {
+        const parsed = parseCoinStore(await res.json());
+        if (parsed) {
+          balance = parsed.balance;
+          // 풀노드가 돌려준 표기를 쓴다 — 목록 경로도 같은 곳에서 뽑는다.
+          resolvedId = parsed.coinType;
+        }
+      }
+    } catch {
+      balance = 0n;
+    }
+
+    return {
+      id: resolvedId,
+      symbol: info.symbol,
+      name: info.name,
+      decimals: info.decimals,
+      balance,
+      // source 없음 = 체인에서 직접 읽은 값.
+    };
+  }
+
+  /**
+   * FA 갈래 — 인덱서.
+   *
+   * FA 는 metadata 주소를 알아도 **체인만으로는 primary store 를 열거할 수 없다**
+   * (`discoverFungibleAssets` 주석 참고). 그래서 목록과 마찬가지로 인덱서를 쓰고
+   * `source: 'aptos-indexer'` 를 남긴다.
+   *
+   * 한 번의 GraphQL 로 두 가지를 같이 묻는다:
+   *   - 이 소유자의 잔액 행 (목록 경로와 **같은 필드·같은 파서** `parseFaRow`)
+   *   - 자산 자체의 메타 (잔액 행이 아예 없을 때 쓸 대체 경로)
+   *
+   * 잔액 필터(`amount > 0`)는 걸지 않는다 — 목록은 "가진 것"을 보여주는 자리고
+   * 여기는 "아직 안 받은 것을 등록"하는 자리라서 그렇다. 값을 만드는 규칙은
+   * 그대로다.
+   */
+  private async readFungibleAssetToken(
+    metadataAddress: string,
+    owner: string,
+  ): Promise<PortableTokenBalance | null> {
+    if (normalizeAddress(metadataAddress) === normalizeAddress(APT_FA_METADATA)) {
+      return null;
+    }
+    const endpoint = this.indexerUrl;
+    if (!endpoint) {
+      throw new Error(
+        'aptos: fungible asset lookup needs the indexer, but indexer is disabled (indexer: null)',
+      );
+    }
+    const query = `query ByeorinReadFa($owner: String!, $assetType: String!) {
+  current_fungible_asset_balances(
+    where: { owner_address: { _eq: $owner }, asset_type: { _eq: $assetType } }
+    limit: 1
+  ) {
+    asset_type
+    amount
+    metadata { name symbol decimals }
+  }
+  fungible_asset_metadata(where: { asset_type: { _eq: $assetType } }, limit: 1) {
+    asset_type
+    name
+    symbol
+    decimals
+  }
+}`;
+    const res = await this.httpPost(endpoint, {
+      query,
+      variables: { owner, assetType: metadataAddress },
+    });
+    if (!res.ok) {
+      throw new Error(`aptos: indexer returned HTTP ${res.status}`);
+    }
+    const body = (await res.json()) as {
+      data?: {
+        current_fungible_asset_balances?: unknown;
+        fungible_asset_metadata?: unknown;
+      };
+    };
+    const balanceRows = body?.data?.current_fungible_asset_balances;
+    if (Array.isArray(balanceRows) && balanceRows.length > 0) {
+      const token = parseFaRow(balanceRows[0]);
+      if (token) return token;
+    }
+    const metaRows = body?.data?.fungible_asset_metadata;
+    if (!Array.isArray(metaRows) || metaRows.length === 0) return null;
+    const m = metaRows[0] as {
+      asset_type?: unknown;
+      name?: unknown;
+      symbol?: unknown;
+      decimals?: unknown;
+    } | null;
+    if (!m) return null;
+    // 잔액 행과 똑같은 파서를 태운다 — 검증 규칙이 갈라지지 않게.
+    return parseFaRow({
+      asset_type: m.asset_type,
+      amount: '0',
+      metadata: { name: m.name, symbol: m.symbol, decimals: m.decimals },
+    });
+  }
+
   /** GET + AbortController 타임아웃. fetch 가 없으면 실패로 본다. */
   private async httpGet(url: string): Promise<Response> {
     const f = this.fetchImpl;

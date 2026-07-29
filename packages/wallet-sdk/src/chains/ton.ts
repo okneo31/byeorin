@@ -223,6 +223,115 @@ export class TonAdapter
   }
 
   /**
+   * jetton master 주소 하나를 직접 읽는다 — **수동 토큰 추가용.**
+   *
+   * **출처는 목록과 같은 인덱서다** (`source` 에 호스트를 남긴다). 체인 직접
+   * 조회로는 메타데이터를 온전히 얻을 수 없다: TEP-64 의 `get_jetton_data` 는
+   * content 셀을 주는데, 실무의 대다수 jetton 이 off-chain 형식이라 셀 안에는
+   * URL 만 있고 symbol/decimals 는 그 URL 을 다시 받아와야 나온다. 결국 남이
+   * 말해준 값이 되므로, 인덱서를 쓰고 그 사실을 숨기지 않는 쪽을 고른다.
+   *
+   * 두 단계다:
+   *   1. `/v2/accounts/{owner}/jettons/{master}` — 목록(`/v2/accounts/{owner}/jettons`)
+   *      과 **같은 스키마**라 `parseJettonBalance` 를 그대로 태운다. 그래서
+   *      discoverTokens 와 같은 값(정규화된 id 포함)이 나온다.
+   *   2. jetton wallet 이 아직 없으면(=한 번도 받은 적 없음) `/v2/jettons/{master}`
+   *      로 메타만 읽고 잔액 0 으로 등록한다.
+   *
+   * 인덱서가 꺼져 있으면(`jettonApiUrl: null`) 던진다 — 조용히 null 을 주면
+   * "이 토큰이 없다" 로 읽히는데, 사실은 "물어볼 곳이 없다" 이다.
+   */
+  async readToken(
+    id: string,
+    owner: string,
+  ): Promise<PortableTokenBalance | null> {
+    const base = this.jettonApiUrl;
+    if (!base) {
+      throw new Error(
+        'ton: jetton lookup needs an indexer, but jettonApiUrl is null',
+      );
+    }
+    let master: TonAddress;
+    try {
+      master = TonAddress.parse(id.trim());
+    } catch {
+      throw new Error(
+        `ton: unsupported token id "${id}" — expected a jetton master address`,
+      );
+    }
+    const masterRaw = master.toRawString();
+    const source = hostOf(base);
+    const testOnly = this.network === 'testnet';
+
+    // 1) 이 소유자의 jetton wallet 잔액 — 목록과 같은 응답 모양.
+    const held = await this.fetchIndexerJson(
+      `${base}/v2/accounts/${encodeURIComponent(owner)}/jettons/${encodeURIComponent(masterRaw)}`,
+    );
+    if (held !== null) {
+      const token = parseJettonBalance(held, source, testOnly);
+      if (token) return token;
+    }
+
+    // 2) jetton wallet 이 없다 → master 메타만 읽고 잔액 0 으로 등록한다.
+    const info = await this.fetchIndexerJson(
+      `${base}/v2/jettons/${encodeURIComponent(masterRaw)}`,
+    );
+    if (info === null) return null;
+    const meta = (info as { metadata?: unknown }).metadata;
+    if (typeof meta !== 'object' || meta === null) return null;
+    const m = meta as {
+      address?: unknown;
+      name?: unknown;
+      symbol?: unknown;
+      decimals?: unknown;
+    };
+    // 잔액 응답과 같은 파서를 태운다 — 검증·정규화 규칙이 갈라지지 않게.
+    return parseJettonBalance(
+      {
+        balance: '0',
+        jetton: {
+          // 인덱서가 metadata.address 를 빼먹어도 우리가 아는 master 로 채운다.
+          address: typeof m.address === 'string' ? m.address : masterRaw,
+          name: m.name,
+          symbol: m.symbol,
+          // `/v2/jettons` 는 decimals 를 문자열로 준다 — 숫자로 맞춰 준다.
+          decimals: toJettonDecimals(m.decimals),
+        },
+      },
+      source,
+      testOnly,
+    );
+  }
+
+  /**
+   * 인덱서 GET → JSON. HTTP 오류(404 등)면 `null`.
+   *
+   * 네트워크 자체가 실패하면 **던진다** — `readToken` 은 사용자가 명시적으로
+   * 요청한 동작이라 "없다" 와 "못 물어봤다" 를 같은 값으로 뭉개면 안 된다.
+   */
+  private async fetchIndexerJson(url: string): Promise<unknown | null> {
+    const f = this.fetchImpl;
+    if (!f) throw new Error('ton: fetch unavailable');
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), this.tokenTimeoutMs);
+    try {
+      const res = await f(url, {
+        headers: {
+          accept: 'application/json',
+          ...(this.jettonApiKey
+            ? { authorization: `Bearer ${this.jettonApiKey}` }
+            : {}),
+        },
+        signal: ctl.signal,
+      });
+      if (!res.ok) return null;
+      return (await res.json()) as unknown;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
    * jetton master 주소로부터 **이 소유자의 jetton wallet 주소**를 체인에서 받아온다.
    *
    * 오프체인 계산(master 코드+데이터로 주소를 직접 유도)도 가능하지만, jetton 구현마다
@@ -487,6 +596,19 @@ function parseJettonBalance(
     // 체인이 아니라 인덱서가 말해준 값이다.
     source,
   };
+}
+
+/**
+ * `/v2/jettons/{master}` 의 `metadata.decimals` 를 숫자로 맞춘다.
+ *
+ * tonapi 는 같은 값을 엔드포인트마다 다른 타입으로 준다 — 계정별 잔액에서는
+ * 숫자, master 메타에서는 `"9"` 같은 문자열이다. 여기서 한 번만 맞춰 두고,
+ * 실제 유효성 판정(정수·범위)은 `parseJettonBalance` 한 곳에서만 한다.
+ * 숫자로 못 바꾸면 원본을 그대로 흘려 보내 파서가 버리게 둔다.
+ */
+function toJettonDecimals(v: unknown): unknown {
+  if (typeof v !== 'string' || !/^\d+$/.test(v)) return v;
+  return Number(v);
 }
 
 /** URL 에서 호스트만. 파싱 실패하면 원본을 그대로 쓴다 (source 는 표시용). */

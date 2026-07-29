@@ -17,7 +17,9 @@ export {
 } from './ttlscan.js';
 export {
   discoverPortableTokens,
+  readPortableToken,
   supportsTokens,
+  supportsManualToken,
   type PortableTokenBalance,
   type TokenCapableAdapter,
 } from './portable.js';

@@ -64,6 +64,27 @@ const SUI_ED25519_FLAG = 0x00;
  * BCS-encoded TransactionData. The 32-byte blake2b256 digest is the Ed25519
  * signing message — Sui's verifier reapplies the same intent hash on-chain.
  */
+/**
+ * 기본 RPC. **공식 fullnode 를 쓰지 않는다.**
+ *
+ * 실측(2026-07-29): `fullnode.mainnet.sui.io` 는 JSON-RPC 를 통째로 폐기했다 —
+ * suix_getAllBalances·suix_getCoinMetadata·sui_getObject 까지 전부
+ * "Method not found. JSON-RPC on public fullnodes has been deprecated.
+ *  Please migrate to gRPC or GraphQL" 를 돌려준다. 그래서 토큰 조회가 조용히
+ * 0 건이 되고 수동 추가는 예외로 죽었다.
+ *
+ * @mysten/sui 클라이언트가 JSON-RPC 로 말하므로, GraphQL 로 갈아타려면 SDK 사용
+ * 전체를 바꿔야 한다. 그 전까지는 JSON-RPC 를 아직 지원하는 엔드포인트를 쓴다.
+ * publicnode 는 CORS 도 열려 있어 브라우저에서 직접 부를 수 있다(실측 130ms).
+ *
+ * testnet/devnet 은 아직 공식 fullnode 가 JSON-RPC 를 받으므로 그대로 둔다.
+ */
+function defaultSuiRpcUrl(network: SuiNetwork): string {
+  return network === 'mainnet'
+    ? 'https://sui-rpc.publicnode.com'
+    : getFullnodeUrl(network);
+}
+
 export class SuiAdapter
   implements ChainAdapter<SuiUnsignedTx, SuiSignedTx>, TokenCapableAdapter
 {
@@ -79,7 +100,7 @@ export class SuiAdapter
     this.id = `sui:${this.network}`;
     this.displayName =
       this.network === 'mainnet' ? 'Sui' : `Sui ${this.network}`;
-    const url = opts.url ?? getFullnodeUrl(this.network);
+    const url = opts.url ?? defaultSuiRpcUrl(this.network);
     this.client = new SuiClient({ url });
   }
 
@@ -164,6 +185,72 @@ export class SuiAdapter
       });
     }
     return out;
+  }
+
+  /**
+   * coin type 하나를 직접 읽는다 — **수동 토큰 추가용.**
+   *
+   * `discoverTokens` 와 같은 두 곳만 본다: `suix_getCoinMetadata` 로 표시 정보,
+   * `suix_getBalance` 로 잔액. metadata 판정 기준(정수 decimals, 없으면 버림)도
+   * 같은 조건을 그대로 쓴다.
+   *
+   * **id 는 풀노드가 돌려준 coin type 을 그대로 쓴다.** `0x2::sui::SUI` 와
+   * `0x000…002::sui::SUI` 는 같은 코인인데 문자열이 다르다. 사용자가 어느 쪽으로
+   * 적든 `suix_getBalance` 응답의 `coinType` 을 id 로 삼으면 `suix_getAllBalances`
+   * (= discoverTokens 의 출처) 와 같은 표기가 나온다. 잔액 조회가 실패했을 때만
+   * `normalizeStructTag` 한 값으로 대신한다.
+   *
+   * coin type 문법이 아니면 던진다 — 사용자가 방금 입력한 값이라 이유를 알려주는
+   * 편이 낫다.
+   */
+  async readToken(
+    id: string,
+    owner: string,
+  ): Promise<PortableTokenBalance | null> {
+    const trimmed = id.trim();
+    let coinType: string;
+    try {
+      if (trimmed.length === 0) throw new Error('empty');
+      coinType = normalizeStructTag(trimmed);
+    } catch {
+      throw new Error(
+        `sui: token id must be a coin type (e.g. '0x2::sui::SUI'), got ${JSON.stringify(id)}`,
+      );
+    }
+
+    const meta = await this.client.getCoinMetadata({ coinType });
+    // decimals 를 못 얻으면 추측하지 않는다 — discoverTokens 와 같은 판정.
+    if (
+      meta === null ||
+      typeof meta.decimals !== 'number' ||
+      !Number.isInteger(meta.decimals) ||
+      meta.decimals < 0
+    ) {
+      return null;
+    }
+
+    let balance = 0n;
+    let resolvedId = coinType;
+    try {
+      const res = await this.client.getBalance({ owner, coinType });
+      const parsed = BigInt(res.totalBalance);
+      if (parsed >= 0n) balance = parsed;
+      if (typeof res.coinType === 'string' && res.coinType.length > 0) {
+        resolvedId = res.coinType;
+      }
+    } catch {
+      // 아직 이 코인을 하나도 안 받은 주소일 수 있다. 등록은 되어야 한다.
+      balance = 0n;
+    }
+
+    return {
+      id: resolvedId,
+      symbol: meta.symbol,
+      name: meta.name.length > 0 ? meta.name : meta.symbol,
+      decimals: meta.decimals,
+      balance,
+      source: 'sui:getCoinMetadata',
+    };
   }
 
   async buildTransfer(

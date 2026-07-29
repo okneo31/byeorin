@@ -161,3 +161,105 @@ export async function discoverEvmTokens(
     maxRpcCalls: 256,
   });
 }
+// ────────── 체인 무관 수동 토큰 저장소 ──────────
+//
+// 왜 별도인가: 기존 `nd:custom-tokens` 는 `Record<chainId(number), TokenInfo[]>`
+// 다. chainId 는 EVM 에만 있는 개념이라 Solana·Cosmos·XRP 를 담을 수 없다.
+// 그래서 chainKey(`evm:ttl`, `solana`, `cosmos:zion`) 로 키를 잡는 저장소를
+// 따로 둔다. 기존 것을 마이그레이션하지 않는 이유는 EVM 커스텀 토큰이 이미
+// 레지스트리 경로로 잘 동작하고 있어서, 건드리면 회귀만 생기기 때문이다.
+//
+// **잔액은 저장하지 않는다.** 잔액은 체인의 현재 상태라 저장하는 순간 거짓이
+// 된다. 식별자와 메타데이터만 남기고 잔액은 매번 어댑터에게 다시 묻는다.
+
+const MANUAL_TOKENS_KEY = 'nd:manual-tokens';
+
+/** 저장 형식 — 잔액 없는 메타데이터만. */
+export interface ManualTokenRecord {
+  id: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  /** 읽어온 출처(체인 직접 / 인덱서). 화면이 신뢰도를 표시한다. */
+  source?: string;
+}
+
+type ManualTokensStored = Record<string, ManualTokenRecord[]>;
+
+function sameId(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+/** chainKey 별 수동 추가 토큰 목록. 실패하면 빈 객체 — 지갑을 막지 않는다. */
+export async function loadManualTokens(): Promise<ManualTokensStored> {
+  try {
+    const raw = await readManualRaw();
+    if (!raw || typeof raw !== 'object') return {};
+    const out: ManualTokensStored = {};
+    for (const [chainKey, list] of Object.entries(raw)) {
+      if (!Array.isArray(list)) continue;
+      const kept = list.filter(isManualRecord);
+      if (kept.length > 0) out[chainKey] = kept;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** 추가. 같은 id 가 이미 있으면 메타데이터를 갱신한다. */
+export async function addManualToken(
+  chainKey: string,
+  token: ManualTokenRecord,
+): Promise<void> {
+  if (!isManualRecord(token)) {
+    // decimals 가 틀린 값을 저장하면 그 뒤로 계속 거짓 잔액을 보여준다.
+    throw new Error('수동 토큰 형식이 올바르지 않습니다.');
+  }
+  const all = await loadManualTokens();
+  const list = all[chainKey] ?? [];
+  const idx = list.findIndex((t) => sameId(t.id, token.id));
+  if (idx >= 0) list[idx] = token;
+  else list.push(token);
+  all[chainKey] = list;
+  await writeManualRaw(all);
+}
+
+/** 제거. 없으면 no-op. */
+export async function removeManualToken(chainKey: string, id: string): Promise<void> {
+  const all = await loadManualTokens();
+  const list = all[chainKey];
+  if (!list) return;
+  const next = list.filter((t) => !sameId(t.id, id));
+  if (next.length === 0) delete all[chainKey];
+  else all[chainKey] = next;
+  await writeManualRaw(all);
+}
+
+/**
+ * 저장된 값이 쓸 만한지 본다. **decimals 가 정수가 아니면 버린다** — 저장소가
+ * 손상됐거나 옛 형식이 섞였을 때 거짓 잔액을 화면에 올리지 않기 위한 방어선이다.
+ */
+function isManualRecord(v: unknown): v is ManualTokenRecord {
+  if (typeof v !== 'object' || v === null) return false;
+  const t = v as ManualTokenRecord;
+  return (
+    typeof t.id === 'string' &&
+    t.id.length > 0 &&
+    typeof t.symbol === 'string' &&
+    typeof t.name === 'string' &&
+    typeof t.decimals === 'number' &&
+    Number.isInteger(t.decimals) &&
+    t.decimals >= 0 &&
+    t.decimals <= 36
+  );
+}
+
+async function readManualRaw(): Promise<unknown> {
+  const raw = localStorage.getItem(MANUAL_TOKENS_KEY);
+  return raw === null ? undefined : (JSON.parse(raw) as unknown);
+}
+
+async function writeManualRaw(all: ManualTokensStored): Promise<void> {
+  localStorage.setItem(MANUAL_TOKENS_KEY, JSON.stringify(all));
+}

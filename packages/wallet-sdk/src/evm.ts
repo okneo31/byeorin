@@ -54,7 +54,9 @@ export {
 
 export {
   discoverPortableTokens,
+  readPortableToken,
   supportsTokens,
+  supportsManualToken,
   type PortableTokenBalance,
   type TokenCapableAdapter,
 } from './tokens/portable.js';

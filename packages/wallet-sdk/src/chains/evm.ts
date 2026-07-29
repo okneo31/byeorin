@@ -2,6 +2,7 @@ import {
   bytesToHex,
   concat,
   createPublicClient,
+  getAddress,
   hexToBytes,
   http,
   keccak256,
@@ -20,6 +21,12 @@ import {
 import { publicKeyToAddress } from 'viem/accounts';
 import { toUncompressedSecp256k1 } from '../crypto/secp.js';
 import { discoverTokens as discoverRegistryTokens } from '../tokens/discovery.js';
+// Erc20 는 `import type { EvmAdapter }` 만 되짚으므로 런타임 순환이 생기지 않는다
+// (타입 import 는 컴파일 후 사라진다). 아래 ERC20_TRANSFER_ABI 를 복제한 이유는
+// 그 주석에 적힌 대로 **값 의존**을 피하기 위한 것이었는데, 여기서 필요한 것은
+// 이미 있는 read 구현(symbol/name/decimals/balanceOf)이라 그대로 쓴다 —
+// 같은 호출을 두 벌 만들면 둘이 어긋난다.
+import { Erc20 } from '../tokens/erc20.js';
 import { TokenRegistry } from '../tokens/registry.js';
 import type { PortableTokenBalance, TokenCapableAdapter } from '../tokens/portable.js';
 import type { Signer, Address, TransferIntent, TxHash } from '../types.js';
@@ -69,6 +76,21 @@ export const DEFAULT_EVM_TOKEN_SCAN_CALLS = 512;
  */
 export const EVM_TOKEN_SOURCE_BUILTIN = 'erc20.balanceOf';
 export const EVM_TOKEN_SOURCE_CUSTOM = 'erc20.balanceOf:custom';
+
+/**
+ * `readToken`(수동 추가)이 쓰는 표기.
+ *
+ * 목록 조회와 구분하는 이유: 이쪽은 **레지스트리를 거치지 않고 컨트랙트에서 직접**
+ * 심볼/이름/자릿수를 읽는다. 같은 `erc20.balanceOf` 로 뭉뚱그리면 화면이 "코드에
+ * 박힌 값"과 "방금 계약에 물어본 값"을 구별할 수 없다.
+ */
+export const EVM_TOKEN_SOURCE_MANUAL = 'erc20.contract';
+
+/** portable.ts 의 검증 상한과 맞춘다 — 벗어나면 신뢰할 수 없는 값이다. */
+const MAX_TOKEN_DECIMALS = 36;
+
+/** 컨트랙트 주소 형식. 이걸 통과 못 하면 EVM 토큰이 아니다. */
+const EVM_CONTRACT_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 
 /**
  * 레지스트리를 주입받지 못한 어댑터가 쓰는 폴백 — 빌트인만 들어 있다.
@@ -337,6 +359,80 @@ export class EvmAdapter
     }
   }
 
+  /**
+   * 컨트랙트 주소 하나를 받아 그 ERC-20 이 무엇인지 체인에서 읽는다. **수동 추가용.**
+   *
+   * 호출 구성 — **왕복 4회, 전부 동시에 나간다** (`decimals`/`symbol`/`name`/
+   * `balanceOf`). 순차로 돌릴 이유가 없다: EVM 공개 RPC 는 TRON 처럼 연속 호출
+   * 한도가 빡빡하지 않고, 사용자가 "추가" 버튼을 누르고 기다리는 화면이라
+   * 4배 느려지는 쪽이 손해다. 하나라도 실패해도 나머지는 살린다.
+   *
+   * 실패의 종류를 두 가지로 나눈다:
+   *   - **형식이 틀리면 던진다.** 사용자가 방금 붙여넣은 문자열이 주소가 아니라는
+   *     사실은 즉시 알려줘야 한다. 조용히 null 을 주면 "왜 안 되지"만 남는다.
+   *   - **형식은 맞는데 decimals 를 못 읽으면 null.** EOA 나 ERC-20 이 아닌 계약이
+   *     여기 해당한다. 18 로 추측하지 않는다 — 자릿수가 틀리면 잔액이 통째로
+   *     거짓이 되는데 사용자는 그걸 알아채지 못한다.
+   *
+   * symbol/name 은 못 읽어도 버리지 않는다. 금액을 왜곡하지 않으므로 주소 축약으로
+   * 대체하고 그 사실을 `source` 에 남긴다(지어내지 않는다). 잔액도 못 구하면 0n 으로
+   * 두되 등록 자체는 되게 한다 — 아직 안 받은 토큰을 미리 등록하는 것은 정상이다.
+   */
+  async readToken(id: string, owner: string): Promise<PortableTokenBalance | null> {
+    if (typeof id !== 'string' || !EVM_CONTRACT_ADDRESS_RE.test(id)) {
+      throw new Error(
+        `evm: 토큰 식별자가 컨트랙트 주소 형식(0x + 40 hex)이 아닙니다: ${id}`,
+      );
+    }
+    // 체크섬 표기로 못박는다. 같은 컨트랙트를 소문자로도 대문자로도 등록하면
+    // 레지스트리에 같은 토큰이 두 줄 생기고, 조회와 송금이 서로 다른 문자열을
+    // 보게 된다. getAddress 는 EIP-55 체크섬으로 정규화한다.
+    const token = getAddress(id) as Address;
+
+    const erc20 = new Erc20(this);
+    const [decRes, symRes, nameRes, balRes] = await Promise.allSettled([
+      erc20.decimals(token),
+      erc20.symbol(token),
+      erc20.name(token),
+      erc20.balanceOf(token, owner as Address),
+    ]);
+
+    // decimals 가 없으면 이 주소는 ERC-20 이 아니거나 읽을 수 없는 상태다.
+    if (decRes.status !== 'fulfilled') return null;
+    const decimals = decRes.value;
+    if (
+      !Number.isInteger(decimals) ||
+      decimals < 0 ||
+      decimals > MAX_TOKEN_DECIMALS
+    ) {
+      return null;
+    }
+
+    const symbol = symRes.status === 'fulfilled' ? cleanLabel(symRes.value) : null;
+    const name = nameRes.status === 'fulfilled' ? cleanLabel(nameRes.value) : null;
+    // 음수는 balanceOf 가 줄 수 없는 값이다. 그런 응답이 오면 읽기 실패로 본다.
+    const balance =
+      balRes.status === 'fulfilled' &&
+      typeof balRes.value === 'bigint' &&
+      balRes.value >= 0n
+        ? balRes.value
+        : null;
+    const fallback = shortenEvmAddress(token);
+
+    return {
+      id: token, // 그대로 TransferIntent.asset 에 넣으면 송금이 된다.
+      symbol: symbol ?? fallback,
+      name: name ?? symbol ?? fallback,
+      decimals,
+      balance: balance ?? 0n,
+      source: buildManualEvmSource({
+        symbolRead: symbol !== null,
+        nameRead: name !== null,
+        balanceRead: balance !== null,
+      }),
+    };
+  }
+
   private async shouldUseEip1559(): Promise<boolean> {
     if (this.feeMode === 'legacy') return false;
     if (this.feeMode === 'eip1559') return true;
@@ -347,6 +443,59 @@ export class EvmAdapter
       return false;
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// 수동 토큰 추가(readToken) 보조 함수
+// ---------------------------------------------------------------------------
+
+/**
+ * `source` 문자열을 만든다.
+ *
+ * 무엇을 계약에서 실제로 읽었고 무엇을 대체했는지 한 줄에 담는다 — 화면이
+ * PortableTokenBalance 하나만 받아도 "이 이름이 진짜인가"를 판단할 수 있어야 한다.
+ */
+function buildManualEvmSource(o: {
+  symbolRead: boolean;
+  nameRead: boolean;
+  balanceRead: boolean;
+}): string {
+  const read = ['decimals'];
+  if (o.symbolRead) read.push('symbol');
+  if (o.nameRead) read.push('name');
+  if (o.balanceRead) read.push('balanceOf');
+  const parts = [`${EVM_TOKEN_SOURCE_MANUAL}:${read.join(',')}`];
+  if (!o.symbolRead) parts.push('symbol=주소축약(읽기실패)');
+  if (!o.nameRead) parts.push('name=대체(읽기실패)');
+  if (!o.balanceRead) parts.push('balance=0(조회실패)');
+  return parts.join('; ');
+}
+
+/** `0xaaaa…bbbb` 꼴. symbol 을 못 읽었을 때 지어내는 대신 쓴다. */
+function shortenEvmAddress(addr: string): string {
+  return addr.length <= 12 ? addr : `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+/**
+ * 계약이 준 텍스트를 그대로 믿지 않는다.
+ *
+ * symbol()/name() 은 컨트랙트가 임의로 정하는 문자열이라 줄바꿈으로 UI 를 깨거나
+ * 다른 토큰인 척하는 데 쓰일 수 있다. 제어문자를 지우고 길이를 자른다.
+ * 남는 게 없으면 null — 여기서 빈 문자열을 통과시키면 화면에 이름 없는 줄이 생긴다.
+ * (tron.ts 의 sanitizeText 와 같은 규칙. 두 파일이 서로를 import 하지 않으므로
+ * 짧은 함수 하나를 각자 들고 있는 편이 의존 방향을 단순하게 유지한다.)
+ */
+function cleanLabel(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  let cleaned = '';
+  for (const ch of v) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code < 0x20 || code === 0x7f) continue;
+    cleaned += ch;
+  }
+  cleaned = cleaned.trim();
+  if (cleaned.length === 0) return null;
+  return cleaned.length > 64 ? cleaned.slice(0, 64) : cleaned;
 }
 
 /**
