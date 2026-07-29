@@ -1,17 +1,18 @@
 {
   "artifact": "벼린.apk",
-  "sha256": "f5f9440cd6c81455c702864aaa15ef857a7275ac33f7600a65500fea8bc59729",
-  "sizeBytes": 5542384,
-  "versionName": "0.5.12",
-  "versionCode": 13,
+  "sha256": "79260b923502762abc19d382c99db9e914662236bb24a07befcb71dee4b5a371",
+  "sizeBytes": 5541784,
+  "versionName": "0.5.13",
+  "versionCode": 14,
   "signer": {
     "certSha256": "303f801bb44af8c494b6e89844fbe86c36bd6f48ab404a4b6c0228fa3f103480"
   },
   "source": {
-    "commit": "f1a59bcd10a6379149737fb75903ff1d801ac0f1",
-    "commitShort": "f1a59bc",
+    "commit": "5e1b29310b30c1760001adaa5e788e8dd1de6964",
+    "commitShort": "5e1b293",
     "branch": "main",
-    "workingTreeClean": true
+    "workingTreeClean": false,
+    "warning": "커밋되지 않은 변경이 섞인 빌드다. 이 산출물은 소스로 추적할 수 없다."
   },
   "toolchain": {
     "node": "v24.15.0",
