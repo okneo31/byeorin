@@ -1196,9 +1196,17 @@ function ActiveAccountCard({
     //
     // discoverPortableTokens 는 실패해도 던지지 않고 빈 배열을 준다 — 토큰 목록
     // 때문에 지갑이 안 열리면 안 된다.
-    void discoverPortableTokens(adapter, chainAddress).then((tokens) => {
-      if (!cancelled) setEvmTokens(tokens);
-    });
+    //
+    // 발견 전에 TTL 발행 목록(66종)이 registry 에 들어가 있어야 한다. mount 의
+    // loadTtlScanTokens 와 이 effect 는 경주였다 — 발견이 먼저 돌면 빌트인만
+    // 보이고 목록이 늦게 와도 재발견이 없었다 (안드로이드 실기기 0.5.8 실측).
+    // loadTtlScanTokens 는 멱등이고 성공 후에는 즉시 반환한다.
+    void loadTtlScanTokens()
+      .catch(() => 0)
+      .then(() => discoverPortableTokens(adapter, chainAddress))
+      .then((tokens) => {
+        if (!cancelled) setEvmTokens(tokens);
+      });
     return () => {
       cancelled = true;
     };

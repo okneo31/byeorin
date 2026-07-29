@@ -1252,9 +1252,18 @@ function ActiveAccountCard({
     // 조회는 항상 전체를 받는다. 잔액 0 을 감출지는 표시 단계가 정한다 —
     // 토글에 묶으면 켤 때마다 RPC 를 다시 때리고, 상위로 올라가는 목록에도
     // 보유분만 담겨 토큰 목록 화면의 검색이 무의미해진다.
-    void discoverPortableTokens(adapter, chainAddress).then((tokens) => {
-      if (!cancelled) setEvmTokens(tokens);
-    });
+    //
+    // 발견 전에 TTL 발행 목록(66종)이 registry 에 들어가 있어야 한다. App mount 의
+    // loadTtlScanTokens 와 이 effect 는 경주였다 — 세션 복원 등으로 카드가 먼저
+    // 마운트되면 빌트인만 발견되고, 목록이 늦게 와도 재발견이 없었다. 실기기
+    // 0.5.8 에서 교환 화면 자산 목록이 TTL 하나뿐이던 원인. loadTtlScanTokens 는
+    // 멱등이고 성공 후에는 즉시 반환하므로 매번 앞에 두는 비용은 첫 1회뿐이다.
+    void loadTtlScanTokens()
+      .catch(() => 0)
+      .then(() => discoverPortableTokens(adapter, chainAddress))
+      .then((tokens) => {
+        if (!cancelled) setEvmTokens(tokens);
+      });
     return () => {
       cancelled = true;
     };
