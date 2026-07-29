@@ -281,7 +281,25 @@ export function App() {
         if (cancelled) return;
         // eslint-disable-next-line no-console
         console.info('[byeorin] multichain loaded:', m.DEFAULT_CHAINS.length, 'chains');
-        setChainSpecs([...m.DEFAULT_CHAINS]);
+        // Solana 만 native HTTP 로 갈아끼운다.
+        //
+        // 실측(2026-07-29): 토큰 조회(getTokenAccountsByOwner)를 받아주는 무료
+        // 엔드포인트는 api.mainnet-beta.solana.com 하나인데, **Origin 헤더가
+        // 붙으면 403** 이다. WebView 의 fetch 는 Origin 을 붙이므로 막힌다.
+        // CapacitorHttp 는 네이티브 요청이라 Origin 을 붙이지 않아 통과한다.
+        // (publicnode 는 브라우저는 받지만 그 메서드를 403 으로 막는다.)
+        //
+        // ZION AMM 이 이미 같은 이유로 native-http 를 쓰고 있다. 전역 패치는
+        // viem 과 충돌 우려가 있어 이번에도 이 체인 하나만 바꾼다.
+        const specs = m.DEFAULT_CHAINS.map((spec) =>
+          spec.key === 'solana'
+            ? {
+                ...spec,
+                build: () => new m.SolanaAdapter({ fetch: nativeFetch }),
+              }
+            : spec,
+        );
+        setChainSpecs(specs);
       })
       .catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e);

@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { PublicKey, Transaction } from '@solana/web3.js';
 import { SolanaAdapter } from '../src/index.js';
+import { SOLANA_MAINNET_RPC_URLS } from '../src/chains/solana.js';
 import type { Signer } from '../src/types.js';
 
 const URL_A = 'https://a.example/rpc';
@@ -334,10 +335,13 @@ describe('SolanaAdapter — 옵션 하위 호환', () => {
     expect(sol.writeRpcUrl).toBe(URL_A);
   });
 
-  it('mainnet-beta 기본값은 publicnode → OnFinality → dRPC 순서', () => {
+  it('mainnet-beta 기본값 순서 — publicnode 다음이 공식 RPC 다', () => {
     const sol = new SolanaAdapter();
     expect(sol.rpcUrls).toEqual([
       'https://solana-rpc.publicnode.com',
+      // publicnode 는 getTokenAccountsByOwner 를 403 으로 막는다(실측). 토큰
+      // 조회를 실제로 받아주는 유일한 무료 엔드포인트가 여기라 2순위로 둔다.
+      'https://api.mainnet-beta.solana.com',
       'https://solana.api.onfinality.io/public',
       'https://solana.drpc.org',
     ]);
@@ -352,6 +356,8 @@ describe('SolanaAdapter — 옵션 하위 호환', () => {
 
   it('빈 rpcUrls 는 기본 목록으로 떨어진다', () => {
     const sol = new SolanaAdapter({ rpcUrls: [] });
-    expect(sol.rpcUrls).toHaveLength(3);
+    // 개수를 못 박지 않는다 — 엔드포인트 목록은 가용성에 따라 늘고 준다.
+    // 지켜야 할 것은 "빈 배열이면 기본 목록으로 떨어진다" 이다.
+    expect(sol.rpcUrls).toEqual(SOLANA_MAINNET_RPC_URLS);
   });
 });

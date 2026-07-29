@@ -266,3 +266,8 @@ export const DEFAULT_CHAINS: readonly ChainSpec[] = [
 export function findChainSpec(key: ChainKey): ChainSpec | undefined {
   return DEFAULT_CHAINS.find((c) => c.key === key);
 }
+
+// 셸이 어댑터를 갈아끼울 수 있게 노출한다.
+// 안드로이드는 Solana 를 native HTTP(CapacitorHttp)로 태워야 한다 — 토큰 조회를
+// 받아주는 무료 엔드포인트가 Origin 헤더를 403 으로 막기 때문이다.
+export { SolanaAdapter, type SolanaAdapterOptions } from './chains/solana.js';

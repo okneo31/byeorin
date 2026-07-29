@@ -107,7 +107,17 @@ const MINT_DERIVED_LABEL_SOURCE = 'mint-address';
  * 코드 변경 없이 살아나기 때문. 실질 이중화가 필요하면 `rpcUrls` 로 override.
  */
 export const SOLANA_MAINNET_RPC_URLS: readonly string[] = [
+  // 1순위. 브라우저 origin 을 받아주고 getBalance 가 잘 된다.
+  // **단, getTokenAccountsByOwner 는 403 "blocked parameter" 로 막는다**
+  // (실측 2026-07-29). 그래서 토큰 조회는 반드시 다음 순위로 넘어간다.
   'https://solana-rpc.publicnode.com',
+  // 토큰 조회가 실제로 되는 유일한 무료 엔드포인트(실측: 2,787 건 반환).
+  // 다만 **Origin 헤더가 붙으면 403** 이라 브라우저에서 직접 부르면 막힌다.
+  // 안드로이드는 native-http(CapacitorHttp)가 Origin 을 안 붙여 통과하고,
+  // Node/데스크톱도 통과한다. 확장 popup 은 이 경로가 막힐 수 있다 —
+  // 그 경우 아래 두 곳도 무키로는 실패하므로 토큰 목록이 비게 된다.
+  'https://api.mainnet-beta.solana.com',
+  // 아래 둘은 무키 상태에서 각각 429/400 이다. 키를 넣으면 살아난다.
   'https://solana.api.onfinality.io/public',
   'https://solana.drpc.org',
 ];
