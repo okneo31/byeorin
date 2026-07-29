@@ -60,3 +60,17 @@ export {
   type PortableTokenBalance,
   type TokenCapableAdapter,
 } from './tokens/portable.js';
+
+// 벼린 거래소(TTL 체인 AMM) — 클라이언트와 공유 타입.
+export {
+  TtlAmmClient,
+  TTL_AMM_FEE_BPS,
+  TTL_AMM_NATIVE,
+  TTL_AMM_DEFAULT_RPC_URL,
+  TTL_AMM_DEFAULT_SLIPPAGE_BPS,
+  type TtlAmmClientOptions,
+  type TtlAmmRouteQuote,
+  type TtlAmmPool,
+  type TtlAmmQuote,
+  type TtlAmmSwapCall,
+} from './exchange/index.js';

@@ -76,6 +76,7 @@ import {
 import { ActivityPane } from './screens/ActivityPane.js';
 import { SendPane } from './screens/SendPane.js';
 import { TokenListPane } from './screens/TokenListPane.js';
+import { ExchangePane, type TtlAmmClientLike } from './screens/ExchangePane.js';
 
 // 벼린 — 확장 팝업.
 // 셸 라이프사이클: 잠금 → (생성/복구/PK import) → 잠금해제 → (계정 추가/전환/제거/키 노출) → 잠금.
@@ -91,6 +92,7 @@ import { TokenListPane } from './screens/TokenListPane.js';
 //   - 'addressbook': 주소록 — 내 계정 자동 sync + 외부 주소 CRUD (Stage E2)
 //   - 'activity'   : 활동 내역 (Stage E3, EVM 체인 전용)
 //   - 'tokens'     : 토큰 목록 — 검색·보기/가리기·벼린 환율 가치 (Stage E4)
+//   - 'exchange'   : 내부 거래소 스왑 (TTL 체인 AMM — docs/EXCHANGE.md)
 
 type Mode =
   | 'home'
@@ -104,7 +106,8 @@ type Mode =
   | 'addresses'
   | 'addressbook'
   | 'activity'
-  | 'tokens';
+  | 'tokens'
+  | 'exchange';
 
 // 송금 금액 검증 — 10진수, 소수점 18자리 이하 (체인별 decimals 는 parseUnits 가 처리).
 const AMOUNT_RE = /^\d+(\.\d{1,18})?$/;
@@ -326,6 +329,14 @@ export function App() {
   // 카드는 mode==='home' 에서만 마운트되므로 App 이 들고 있어야 send 화면에서 산다.
   const [sendTokens, setSendTokens] = useState<PortableTokenBalance[] | null>(null);
   const [sendNativeBalance, setSendNativeBalance] = useState<bigint | null>(null);
+
+  // 내부 거래소(TTL AMM) 클라이언트.
+  //
+  // **컨트랙트가 아직 배포되지 않았다** — 주소 세 개(factory/router/wttl)가
+  // 나오면 아래 상수를 채우고 TtlAmmClient 를 생성하게 바꾼다. null 이면 화면이
+  // "거래소가 아직 배포되지 않았습니다" 를 정직하게 그린다. 배포 전인데 있는
+  // 척하는 것보다 낫다.
+  const ttlAmmClient: TtlAmmClientLike | null = null;
 
   // 주소록 — 저장은 chrome.storage.local 평문 JSON (공개키 파생물인 주소만 담는다).
   const book = useMemo(() => new Addressbook(new ChromeLocalBackend()), []);
@@ -631,6 +642,7 @@ export function App() {
             onAddressbook={() => setMode('addressbook')}
             onActivity={() => setMode('activity')}
             onTokens={() => setMode('tokens')}
+            onExchange={() => setMode('exchange')}
             onTokensChange={setSendTokens}
             onNativeBalanceChange={setSendNativeBalance}
             onLock={handleLogout}
@@ -692,6 +704,18 @@ export function App() {
           tokens={sendTokens}
           chainKey={activeChainKey}
           supported={supportsTokens(effectiveAdapter)}
+          onBack={() => setMode('home')}
+        />
+      )}
+
+      {/* 내부 거래소 — TTL 체인 AMM. 배포 전엔 그 사실을 그대로 그린다. */}
+      {unlocked && mode === 'exchange' && (
+        <ExchangePane
+          client={ttlAmmClient}
+          tokens={sendTokens}
+          nativeBalance={sendNativeBalance}
+          adapter={effectiveAdapter}
+          chainKey={activeChainKey}
           onBack={() => setMode('home')}
         />
       )}
@@ -810,6 +834,7 @@ function AccountListCard({
   onAddressbook,
   onActivity,
   onTokens,
+  onExchange,
   onTokensChange,
   onNativeBalanceChange,
   onLock,
@@ -833,6 +858,7 @@ function AccountListCard({
   onAddressbook: () => void;
   onActivity: () => void;
   onTokens: () => void;
+  onExchange: () => void;
   onTokensChange: (rows: PortableTokenBalance[] | null) => void;
   onNativeBalanceChange: (b: bigint | null) => void;
   onLock: () => void;
@@ -866,6 +892,7 @@ function AccountListCard({
           onAddressbook={onAddressbook}
           onActivity={onActivity}
           onTokens={onTokens}
+          onExchange={onExchange}
           onTokensChange={onTokensChange}
           onNativeBalanceChange={onNativeBalanceChange}
           onLock={onLock}
@@ -946,6 +973,7 @@ function ActiveAccountCard({
   onAddressbook,
   onActivity,
   onTokens,
+  onExchange,
   onTokensChange,
   onNativeBalanceChange,
   onLock,
@@ -967,6 +995,7 @@ function ActiveAccountCard({
   onAddressbook: () => void;
   onActivity: () => void;
   onTokens: () => void;
+  onExchange: () => void;
   /** 발견한 ERC-20 잔액을 상위(App)로 흘려보낸다 — 송금 화면이 재조회 없이 쓴다. */
   onTokensChange: (rows: PortableTokenBalance[] | null) => void;
   /** native 잔액을 상위로. 송금 화면의 잔액 초과 검사에 쓰인다. */
@@ -1569,6 +1598,12 @@ function ActiveAccountCard({
             title="ZION AMM"
           >
             {t('account.swap')}
+          </button>
+        )}
+        {/* 내부 거래소 — TTL 체인 전용 (EXCHANGE.md: 66종이 있는 곳에 거래소가 있다) */}
+        {activeChainKey === 'evm:ttl' && (
+          <button className="btn-ghost btn-sm" onClick={onExchange}>
+            {t('exchange.title')}
           </button>
         )}
         {/* 활동 내역 — 비-EVM 에서도 눌러 "미지원" 안내를 볼 수 있게 막지 않는다. */}

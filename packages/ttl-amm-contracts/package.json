@@ -1,0 +1,25 @@
+{
+  "name": "@byeorin/ttl-amm-contracts",
+  "version": "0.0.1",
+  "private": true,
+  "description": "벼린 거래소 — TTL 체인 내부 AMM 컨트랙트 (Uniswap V2 포크, 33bps · WTTL 허브 강제)",
+  "scripts": {
+    "build": "hardhat compile",
+    "test": "hardhat test",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf artifacts cache"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.8",
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "@types/chai": "^4.3.20",
+    "@types/mocha": "^10.0.9",
+    "@types/node": "^22.9.0",
+    "chai": "^4.5.0",
+    "ethers": "^6.13.4",
+    "hardhat": "^2.22.0",
+    "rimraf": "^6.0.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}
