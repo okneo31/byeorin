@@ -17,6 +17,7 @@ import {
   TokenRegistry,
   discoverTokens,
   fetchTtlScanTokens,
+  authoritativeDecimals,
   type DiscoveredBalance,
   type TokenInfo,
 } from '@byeorin/wallet-sdk/evm';
@@ -84,7 +85,7 @@ export async function loadCustomTokensFromStorage(): Promise<void> {
  * 발행 사실은 이미 공개돼 있다.
  *
  * 목록은 **무엇을 조회할지**만 정한다. 잔액은 여기서 안 받고 체인에서
- * balanceOf 로 읽는다. 익스플로러가 거짓 목록을 줘도 잔액을 부풀릴 수는 없다.
+ * balanceOf 로 읽는다. 가짜 주소는 환율이 안 붙는다. decimals 는 스냅샷 값이 이긴다 — 익스플로러가 그걸로 표시 수량을 부풀릴 수 있기 때문이다.
  *
  * localStorage 에 저장하지 않는다 — 발행 목록은 체인 쪽 사실이라 매번 최신을
  * 받는 편이 맞고, 사용자가 손으로 추가한 토큰과 섞이면 지울 수도 없어진다.
@@ -96,7 +97,15 @@ export async function loadTtlScanTokens(chainId: number = TTL_CHAIN_ID): Promise
   const tokens = await fetchTtlScanTokens();
   if (tokens.length === 0) return 0;
   ttlScanTokensLoaded = true;
-  for (const t of tokens) tokenRegistry.addCustomToken(chainId, t);
+  for (const t of tokens) {
+    // 익스플로러가 준 decimals 를 그대로 믿지 않는다. 환율 스냅샷은 저장소에
+    // 커밋된 앵커라 같은 주소의 정답을 이미 들고 있고, 그쪽이 이긴다.
+    // 안 그러면 익스플로러가 장악됐을 때 보여지는 수량이 임의 배율로 부푼다.
+    tokenRegistry.addCustomToken(chainId, {
+      ...t,
+      decimals: authoritativeDecimals(t.address, t.decimals),
+    });
+  }
   return tokens.length;
 }
 

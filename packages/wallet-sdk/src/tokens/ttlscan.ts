@@ -8,9 +8,14 @@
 // 넣어야 할 이유가 없다 — 발행 사실은 이미 공개돼 있다.
 //
 // 신뢰 경계: 이 API 는 **무엇을 조회할지**만 정한다. 잔액은 여기서 안 받고
-// 반드시 체인에서 balanceOf 로 읽는다. 익스플로러가 거짓 목록을 주면 있지도 않은
-// 토큰을 조회해 0 이 나올 뿐이고, 잔액을 부풀릴 수는 없다. 그래서 이 목록을
-// 신뢰하는 것과 잔액을 신뢰하는 것은 다른 문제다.
+// 반드시 체인에서 balanceOf 로 읽는다. 가짜 주소를 넣어도 rateByAddress 가
+// null 을 주므로 환율이 붙지 않는다.
+//
+// 다만 **decimals 는 다르다.** 여기서 받은 decimals 를 그대로 표시에 쓰면,
+// 익스플로러가 진짜 주소에 틀린 decimals 를 실어 보여지는 수량을 임의 배율로
+// 부풀릴 수 있다 (12 면 10^6 배, 0 이면 10^18 배). 잔액 자체는 못 건드려도
+// 화면의 숫자는 건드릴 수 있다. 그래서 환율 스냅샷에 있는 토큰은 **스냅샷의
+// decimals 가 이긴다** — rates/index.ts 의 authoritativeDecimals 참고.
 
 import type { Address } from '../types.js';
 import type { TokenInfo } from './registry.js';

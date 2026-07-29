@@ -42,6 +42,7 @@ export {
   rateByIso,
   unresolvedRates,
   tokenAmountToTtl,
+  authoritativeDecimals,
   ttlToTokenAmount,
   crossRate,
   snapshot as rateSnapshot,

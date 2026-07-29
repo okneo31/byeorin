@@ -3,7 +3,7 @@
 > 이 문서의 역할: **새 세션에서 5분 안에 풀 컨텍스트 잡기.**
 > 단일 진실원은 [`PLAN.md`](./PLAN.md)지만, "방금 무엇이 어디까지 됐는가"는 이 문서에서 본다.
 >
-> 마지막 갱신: **2026-07-28** (릴리스 검증 체계 + 금고 하드웨어 바인딩 + 공개 저장소 준비)
+> 마지막 갱신: **2026-07-29** (벼린 환율 도입 + 온체인 앵커 실발행 + Stage E2/E3)
 > GitHub: <https://github.com/okneo31/byeorin> (private)
 
 ---
@@ -15,7 +15,33 @@
 - **2026-05-25 라운드: Extension popup 풀스코프.** 멀티체인 16 슬롯 + 다중 계정 + import/export + ZION 통합. Stage E1(셀렉터·잔액·송금) 완료, E2(주소록·매트릭스 복사)/E3(활동·토큰) 대기.
 - **2026-07-25 라운드: 안드로이드 APK 완성.** `apps/android` 신설 — Capacitor 8 + Vite WebView 셸에 Extension popup UI 를 이식. **9 체인 전부 실기기 경로에서 동작 검증** (Pixel 7 Pro 에뮬레이터, release APK). 확장에 없던 계층 추가: 비밀번호 금고 · 자동 잠금 · 뒤로가기.
 - **2026-07-26 라운드: 검증 가능한 보안 + 공개 저장소 준비.** 금고를 AndroidKeyStore(TEE/StrongBox) 키로 한 겹 더 감쌈 · 릴리스 매니페스트/검증기 도입 · **재현 빌드가 실측에서 실패**(clean 후 재빌드 시 해시 불일치, [VERIFIABILITY §2.1](./VERIFIABILITY.md)) · 이력 재작성(force push)으로 APK blob 제거 · LICENSE Apache-2.0 + NOTICE + README + SECURITY 추가 · 온체인 앵커 기록기/검증기 구현(**발행 대기**).
-- **다음 행동: 실기기 테스트 피드백 반영** → 송금/스왑 브로드캐스트 확인 → 릴리스 전 항목([apps/android/README.md](../apps/android/README.md) 하단). 검증 트랙은 온체인 앵커 실제 발행(§7 D).
+- **2026-07-29 라운드: 벼린 환율 + 온체인 앵커 실발행 + Stage E2/E3.** `1 TTL = 노동자 1일 품삯` 을 산식으로 못 박고 통화토큰 66 종 환율을 산출(`docs/RATES.md`) · **BTC 페깅 해제**(2026-07-29 앵커로 한 번 쓰고 끝) · 온체인 릴리스 앵커 **2 건 실제 발행**(0.5.3 / 0.5.4) · 확장·안드로이드에 Stage E2/E3 이식 · TTL 발행 토큰 66 종 자동 감지 · 활동 내역 SDK 경로 수정.
+- **다음 행동: 실기기 테스트 피드백 반영** → 송금/스왑 브로드캐스트 확인 → 릴리스 전 항목([apps/android/README.md](../apps/android/README.md) 하단). 환율 트랙은 갱신 동력 설계, 검증 트랙은 재현 빌드(§7 D).
+
+### 2026-07-29 라운드 — 벼린 환율 · 온체인 앵커 실발행 · Stage E2/E3
+
+커밋 범위 `91d40b5`…`8a13047` (14개).
+
+| 항목 | 내용 |
+|---|---|
+| **벼린 환율** (`c9a6771`, `8a13047`) | TTL 이 기준(numeraire)이고 각국 통화토큰이 여기 매달린다. **시장환율을 입력으로 쓰지 않는다** — 산식 어디에도 환율이 들어가지 않는다. `perTtl = 명목GDP(자국통화) / 인구 / 365`, `1 TTL = perTtl 단위의 t{ISO}`. 실제 스냅샷: **66 종 산출 · 미해결 0 건** (`rate-snapshot.json`, `anchoredAt: 2026-07-29` 고정 상수). 예: `1 TTL = 246.65 tUSD = 14,740.71 tJPY = 141,180.04 tKRW = 123.07 tEUR`. 상세·한계는 [`docs/RATES.md`](./RATES.md) |
+| 환율 출처 | World Bank `NY.GDP.MKTP.CN`(current LCU) + `SP.POP.TOTL`. **달러 환산 GDP 를 쓰지 않는 이유** = 그 값에 시장환율이 이미 곱해져 있어 배제하려던 것이 뒷문으로 들어온다. **실질 GDP 를 쓰지 않는 이유** = 재려는 것이 바로 그 인플레이션이고, 기준연도가 나라마다 달라 국가 간 비교가 성립하지 않는다. 대만만 World Bank 미수록국이라 IMF DataMapper 에서 `PPPGDP × PPPEX` 항등식으로 자국통화 GDP 를 복원(KOR/JPN/USA/DEU 대조 오차 0.00~0.02%) |
+| 합성값 3 종 | `tEUR`(회원국 20 개국 GDP·인구 합산) · `tXOF`(서아프리카 8 개국 합산) · `tTWD`(IMF 유도). `inputs.gdpSynthetic` 필드로 구분된다. 나머지 63 종은 단일 국가 값 |
+| **앵커 2 개, 서로 만나지 않는다** | ① BTC **63,412.45 @ 2026-07-29 00:00 KST** → TTL 외부 시세. **이후 페깅 해제** — 스냅샷 어디에도 BTC 도 달러 시세도 없다(테스트가 이를 지킨다). ② 2025 명목GDP/인구 → 66 종 환율. 이후 외부 데이터를 보지 않는다. `crossRate(from,to) = to.perTtl / from.perTtl` 이라 TTL 의 절대 눈금은 약분된다 |
+| 지갑 환율 조회 | **주소로 찾는다, 심볼이 아니라.** 심볼 키였을 때 `tUSD` → `TUSD`(이더리움 TrueUSD)와 충돌해 TrueUSD 잔액에 벼린 환율이 붙는 버그가 실제로 있었다. 환율을 모르면 `null`, `0` 이 아니다 — 화면은 **가치 자리를 비우고 수량만** 보여준다 |
+| 토큰 목록 화면 | `TokenListPane` — 66 종 검색 · 개별 보기/가리기 · TTL 환산 가치 · 환율 근거 패널(GDP·인구·연도·ISO3·합성 여부). 가리기는 **가린 목록만 저장**(allowlist 아님 — allowlist 면 새로 발행된 토큰이 영영 안 보인다). **커밋 기준(`8a13047`)으로는 확장에만 있다** — 안드로이드에는 CSS(149줄)만 들어갔다. (본 문서 갱신 시점의 작업 트리에는 안드로이드 `screens/TokenListPane.tsx` · `lib/token-visibility.ts` 이식이 **미커밋 상태로 진행 중**이며 `App.tsx` 에 배선까지 돼 있다. 동작 검증 여부는 **미확인**) |
+| **온체인 앵커 실발행 2 건** | 0.5.3 (4) — tx `0xbaa318f2…01c1`, block **1125713**, sha256 `3c545e15…eeb1`, 출처 `560e39e`. 0.5.4 (5) — tx `0xca7039ea…59fd`, block **1126124**, sha256 `bf2436b1…82ce`, 출처 `b44bc80`. publisher `0x52B5dE96dC298f98a0cDf9E694De1Cc55c28f533` (ChainID 7777). `anchor-publishers.json` 의 `publishers` 가 채워졌다. 가스 실측 27,224 × 50 gwei = **0.0013612 TTL/건** |
+| 앵커의 append-only 대가 | 0.5.3 앵커는 **번역이 깨진 빌드**(낡은 i18n dist)를 가리킨다. 지울 수 없어서 0.5.4 로 새 앵커를 올려 덮어 설명했다. 두 앵커 모두 체인에 영구히 남는다 |
+| 검증기 정직성 수정 (`30f5e85`) | 음성 테스트 12 건으로 찾은 것: **`publishers` 가 빈 배열일 때 아무 주소로 만든 tx 나 `[OK]` 로 통과**했다(경고도 없었음 — 당시 라이브 상태) · chainId 미검사 → `eth_chainId` 대조 · pending tx 가 OK → SKIP+경고. 기준을 "확실히 틀린 것은 FAIL, 확인할 수 없는 것은 SKIP" 으로 정리. 기록기에도 전송 전 chainId·주소·잔액 3중 사전검사 추가 |
+| 검증기 종료코드 버그 (`be1e56f`) | 화면엔 ✅ 인데 exit 127. `process.exit()` 를 앵커 fetch 직후 호출해 Windows libuv assertion 이 터지고 종료코드가 덮였다. `process.exitCode` 방식으로 교체. 정상 exit 0 / sha256 조작 exit 1 / 없는 txHash exit 1 양쪽 확인 |
+| publisher 키 파생 (`8005923`, `cdd2197`) | `scripts/derive-publisher-key.mjs` + `scripts/Set-AnchorKey.ps1`. 시드구문은 **stdin 으로만** 받는다(argv 는 프로세스 목록·셸 히스토리에 남는다). PS 5.1 의 `$OutputEncoding` 기본값이 ASCII 라 **한국어 시드가 통째로 `?` 로 파손**되던 것을 base64 래핑으로 해결. `anchor-publishers.json` 이 닫는 중괄호 뒤 `ro` 두 글자 때문에 JSON 파싱 자체가 안 되던 것도 수정 |
+| Stage E2/E3 (`606a218` 확장, `560e39e` 안드로이드) | 체인별 주소 매트릭스 · 주소록(self 자동 sync + 외부 CRUD + 송금 자동완성) · 활동 내역 · 토큰 송금. popup `App.tsx` 2585 줄을 `screens/` 로 분할. 안드로이드는 확장의 **별도 복사본**이라 자동으로 따라오지 않아 수동 이식 — 달라진 것은 import 경로 · 주소록 저장 백엔드(Chrome ↔ localStorage) · 입력 `className="input"` 셋뿐 |
+| 활동 내역 SDK 수정 (`dabbdab`) | TTL Scan 이 etherscan 호환이라 **가정**하고 있었으나 실측하니 아니다(자체 규격, `/api` catch-all 없음 → 항상 404 → 항상 fallback). 진짜 경로 `/api/indexer/address/:addr/txs` 를 1순위로. `rawGetLogs` 가 viem `client.getLogs` 를 먼저 시도해 41.1 초 매달리던 것을 `client.request` 직접 호출로 교체. 실측: 거래 있는 주소 **0 건 / 13.8 초 → 20 건 / 1.39 초**, 없는 주소 13.8 초 → 0.41 초 |
+| TTL 토큰 66 종 자동 감지 (`b44bc80`) | 레지스트리 `BUILTIN` 의 TTL(7777) 항목이 **0 개**였다 — 사용자가 주소를 손으로 넣지 않으면 아무것도 안 보였다. `tokens/ttlscan.ts` 가 `/api/tokens` 를 읽어 registry 에 얹는다. 신뢰 경계: 이 목록은 **무엇을 조회할지만** 정하고 잔액은 반드시 체인 `balanceOf` 로 읽는다. `discoverEvmTokens` 의 `maxRpcCalls` 50 → 256(50 이면 66 종을 조용히 잘라냈다). 실측: 목록 66 개 872ms · balanceOf 66 건 694ms |
+| 빌드 순서 버그 (`b44bc80`) | 실기기 화면에 버튼이 `addresses.title` 로 떴다. 앱만 빌드하고 `@byeorin/i18n` 등 워크스페이스 의존성을 빌드하지 않아 **낡은 dist 가 APK 에 실렸다**. typecheck 도 test 도 못 잡는다(`t()` 는 없는 키도 타입 오류가 아니다). 빌드 스크립트 앞에 `pnpm -r --filter <pkg>^... build` 를 붙여 막았다 |
+| Solana RPC fallback (`91d40b5`) | 백로그 #26. **읽기만** publicnode → OnFinality → dRPC 로 넘어가고 쓰기는 단일 고정(A 에서 받은 blockhash 를 B 로 보내면 tx 가 깨진다). 그 구분을 주석이 아니라 자료구조로 강제(`readEndpoints` / `writeConnection` 별개 필드). **실측(2026-07-28): 2·3순위는 무키 상태에서 각각 429/400 을 돌려준다 — 지금은 실질 이중화가 아니다** |
+| 산출물 | `top.ttl1.byeorin` **v0.5.4 (versionCode 5)** · APK 5,261,688 B · sha256 `bf2436b1…82ce` · 매니페스트 출처 커밋 `b44bc80` (main, `workingTreeClean: true`) · 앵커 `0xca7039ea…59fd` |
+| 검증 (본 문서 갱신 시 재실행) | `pnpm test` **450 통과 / 9 skipped** (i18n 19 · wallet-sdk 266 · shell-core 52 · extension 113). `pnpm typecheck` 9 워크스페이스 통과 |
 
 ### 2026-07-26 라운드 — 검증 가능한 보안
 
@@ -60,13 +86,13 @@
 
 | Task | 상태 | 내용 |
 |---|---|---|
-| #20 Stage E2 | 다음 | 계정 카드의 9 체인 주소 row + 원클릭 복사, 주소록 화면(자동 sync + 외부 추가), 송금 시 주소록 추천 |
-| #20 Stage E3 | 그 다음 | 활동 내역(Activity) + ERC-20 토큰 목록 + 토큰 송금 분기 |
-| #26 | 후속 | SolanaAdapter — 멀티 RPC fallback (read-only): publicnode → OnFinality → dRPC. 송금은 단일 (`recent_blockhash` 일관성) |
+| #20 Stage E2 | **완료 (2026-07-29)** | 계정 카드의 9 체인 주소 row + 원클릭 복사, 주소록 화면(자동 sync + 외부 추가), 송금 시 주소록 추천 |
+| #20 Stage E3 | **완료 (2026-07-29)** | 활동 내역(Activity) + ERC-20 토큰 목록 + 토큰 송금 분기 |
+| #26 | **완료 (2026-07-29)** | SolanaAdapter — 멀티 RPC fallback (read-only): publicnode → OnFinality → dRPC. 송금은 단일 (`recent_blockhash` 일관성). 단, 2·3순위가 무키 상태에서 429/400 이라 실질 이중화는 아직 아니다 |
 | #13/14/15 Stage W/D/M | Extension 완성 후 | Web/Desktop/Mobile 셸을 Extension reference 패턴으로. Mobile 만 RN 재작성, Web/Desktop 은 거의 복붙 |
 | #16 | Stage B 묶음 | extension e2e smoke 확장, 위협모델 갱신, CONTEXT/PLAN closed 처리 |
 | #23/24/25 Z2/Z3/Z4 | 별도 트랙 | ZION 커스텀 메시지(job/amm/pop/bankext/poms) + 기능 UI(잡마켓·AMM·PoP·BTC브릿지) + zion-api 연동 |
-| #27 TTL 가치표시 | 완료 | **1 TTL = 노동자 하루 품삯(데나리온)**. 환산은 설계자 연봉 1000 BTC ÷ 365일 = 설계자의 하루 = 100 TTL → 1 TTL = 10/365 ≈ 0.02739726 BTC (2026-07-25 개정, 이전 1/300,000). kWR 은 따라가지 않고 1/300,000 별도 트랙 |
+| #27 TTL 가치표시 | 완료 | **1 TTL = 노동자 하루 품삯(데나리온)**. 환산은 설계자 연봉 1000 BTC ÷ 365일 = 설계자의 하루 = 100 TTL → 1 TTL = 10/365 ≈ 0.02739726 BTC (2026-07-25 개정, 이전 1/300,000). kWR 은 따라가지 않고 1/300,000 별도 트랙<br>**→ 2026-07-29 정정: BTC 페깅 해제.** 이 비율은 2026-07-29 앵커에 한 번 쓰이고 끝났다. 현행 기준은 §5 "벼린 환율" |
 
 ### 본 라운드 외부 결정 (사용자 확정)
 
@@ -74,7 +100,7 @@
 - **풀 ZION 기능** 목표 (job/amm/pop/BTC브릿지) — 별도 트랙 Z2~Z4.
 - **원클릭 주소 복사** = 각 체인 row 옆에 (체인당 1개씩) — Stage E2 에서 구현.
 - **주소록** = self 자동 sync — `shell-core/Addressbook` 모듈 완성. UI 는 E2.
-- **가치 표시** = native 잔액 메인 + BTC 환산 보조 (클릭하면 USD 토글). 천 단위 쉼표. 시세 = Binance ticker. TTL 페그 = 10/365 BTC (노동가치 기준).
+- **가치 표시** = native 잔액 메인 + BTC 환산 보조 (클릭하면 USD 토글). 천 단위 쉼표. 시세 = Binance ticker. TTL 페그 = 10/365 BTC (노동가치 기준). — **2026-07-29 정정: 페깅 해제** (§5).
 - **MV3 popup 멀티체인 인프라** = WASM CSP `'wasm-unsafe-eval'` 허용 + Buffer polyfill 필수. multichain 청크는 dynamic import 로 분리 (popup 초기 78kB, multichain 5.76MB lazy).
 - **RPC override** = `ethereum`/`solana` 만 publicnode 로 override (viem default 와 mainnet-beta 가 extension origin 거부 또는 hang). 나머지 EVM/비-EVM 은 라이브러리 기본 RPC.
 
@@ -150,14 +176,22 @@
 | `deploy_icons.py` | `icons/dist/` → 각 앱 적절한 위치로 (17 타겟) |
 | `migrate_brand.py` | 브랜드 텍스트 일괄 치환 (dry-run/--apply, 슬로건 보호) |
 
-릴리스 검증 2종 (2026-07-26 신설):
+릴리스 검증 4종 (2026-07-26 신설, 2026-07-29 확장):
 
 | 스크립트 | 용도 |
 |---|---|
-| `verify-byeorin-apk.mjs` | **제3자용 검증기.** 의존성 0(순수 fetch). 무결성/진위/출처/온체인 앵커 4항목 대조 |
-| `anchor-release.mjs` | 릴리스 매니페스트 해시를 TTL 체인(7777)에 앵커링. 기본 드라이런, `--send` + `BYEORIN_ANCHOR_KEY` 로 발행 |
+| `verify-byeorin-apk.mjs` | **제3자용 검증기.** 의존성 0(순수 fetch). 무결성/진위/출처/온체인 앵커 4항목 대조. 확실히 틀린 것은 FAIL, 확인할 수 없는 것은 SKIP |
+| `anchor-release.mjs` | 릴리스 매니페스트 해시를 TTL 체인(7777)에 앵커링. 기본 드라이런, `--send` + `BYEORIN_ANCHOR_KEY` 로 발행. 전송 전 chainId·publisher 주소·잔액 3중 사전검사 |
+| `derive-publisher-key.mjs` | 시드구문 → 앵커 publisher 개인키 파생 (2026-07-29 신설). 시드는 **stdin 으로만** 받고 argv·파일에 남기지 않는다. `--stdin-base64` 로 UTF-8 시드를 base64 로 감싸 받는다. 지갑과 같은 SDK 코드 경로를 쓰고, 두 경로로 구한 주소가 어긋나면 키를 출력하지 않고 죽는다 |
+| `Set-AnchorKey.ps1` | 위 스크립트의 PowerShell 래퍼 (2026-07-29 신설). 시드를 `Read-Host -AsSecureString` 으로 받아 `BYEORIN_ANCHOR_KEY` 환경변수에 넣는다. `-Persist` 는 HKCU 레지스트리에 **평문**으로 남는다(스크립트 내 "노출 범위" 참고). `-Clear` 로 삭제 |
 
 > 매니페스트 생성기는 안드로이드 앱 쪽에 있다 — `apps/android/scripts/release-manifest.mjs` (release 빌드 시 `gradle.mjs` 가 자동 호출).
+
+환율 1종 (2026-07-29 신설):
+
+| 스크립트 | 용도 |
+|---|---|
+| `build-rate-snapshot.mjs` | 벼린 환율 스냅샷 생성기 (재현용). World Bank API + IMF DataMapper + TTL Scan 토큰 목록을 읽어 `rate-snapshot.json` 과 `packages/wallet-sdk/src/rates/snapshot.ts` 를 **한 번에** 만든다. 검증 목적이면 `--out` 으로 다른 경로를 줘야 저장소 사본을 덮지 않는다 — 단 `snapshot.ts` 는 `--out` 을 줘도 항상 제자리에 덮어쓰므로, 검증 후 `git diff` 로 변화가 없는지 확인한다 |
 
 기존 코어 도구 (참고):
 - `setup-check.mjs`, `verify-addresses.mjs`, `devnet-round-trip.mjs`, `generate-extension-icons.mjs`
@@ -183,12 +217,13 @@ D:\TTLCOINWalet\
 │   └── app/         Zephyr RTOS, nRF52840 + SE050 + e-ink. 컴파일 통과, HW-터치는 -ENOSYS stub
 ├── hardware/        SPEC.md, BOM.csv, pin-map.md, threat-model.md
 ├── verification/    10/10 cross-SDK 주소 검증 + test-dapp.html
-├── docs/            PLAN.md(v0.5), ARCHITECTURE.md, VERIFIABILITY.md, CHANGELOG.md, INSURANCE.md, CONTEXT.md(본문)
+├── docs/            PLAN.md(v0.5), ARCHITECTURE.md, VERIFIABILITY.md, RATES.md, CHANGELOG.md, INSURANCE.md, CONTEXT.md(본문)
 ├── icons/dist/      64 파일 앱 아이콘 패키지
 ├── scripts/         자동화 (위 §3)
 ├── branding/raw/    옛 곡괭이 자산 (정리 후보)
 ├── LICENSE, NOTICE, README.md, SECURITY.md   공개 저장소 세트 (2026-07-26)
-├── anchor-publishers.json   앵커 publisher 허용 목록 (chainId 7777, 현재 비어 있음)
+├── anchor-publishers.json   앵커 publisher 허용 목록 (chainId 7777, 단일 키 0x52B5dE96…f533)
+├── rate-snapshot.json       벼린 환율 스냅샷 (66종, anchoredAt 2026-07-29) — 사람이 검증하는 사본
 ├── 벼린.apk (git 미추적) + 벼린.apk.manifest.json (추적 — 공개 검증 근거)
 ├── BYEORINWordMark.png, lockup{가로,세로}.png, 벼린 워드마크.png, logo0.{png,svg,_dark.png}
 └── package.json (byeorin-wallet, pnpm workspace)
@@ -198,6 +233,29 @@ D:\TTLCOINWalet\
 
 ## 5. 닫힌 결정 (재논의 X)
 
+- **BTC 페깅 해제** (2026-07-29). 옛 결정 "TTL = 10/365 BTC"(2026-07-25, `a4b4a03`)는
+  **2026-07-29 앵커로 한 번 쓰고 해제됐다.** BTC 63,412.45 @ 2026-07-29 00:00 KST 를
+  TTL 의 초기 외부 시세를 정하는 데 한 번 쓴 뒤, 그 이후로는 TTL 을 BTC 에 매달지
+  않는다. 이 값은 `rate-snapshot.json` 어디에도 들어 있지 않고, 테스트가 "BTC 앵커는
+  이 스냅샷 어디에도 등장하지 않는다" 로 그 분리를 지킨다. §0 옛 라운드 표와 메모리
+  (`project_token_pegs`)에 남아 있는 "TTL 페그 = 10/365 BTC" 서술은 이 결정 이전의
+  기록이다.
+  > **코드는 아직 따라오지 않았다 (미해결).** `apps/extension/entrypoints/popup/App.tsx`
+  > 와 `apps/android/src/App.tsx` 는 여전히 `TTL_PEG_BTC = 1000/365/100 = 10/365` 를
+  > 상수로 들고 있고, 잔액 화면의 TTL 가치는 이 비율 × **Binance 실시간 BTC 시세**로
+  > 계산된다. 즉 배포된 0.5.4 에서 TTL 표시 가치는 지금도 BTC 를 따라 움직인다.
+  > 두 값의 차이는 설계상 알려져 있다 — `63,412.45 × 10/365 ≈ 1,737 USD/TTL` 대
+  > `1 TTL = 246.65 tUSD` 로 약 7 배(커밋 `c9a6771` 이 "tUSD 를 실제 달러와 1:1 로
+  > 놓으면 두 앵커가 7 배 어긋나 보인다" 로 언급). **결정과 코드를 언제 어떻게 맞출지는
+  > 정해지지 않았다.**
+- **벼린 환율 = TTL 이 기준, 시장환율을 입력으로 쓰지 않는다** (2026-07-29).
+  `1 TTL = 노동자 1일 품삯. 국적과 무관하다.` 산식은 `perTtl = 명목GDP(자국통화) /
+  인구 / 365` 하나뿐이고 어디에도 환율이 들어가지 않는다. 명목 GDP 를 쓰는 이유는
+  재려는 것이 인플레이션 자체이기 때문이고, 자국통화 단위를 쓰는 이유는 달러 환산
+  GDP 에 이미 시장환율이 곱해져 있기 때문이다. `t{ISO}` 토큰은 **실제 그 나라 통화가
+  아니다** — 상환·예치·페그 어느 것도 없다. 앵커 2 개(BTC → TTL 외부 시세 /
+  GDP·인구 → 통화토큰 환율)는 별개 트랙이고 만나지 않는다.
+  전문·한계는 [`docs/RATES.md`](./RATES.md).
 - **라이선스 = 전체 Apache-2.0** (2026-07-26). 창작재산권은 okneo31, NOTICE 표기
   의무(§4(d))로 파생물에도 표기가 따라간다. "벼린"·"Byeorin"·"벼린 요세" 상표는
   라이선스 대상이 아니다(§6) — 포크는 다른 이름을 써야 한다. 자체 라이선스를
@@ -254,15 +312,47 @@ D:\TTLCOINWalet\
 - USB-IF VID 신청
 
 ### D. 검증 체계 ([VERIFIABILITY.md §3](./VERIFIABILITY.md) 로드맵)
-1. **온체인 릴리스 앵커 실제 발행** (로드맵 1순위) — 기록기/검증기는 `76d7820` 에서
-   구현 완료, 드라이런만 확인됨. 발행에 필요한 것: publisher 개인키
-   (`BYEORIN_ANCHOR_KEY`) + ChainID 7777 가스. 발행 후 publisher 주소를
-   `anchor-publishers.json`(현재 `publishers: []`) 에 넣고 매니페스트에 `anchor.txHash` 기록.
-2. **재현 빌드** (2순위) — 현재 **안 됨**(실측, §0 표). `SOURCE_DATE_EPOCH` 로 zip
-   타임스탬프 고정, AGP/Gradle/JDK 핀 고정, 컨테이너 빌드. 서명 전 APK 기준으로
-   재현성 확보 후 서명은 분리 검증.
-3. **앱 내 빌드 커밋 표시** (3순위) — 푸터가 현재 `v0.5.2 (3)` 까지만 표시하므로
-   실행 중인 앱과 매니페스트를 커밋 단위로 대조할 수단이 없음.
+
+> 로드맵 1순위 "온체인 릴리스 앵커 실제 발행" 은 2026-07-29 에 **완료**됐다
+> (0.5.3 / 0.5.4 두 건, §0 표). 아래는 그 다음.
+
+1. **재현 빌드** (현 1순위) — 여전히 **안 됨**(2026-07-26 실측, §0 표). `SOURCE_DATE_EPOCH`
+   로 zip 타임스탬프 고정, AGP/Gradle/JDK 핀 고정, 컨테이너 빌드. 서명 전 APK 기준으로
+   재현성 확보 후 서명은 분리 검증. **앵커를 발행했다고 이 한계가 사라지지 않는다** —
+   앵커는 "publisher 가 그때 이 해시를 공표했다" 만 증명하고, 소스↔바이너리 대응은
+   증명하지 않는다(매니페스트 `anchor.note` 에 그대로 적혀 있다).
+2. **publisher 단일 키 → k-of-n** — 지금 앵커를 올릴 수 있는 주소는
+   `0x52B5dE96…f533` **하나뿐**이다. 그 키를 잃거나 빼앗기면 앵커 체계 전체가
+   무의미해진다. `anchor-publishers.json` 의 `_policy` 에 "관리자가 늘면 각자 독립
+   주소로 같은 해시를 앵커링하고 검증기가 k-of-n 일치를 요구한다" 로 방향만 적혀 있고
+   구현은 없다.
+3. **앵커 `data` 검사 강화** — 검증기의 `data` 검사가 sha256 **부분문자열 매칭**이라,
+   그 해시 문자열이 어딘가 박힌 아무 tx 나 통과한다. `byeorin:release:1` 매직도
+   `v=` / `commit=` 필드도 대조하지 않는다. 매직 버전 호환성 때문에 `30f5e85` 에서
+   의도적으로 남겨둔 구멍이다.
+4. **앱 내 빌드 커밋 표시** — 푸터가 `v0.5.4 (5)` 까지만 표시한다(`app-version.ts` 가
+   네이티브 `versionName`/`versionCode` 만 읽음). 실행 중인 앱과 매니페스트를 **커밋
+   단위로** 대조할 수단이 아직 없다.
+
+### E. 벼린 환율 후속 ([RATES.md §8](./RATES.md))
+0. **"페깅 해제" 와 코드가 어긋나 있다** — §5 참고. 셸의 `TTL_PEG_BTC` 상수가 그대로
+   살아 있어 잔액 화면의 TTL 가치는 여전히 실시간 BTC 시세를 따라간다. 결정과 코드를
+   맞출지, 두 표시를 병존시킬지 **미정**.
+1. **갱신 동력이 없다** — 66 종 값은 2026-07-29 에 한 번 계산되고 고정됐다. 갱신 주체·
+   주기·트리거 어느 것도 정해져 있지 않다. GDP 나 인구가 바뀌어도 스냅샷은 그대로다.
+   **이 라운드에서 정하지 않은 가장 큰 항목.**
+2. **안드로이드 토큰 목록 화면 이식 (진행 중)** — 커밋 기준으로 `TokenListPane` 은
+   확장에만 있고, 안드로이드는 `c9a6771` 에서 CSS(149줄)만 들어갔다. 본 문서 갱신
+   시점의 작업 트리에는 `apps/android/src/screens/TokenListPane.tsx`(338줄) ·
+   `lib/token-visibility.ts`(375줄) 가 **미커밋**으로 존재하고 `App.tsx` 에 배선돼
+   있다. **실기기·에뮬레이터 동작 확인 여부는 미확인.**
+3. **1인당 산출 ≠ 임금** — `GDP / 인구 / 365` 는 하루 산출액이지 노동자가 받는 임금이
+   아니다. 노동소득분배율·비경제활동인구·소득분포 어느 것도 반영되지 않았다.
+   "노동자 1일 품삯" 이라는 원칙과 실제 산식 사이의 이 간극은 문서에만 적혀 있고
+   좁히는 계획은 없다.
+4. **스냅샷에 생성 시각이 없다** — `anchoredAt: 2026-07-29` 은 재현을 위해 박아 넣은
+   고정 상수라 데이터 취득 시각과 다를 수 있다. 원본(World Bank)은 개정되므로 재실행
+   결과가 달라질 수 있다.
 
 ---
 
@@ -289,7 +379,16 @@ python scripts/migrate_brand.py --apply    # 실제 적용
 cd apps/android && pnpm apk                 # → 벼린.apk + 벼린.apk.manifest.json
 node scripts/verify-byeorin-apk.mjs 벼린.apk 벼린.apk.manifest.json
 node scripts/anchor-release.mjs                              # 앵커 드라이런
-BYEORIN_ANCHOR_KEY=0x… node scripts/anchor-release.mjs --send  # 실제 발행 (미실행)
+BYEORIN_ANCHOR_KEY=0x… node scripts/anchor-release.mjs --send  # 실제 발행 (2건 발행됨)
+
+# 앵커 publisher 키 (PowerShell — 시드는 화면에 안 보이게 입력받는다)
+.\scripts\Set-AnchorKey.ps1 -Index 7        # BYEORIN_ANCHOR_KEY 채움
+.\scripts\Set-AnchorKey.ps1 -Clear          # 지움
+
+# 벼린 환율 스냅샷 재현 (네트워크 사용: World Bank + IMF + TTL Scan)
+node scripts/build-rate-snapshot.mjs --out /tmp/repro.json
+diff <(jq -S . rate-snapshot.json) <(jq -S . /tmp/repro.json)
+git diff packages/wallet-sdk/src/rates/snapshot.ts   # --out 을 줘도 이 파일은 덮어써진다
 
 # Git (origin = github.com/okneo31/byeorin, main 추적 중)
 git status
@@ -314,6 +413,7 @@ git push                                    # 추가 변경 후
 |---|---|
 | [`docs/PLAN.md`](./PLAN.md) | **단일 진실원** — 제품·아키텍처·로드맵 (v0.5) |
 | [`docs/VERIFIABILITY.md`](./VERIFIABILITY.md) | **검증 가능한 보안** — 원칙·현재 검증 가능한 것·아직 못 하는 것·로드맵 |
+| [`docs/RATES.md`](./RATES.md) | **벼린 환율** — 원칙(1 TTL = 노동자 1일 품삯)·산식·두 앵커·재현 방법·API·**한계** |
 | [`docs/CONTEXT.md`](./CONTEXT.md) | **본 문서** — 현재 상태 스냅샷, 세션 인수인계 |
 | [`docs/ARCHITECTURE.md`](./ARCHITECTURE.md) | 시스템 다이어그램 + 모듈 책임 + 위협 경계 + 키 invariant |
 | [`docs/CHANGELOG.md`](./CHANGELOG.md) | 커밋 단위 변경 기록 (v0.5 entry 포함) |
@@ -337,3 +437,7 @@ git push                                    # 추가 변경 후
 4. **자동 변환된 옛 잔재** (`branding/raw/*.svg`, `verification/icon-concepts/*.svg`)에 옛 곡괭이 그래픽이 남아있음을 인지. 새 곡괭이 아님.
 5. **package.json name = `byeorin-wallet`**, 모든 패키지 `@byeorin/*`. 옛 `@nodong/*` 출현 시 마이그레이션 누락이므로 즉시 처리.
 6. **HW 디바이스명은 "벼린 요세"** (Byeorin Yose). "벼린 콜드" 또는 "벼린 모루" 같은 옛 후보는 폐기.
+7. **"TTL = 10/365 BTC" 는 결정상 해제됐다(2026-07-29, §5).** 메모리
+   (`project_token_pegs`)에 옛 서술이 남아 있고, **셸 코드에는 상수가 아직 살아 있어
+   잔액 화면이 실시간 BTC 시세를 따라간다.** 현행 환율 기준은
+   [`docs/RATES.md`](./RATES.md). 이 불일치는 §5 에 기록돼 있다.

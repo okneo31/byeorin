@@ -28,6 +28,12 @@ import {
 } from '@byeorin/shell-core';
 import { LocaleSwitch, useT } from '@byeorin/i18n/react';
 import type { DiscoveredBalance, EvmAdapter } from '@byeorin/wallet-sdk/evm';
+// 벼린 환율 — TTL 통화토큰의 가치는 Binance 시세가 아니라 이 스냅샷에서 온다.
+// 주소로 찾는다: 심볼로 찾으면 tUSD 가 대문자화되어 TrueUSD(TUSD)와 충돌한다.
+import { rateByAddress, rateByIso, tokenAmountToTtl } from '@byeorin/wallet-sdk/evm';
+// TTL 환산값 표기는 토큰 목록 화면과 같은 함수를 쓴다 — 두 화면이 같은 잔액에
+// 다른 자릿수를 내면 안 된다.
+import { formatTtl } from './lib/token-visibility.js';
 import {
   addCustomErc20,
   connectHardware,
@@ -170,7 +176,6 @@ export function App() {
   // 예: prices['BTCUSDT']=61234, prices['ETHBTC']=0.0521, ...
   const [prices, setPrices] = useState<Record<string, number> | null>(null);
   // BTC ↔ USD 토글 — 모든 활성 계정 카드가 공유 (사용자가 한 번 USD 켜면 체인 바꿔도 유지).
-  const [showUsd, setShowUsd] = useState(false);
   // 송금 화면이 쓸 자산 정보 — ActiveAccountCard 가 이미 조회한 값을 끌어올린다.
   // 카드는 mode==='home' 에서만 마운트되므로 App 이 들고 있어야 send 화면에서 산다.
   const [sendTokens, setSendTokens] = useState<DiscoveredBalance[] | null>(null);
@@ -491,8 +496,6 @@ export function App() {
             nativeSymbol={effectiveSymbol}
             nativeDecimals={effectiveDecimals}
             prices={prices}
-            showUsd={showUsd}
-            onToggleUsd={() => setShowUsd((v) => !v)}
           />
           <HwConnectPanel
             hw={hw}
@@ -671,8 +674,6 @@ function AccountListCard({
   nativeSymbol,
   nativeDecimals,
   prices,
-  showUsd,
-  onToggleUsd,
 }: {
   accounts: AccountInfo[];
   onSelect: (idx: number) => void;
@@ -696,8 +697,6 @@ function AccountListCard({
   nativeSymbol: string;
   nativeDecimals: number;
   prices: Record<string, number> | null;
-  showUsd: boolean;
-  onToggleUsd: () => void;
 }) {
   const t = useT();
   const active = accounts.find((a) => a.active) ?? null;
@@ -731,8 +730,6 @@ function AccountListCard({
           activeChainKey={activeChainKey}
           onChainSelect={onChainSelect}
           prices={prices}
-          showUsd={showUsd}
-          onToggleUsd={onToggleUsd}
         />
       )}
 
@@ -813,8 +810,6 @@ function ActiveAccountCard({
   activeChainKey,
   onChainSelect,
   prices,
-  showUsd,
-  onToggleUsd,
 }: {
   account: AccountInfo;
   label: string;
@@ -838,8 +833,6 @@ function ActiveAccountCard({
   activeChainKey: string;
   onChainSelect: (key: string) => void;
   prices: Record<string, number> | null;
-  showUsd: boolean;
-  onToggleUsd: () => void;
 }) {
   const t = useT();
   const [chainAddress, setChainAddress] = useState<string | null>(null);
@@ -881,8 +874,9 @@ function ActiveAccountCard({
   // native asset → BTC 비율. 미상장(TTL/kWR) 은 PRICE_PEG_TO_BTC 페그, 그 외는
   // Binance ticker 의 {SYM}BTC pair. BTC 자체는 1:1.
   const btcPerNative = nativeToBtcRatio(nativeSymbol, prices);
-  // BTC USD — Binance 의 BTCUSDT.
-  const btcUsd = prices?.['BTCUSDT'] ?? null;
+  // TTL 기준 환산. TTL 자신은 null 이라 보조 줄이 아예 그려지지 않는다.
+  const nativeTtl =
+    balance === null ? null : nativeToTtl(balance, nativeDecimals, nativeSymbol, prices);
 
   // 활성 계정 × 활성 체인 → 주소. getAccountAt 은 sync.
   useEffect(() => {
@@ -1107,17 +1101,12 @@ function ActiveAccountCard({
                   {formatAmount(balance, nativeDecimals)}
                   <span className="balance-hero__symbol">{nativeSymbol}</span>
                 </p>
-                {btcPerNative !== null && (
-                  <button
-                    type="button"
-                    className="balance-hero__toggle"
-                    onClick={onToggleUsd}
-                    title={showUsd ? 'BTC' : 'USD'}
-                  >
-                    ≈ {showUsd && btcUsd !== null
-                      ? `$${formatUsdValue(nativeToBtc(balance, nativeDecimals, btcPerNative) * btcUsd)}`
-                      : `${formatBtcValue(nativeToBtc(balance, nativeDecimals, btcPerNative))} BTC`}
-                  </button>
+                {/* TTL 은 기준이라 보조 표시가 없다. 나머지 자산만 TTL 로 환산해
+                    보여준다 — 이 지갑의 모든 가치는 TTL 로 읽힌다. */}
+                {nativeTtl !== null && (
+                  <p className="balance-hero__toggle" style={{ cursor: 'default' }}>
+                    {t('tokens.value_ttl', { v: formatTtl(nativeTtl) })}
+                  </p>
                 )}
               </>
             )}
@@ -1136,14 +1125,16 @@ function ActiveAccountCard({
                   usd !== null && amount > 0n
                     ? baseUnitToNumber(amount, a.decimals) * usd
                     : null;
+                // 이 지갑의 모든 가치는 TTL 로 읽힌다.
+                const zionTtl = usdValue === null ? null : usdToTtl(usdValue, prices);
                 return (
                   <li key={a.denom} className="zion-assets__row">
                     <span className="zion-assets__symbol">{a.symbol}</span>
                     <span className="zion-assets__amount">
                       {formatAmount(amount, a.decimals)}
-                      {usdValue !== null && (
+                      {zionTtl !== null && (
                         <span className="zion-assets__usd">
-                          ≈ ${formatUsdValue(usdValue)}
+                          {t('tokens.value_ttl', { v: formatTtl(zionTtl) })}
                         </span>
                       )}
                     </span>
@@ -1160,23 +1151,44 @@ function ActiveAccountCard({
             <>
               {visibleEvmTokens.length > 0 && (
                 <ul className="zion-assets">
-                  {visibleEvmTokens.map((t) => {
-                    const usd = tokenToUsd(t.token.symbol, prices);
+                  {visibleEvmTokens.map((row) => {
+                    // 갈림길 하나: 주소가 벼린 환율에 있으면 TTL 환산, 없으면
+                    // 기존 Binance/USD 경로. 심볼은 판단에 쓰지 않는다.
+                    const rate = rateByAddress(row.token.address);
+                    const ttl = tokenAmountToTtl(row.balance, row.token.decimals, rate);
+                    // 벼린 토큰 심볼을 달았지만 주소가 스냅샷에 없는 토큰 —
+                    // 대문자화하면 스테이블 목록에 걸려 "1 달러" 로 보인다
+                    // (tUSD → TUSD → TrueUSD). 값을 모르는 것이므로 비워 둔다.
+                    const lookalike =
+                      rate === null &&
+                      /^t[A-Z]{3}$/.test(row.token.symbol) &&
+                      rateByIso(row.token.symbol.slice(1)) !== null;
+                    const usd =
+                      rate !== null || lookalike ? null : tokenToUsd(row.token.symbol, prices);
                     const usdValue =
-                      usd !== null && t.balance > 0n
-                        ? baseUnitToNumber(t.balance, t.token.decimals) * usd
+                      usd !== null && row.balance > 0n
+                        ? baseUnitToNumber(row.balance, row.token.decimals) * usd
                         : null;
                     return (
-                      <li key={t.token.address} className="zion-assets__row">
-                        <span className="zion-assets__symbol" title={t.token.name}>
-                          {t.token.symbol}
+                      <li key={row.token.address} className="zion-assets__row">
+                        <span className="zion-assets__symbol" title={row.token.name}>
+                          {row.token.symbol}
                         </span>
                         <span className="zion-assets__amount">
-                          {formatAmount(t.balance, t.token.decimals)}
-                          {usdValue !== null && (
+                          {formatAmount(row.balance, row.token.decimals)}
+                          {ttl !== null && row.balance > 0n ? (
                             <span className="zion-assets__usd">
-                              ≈ ${formatUsdValue(usdValue)}
+                              {t('tokens.value_ttl', { v: formatTtl(ttl) })}
                             </span>
+                          ) : (
+                            usdValue !== null &&
+                            usdToTtl(usdValue, prices) !== null && (
+                              <span className="zion-assets__usd">
+                                {t('tokens.value_ttl', {
+                                  v: formatTtl(usdToTtl(usdValue, prices)!),
+                                })}
+                              </span>
+                            )
                           )}
                         </span>
                       </li>
@@ -1673,6 +1685,53 @@ function formatAmount(base: bigint | null, decimals: number): string {
   return `${withCommas(whole.toString())}.${fracStr}`;
 }
 
+// ────────── TTL 기준 환산 ──────────
+//
+// **TTL 은 기준(numeraire)이다. 환산해 보여줄 대상이 아니다.**
+//
+// 2026-07-29 00:00 KST 의 BTC 63,412.45 로 TTL 의 절대 눈금을 한 번 정하고
+// BTC 페깅을 해제했다. 그 전에는 "TTL 이 BTC 로 얼마냐" 를 매번 물었고, 그래서
+// BTC 가 움직이면 TTL 표시 가치가 따라 움직였다 — 그게 페깅이다.
+//
+// 이제 방향이 반대다. 앵커를 고정값으로 박아두고 **"X 가 TTL 로 얼마냐" 만**
+// 묻는다. BTC 시세가 움직여도 TTL 은 안 움직이고, 움직이는 것은 BTC 의 TTL
+// 가격이다.
+//
+// 1 TTL ≡ 10/365/100 BTC = 0.02739726 BTC  →  1 BTC = 36.5 TTL (고정)
+const TTL_ANCHOR_BTC = PEG_ANNUAL_BTC / PEG_DAYS_PER_YEAR / PEG_TTL_PER_DAY;
+
+/**
+ * native 자산 잔액 → TTL. 환산할 수 없으면 null (0 이 아니다 — 0 은 "가치 없음"
+ * 으로 오해된다).
+ *
+ * TTL 자신은 환산하지 않는다. 기준을 기준으로 나누면 늘 1 이고, 화면에
+ * "1 TTL ≈ 1 TTL" 을 적을 이유가 없다.
+ */
+function nativeToTtl(
+  balance: bigint,
+  decimals: number,
+  symbol: string,
+  prices: Record<string, number> | null,
+): number | null {
+  if (symbol === 'TTL') return null;
+  const btcPer = nativeToBtcRatio(symbol, prices);
+  if (btcPer === null || !(TTL_ANCHOR_BTC > 0)) return null;
+  return nativeToBtc(balance, decimals, btcPer) / TTL_ANCHOR_BTC;
+}
+
+/**
+ * USD 환산값 → TTL. 앵커가 고정이므로 TTL 자신은 재평가되지 않는다.
+ *
+ * 벼린 환율에 없는 자산(일반 ERC-20, ZION 4종 등)을 TTL 로 보여주기 위한 경로다.
+ * 시세로 USD 를 구한 뒤 BTC 를 거쳐 앵커로 나눈다. 시세가 움직이면 그 자산의
+ * TTL 가격이 움직일 뿐, TTL 의 가치는 고정이다.
+ */
+function usdToTtl(usd: number, prices: Record<string, number> | null): number | null {
+  const btcUsd = prices?.['BTCUSDT'];
+  if (btcUsd === undefined || !(btcUsd > 0) || !(TTL_ANCHOR_BTC > 0)) return null;
+  return usd / btcUsd / TTL_ANCHOR_BTC;
+}
+
 // native 심볼 → 1 unit native = X BTC. 미상장(TTL/kWR) 은 PRICE_PEG_TO_BTC,
 // 그 외는 Binance {SYM}BTC pair. BTC 는 1:1. 시세 없으면 null (UI 에서 "—" 표시).
 function nativeToBtcRatio(
@@ -1742,23 +1801,6 @@ function nativeToBtc(balance: bigint, decimals: number, btcPerNative: number): n
   const frac = balance % factor;
   const nativeAsNum = Number(whole) + Number(frac) / Number(factor);
   return nativeAsNum * btcPerNative;
-}
-
-// BTC 표시 — 값 크기에 따라 자릿수 조정. 정수부 천 단위 쉼표.
-function formatBtcValue(v: number): string {
-  if (!Number.isFinite(v)) return '—';
-  if (v === 0) return '0.00000000';
-  const fixed =
-    v >= 1 ? v.toFixed(4) : v >= 0.001 ? v.toFixed(6) : v.toFixed(8);
-  return withCommas(fixed);
-}
-
-// USD 표시 — 1 이상은 cent, 그 이하는 4자리. 정수부 천 단위 쉼표.
-function formatUsdValue(v: number): string {
-  if (!Number.isFinite(v)) return '—';
-  if (v === 0) return '0.00';
-  const fixed = v >= 1 ? v.toFixed(2) : v.toFixed(4);
-  return withCommas(fixed);
 }
 
 // ────────── 계정 추가 메뉴 ──────────

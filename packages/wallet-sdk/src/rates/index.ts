@@ -55,7 +55,29 @@ export function tokenAmountToTtl(
   rate: TokenRate | null,
 ): number | null {
   if (!rate || !(rate.perTtl > 0)) return null;
-  return baseUnitsToNumber(baseUnits, decimals) / rate.perTtl;
+  // **스냅샷의 decimals 를 쓴다. 호출자가 넘긴 값은 무시한다.**
+  //
+  // 호출자의 decimals 는 대개 익스플로러 응답(scan.ttl1.top)에서 온다. 그걸
+  // 믿으면 익스플로러가 장악됐을 때 진짜 토큰 주소에 틀린 decimals 를 실어
+  // 표시 수량과 TTL 환산값을 임의 배율로 부풀릴 수 있다 — decimals 가 12 면
+  // 10^6 배, 0 이면 10^18 배다. 잔액 자체는 온체인 balanceOf 라 못 건드리지만
+  // **보여지는 숫자는 건드릴 수 있다.**
+  //
+  // 스냅샷은 앵커라 저장소에 커밋돼 있고 사람이 검토한 값이다. 같은 주소에
+  // 대해 정답을 이미 들고 있으므로 그걸 쓴다.
+  return baseUnitsToNumber(baseUnits, rate.decimals) / rate.perTtl;
+}
+
+/**
+ * 이 주소에 대해 **믿을 수 있는 decimals**. 스냅샷에 있으면 그 값, 없으면
+ * 호출자가 준 값(일반 ERC-20 은 체인에서 읽은 값이라 그대로 쓴다).
+ *
+ * 표시 경로에서도 익스플로러가 준 decimals 를 그대로 쓰면 안 되므로,
+ * 수량을 화면에 찍기 전에 이걸 거친다.
+ */
+export function authoritativeDecimals(address: string, fallback: number): number {
+  const r = byAddress.get(address.toLowerCase());
+  return r ? r.decimals : fallback;
 }
 
 /** TTL → 토큰 수량(사람이 읽는 단위). */

@@ -13,6 +13,7 @@ import {
   rateByIso,
   snapshot,
   tokenAmountToTtl,
+  authoritativeDecimals,
   ttlToTokenAmount,
   type TokenRate,
 } from '../src/rates/index.js';
@@ -115,9 +116,27 @@ describe('tokenAmountToTtl', () => {
     expect(tokenAmountToTtl(0n, 18, usd)).toBe(0);
   });
 
-  it('decimals 0 도 처리한다', () => {
+  // 이 테스트는 원래 "호출자가 준 decimals 를 그대로 쓴다" 를 고정하고 있었다.
+  // 그게 정확히 취약점이었다 — 그 값은 대개 익스플로러 응답에서 오고, 장악되면
+  // 진짜 주소에 틀린 decimals 를 실어 보여지는 수량을 임의 배율로 부풀릴 수 있다.
+  it('호출자가 준 decimals 를 무시하고 스냅샷 값을 쓴다 — 익스플로러가 수량을 부풀릴 수 없다', () => {
     const usd = rateByAddress(TUSD)!;
-    expect(tokenAmountToTtl(100n, 0, usd)).toBeCloseTo(100 / usd.perTtl, 12);
+    expect(usd.decimals).toBe(18);
+    const oneToken = 10n ** 18n;
+    const truth = tokenAmountToTtl(oneToken, 18, usd);
+
+    // 공격자가 decimals 를 낮춰 부르든 높여 부르든 결과가 같아야 한다.
+    for (const lie of [0, 6, 12, 24]) {
+      expect(tokenAmountToTtl(oneToken, lie, usd)).toBe(truth);
+    }
+    expect(truth).toBeCloseTo(1 / usd.perTtl, 12);
+  });
+
+  it('authoritativeDecimals — 스냅샷에 있으면 그 값, 없으면 호출자 값', () => {
+    expect(authoritativeDecimals(TUSD, 6)).toBe(18);
+    expect(authoritativeDecimals(TUSD.toUpperCase(), 6)).toBe(18);
+    // 스냅샷에 없는 일반 ERC-20 은 체인에서 읽은 값을 그대로 쓴다.
+    expect(authoritativeDecimals('0x' + '11'.repeat(20), 6)).toBe(6);
   });
 
   it('ttlToTokenAmount 와 왕복', () => {

@@ -1,0 +1,338 @@
+// TokenListPane — 토큰 목록 전용 화면 (검색 · 보기/가리기 · 벼린 환율 가치).
+//
+// 확장 popup(apps/extension/entrypoints/popup/screens/TokenListPane.tsx)에서
+// 그대로 이식했다. 다른 점은 저장 백엔드 하나뿐이다 — 확장은 ChromeLocalBackend,
+// 안드로이드 WebView 는 LocalStorageBackend. 둘 다 shell-core 가 같은 Promise
+// 표면으로 내주므로 `loadHidden`/`saveHidden` 호출부는 글자 하나 안 바뀐다.
+//
+// TTL 체인에 통화 스테이블이 66 종 발행돼 있고 지갑이 그걸 자동 감지한다.
+// 활성 계정 카드의 간단한 목록은 "지금 뭘 갖고 있나" 를 훑는 용도라 66 줄을
+// 감당하지 못한다. 그래서 훑기와 다루기를 화면으로 분리했다 — 카드는 그대로
+// 두고, 검색·가리기·환율 근거는 전부 이쪽에 둔다.
+//
+// 조회하지 않는다. tokens 는 상위(App)가 이미 RPC 로 받아 둔 값을 props 로
+// 받는다. 같은 balanceOf 를 화면 전환마다 66 번씩 다시 쏘지 않기 위해서다.
+//
+// 판단(필터·정렬·검색·가리기 상태)은 전부 `lib/token-visibility.ts` 에 있다.
+// 이 파일은 그 결과를 그리기만 한다 — 그래야 규칙을 jsdom 없이 테스트할 수 있다.
+//
+// 환율은 재구현하지 않는다. wallet-sdk 의 벼린 환율(`rateByAddress` /
+// `tokenAmountToTtl`)이 유일한 출처다.
+//
+// 용어 주의: 1 TTL = 노동자 1일 품삯이고, perTtl 은 "1 TTL 이 그 통화로 얼마인가"
+// 다. 시장환율이 아니다. tUSD 는 실제 달러가 아니다. 화면 문구에서 이 둘을
+// 섞지 않는다 — 하단 고지가 그 경계를 명시한다.
+
+import { useEffect, useMemo, useState } from 'react';
+import { LocalStorageBackend } from '@byeorin/shell-core';
+import type { DiscoveredBalance } from '@byeorin/wallet-sdk/evm';
+import { useT } from '@byeorin/i18n/react';
+import { formatAssetAmount } from '../lib/token-send.js';
+import {
+  EMPTY_HIDDEN,
+  buildTokenRows,
+  formatBigNumber,
+  formatPerTtl,
+  formatTtl,
+  loadHidden,
+  saveHidden,
+  selectTokenView,
+  withHidden,
+  type HiddenMap,
+  type TokenRow,
+} from '../lib/token-visibility.js';
+
+export interface TokenListPaneProps {
+  /**
+   * 상위가 이미 조회한 ERC-20 잔액. `null` = 아직 조회 중(로딩 3상태의 하나).
+   * 이 화면은 절대 직접 조회하지 않는다.
+   */
+  tokens: DiscoveredBalance[] | null;
+  /** 활성 체인 키. 가리기 상태를 체인별로 저장하는 데 쓴다. */
+  chainKey: string;
+  /** 상위의 조회 실패 사유. 있으면 에러 상태로 그린다. */
+  error?: string | null;
+  /** 있으면 새로고침 버튼을 그린다. 재조회는 상위 책임. */
+  onRefresh?: () => void;
+  onBack?: () => void;
+}
+
+export function TokenListPane({
+  tokens,
+  chainKey,
+  error = null,
+  onRefresh,
+  onBack,
+}: TokenListPaneProps) {
+  const t = useT();
+  const [query, setQuery] = useState('');
+  const [showHidden, setShowHidden] = useState(false);
+  // 펼쳐 놓은 행의 key(소문자 주소). 한 번에 하나만 — 여러 개가 펼쳐지면 목록의
+  // 형태를 잃는다.
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  // 가리기 상태 — localStorage. shell-core 의 백엔드를 그대로 재사용한다
+  // (주소록/금고와 같은 저장 계층).
+  const backend = useMemo(() => new LocalStorageBackend(), []);
+  const [hidden, setHidden] = useState<HiddenMap>(EMPTY_HIDDEN);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadHidden(backend).then((map) => {
+      if (!cancelled) setHidden(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [backend]);
+
+  const rows = useMemo<TokenRow[]>(
+    () => (tokens ? buildTokenRows(tokens, hidden, chainKey) : []),
+    [tokens, hidden, chainKey],
+  );
+
+  const view = useMemo(
+    () => selectTokenView(rows, { query, showHidden }),
+    [rows, query, showHidden],
+  );
+
+  // 저장 실패(스토리지 가득참 등)해도 화면은 메모리 상태로 계속 동작한다.
+  // saveHidden 이 false 를 돌려주면 그 사실만 알린다 — 조작 자체를 막지는 않는다.
+  const [persistFailed, setPersistFailed] = useState(false);
+
+  function toggleHidden(row: TokenRow): void {
+    const next = withHidden(hidden, chainKey, row.address, !row.hidden);
+    setHidden(next);
+    void saveHidden(backend, next).then((ok) => {
+      if (!ok) setPersistFailed(true);
+    });
+  }
+
+  const isEvm = chainKey.startsWith('evm:');
+
+  return (
+    <section className="card">
+      <h2 className="create-step__title">{t('tokens.title')}</h2>
+      <p className="create-step__lead">{t('tokens.lead')}</p>
+
+      {!isEvm ? (
+        <p className="empty-state">{t('tokens.unsupported')}</p>
+      ) : error ? (
+        <p className="error" role="alert">
+          {t('tokens.error', { reason: error })}
+        </p>
+      ) : tokens === null ? (
+        <p className="muted small">{t('tokens.loading')}</p>
+      ) : rows.length === 0 ? (
+        <p className="empty-state">{t('tokens.empty')}</p>
+      ) : (
+        <>
+          {/* 검색 — 66 종에서는 이게 없으면 목록을 쓸 수 없다. */}
+          <label className="label" htmlFor="token-search">
+            {t('tokens.search_label')}
+          </label>
+          <input
+            id="token-search"
+            type="search"
+            className="verify-row__input"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('tokens.search_placeholder')}
+            spellCheck={false}
+            autoCapitalize="none"
+            autoCorrect="off"
+          />
+
+          {/* 보임 ↔ 가림 전환. 가린 항목은 사라지는 게 아니라 이쪽 탭으로 간다. */}
+          <div className="token-list__tabs">
+            <button
+              type="button"
+              className={
+                showHidden ? 'token-list__tab' : 'token-list__tab token-list__tab--on'
+              }
+              aria-pressed={!showHidden}
+              onClick={() => setShowHidden(false)}
+            >
+              {t('tokens.tab_visible', { n: view.visibleCount })}
+            </button>
+            <button
+              type="button"
+              className={
+                showHidden ? 'token-list__tab token-list__tab--on' : 'token-list__tab'
+              }
+              aria-pressed={showHidden}
+              onClick={() => setShowHidden(true)}
+            >
+              {t('tokens.tab_hidden', { n: view.hiddenCount })}
+            </button>
+            {onRefresh && (
+              <button type="button" className="zion-assets__toggle" onClick={onRefresh}>
+                {t('common.refresh')}
+              </button>
+            )}
+          </div>
+
+          {view.rows.length === 0 ? (
+            // "검색 결과 없음" 과 "이 탭이 비었음" 은 다른 사건이다. 사용자가
+            // 검색어를 지워야 하는지, 아무것도 안 가렸는지 구분되어야 한다.
+            <p className="empty-state">
+              {query.trim()
+                ? t('tokens.search_empty', { query: query.trim() })
+                : showHidden
+                  ? t('tokens.hidden_empty')
+                  : t('tokens.visible_empty')}
+            </p>
+          ) : (
+            <ul className="token-list">
+              {view.rows.map((row) => (
+                <TokenRowItem
+                  key={row.key}
+                  row={row}
+                  expanded={expanded === row.key}
+                  onToggleExpand={() =>
+                    setExpanded((cur) => (cur === row.key ? null : row.key))
+                  }
+                  onToggleHidden={() => toggleHidden(row)}
+                  t={t}
+                />
+              ))}
+            </ul>
+          )}
+
+          {persistFailed && (
+            <p className="warn small">{t('tokens.persist_failed')}</p>
+          )}
+          <p className="muted small">{t('tokens.hidden_note')}</p>
+          {/* 통화토큰과 실제 통화를 섞지 않게 하는 고지. 지워서는 안 된다. */}
+          <p className="muted small">{t('tokens.disclaimer')}</p>
+        </>
+      )}
+
+      {onBack && (
+        <button className="btn-ghost" onClick={onBack}>
+          {t('common.back')}
+        </button>
+      )}
+    </section>
+  );
+}
+
+// ────────── 목록 한 줄 ──────────
+
+function TokenRowItem({
+  row,
+  expanded,
+  onToggleExpand,
+  onToggleHidden,
+  t,
+}: {
+  row: TokenRow;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onToggleHidden: () => void;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}) {
+  const held = row.balance > 0n;
+  const panelId = `token-basis-${row.key}`;
+
+  return (
+    <li className={row.hidden ? 'token-row token-row--hidden' : 'token-row'}>
+      <div className="token-row__head">
+        <span className="token-row__ident">
+          <span className="token-row__symbol" title={row.name}>
+            {row.symbol}
+          </span>
+          {/* 국가명은 66 종을 구분하는 가장 빠른 단서다. 없으면 자리를 비운다. */}
+          {row.meta.country && (
+            <span className="token-row__country small muted">{row.meta.country}</span>
+          )}
+        </span>
+        <span className="token-row__amounts">
+          <span
+            className={
+              held ? 'token-row__balance' : 'token-row__balance token-row__balance--zero'
+            }
+          >
+            {formatAssetAmount(row.balance, row.decimals)}
+          </span>
+          {/* 환율이 없으면 가치 자리를 **비운다**. 0 이나 추정치를 넣으면
+              "값이 없는 토큰" 과 "값을 모르는 토큰" 이 구분되지 않는다. */}
+          {row.ttl !== null ? (
+            <span className="token-row__ttl">
+              {t('tokens.value_ttl', { v: formatTtl(row.ttl) })}
+            </span>
+          ) : (
+            <span className="token-row__ttl token-row__ttl--none">
+              {t('tokens.no_rate')}
+            </span>
+          )}
+        </span>
+      </div>
+
+      <div className="token-row__actions">
+        <button
+          type="button"
+          className="zion-assets__toggle"
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          onClick={onToggleExpand}
+        >
+          {expanded ? t('tokens.basis_hide') : t('tokens.basis_show')}
+        </button>
+        <button type="button" className="zion-assets__toggle" onClick={onToggleHidden}>
+          {row.hidden ? t('tokens.unhide') : t('tokens.hide')}
+        </button>
+      </div>
+
+      {/* 근거 — 숫자만 있고 근거가 없으면 믿으라는 말밖에 안 된다. */}
+      {expanded && (
+        <dl id={panelId} className="token-basis">
+          {row.meta.rate ? (
+            <>
+              <div className="token-basis__row">
+                <dt>{t('tokens.basis_per_ttl')}</dt>
+                <dd>
+                  1 TTL = {formatPerTtl(row.meta.rate.perTtl)} {row.meta.rate.iso}
+                </dd>
+              </div>
+              <div className="token-basis__row">
+                <dt>{t('tokens.basis_gdp', { year: row.meta.rate.inputs.gdpYear })}</dt>
+                <dd>{formatBigNumber(row.meta.rate.inputs.gdpLocal)}</dd>
+              </div>
+              <div className="token-basis__row">
+                <dt>
+                  {t('tokens.basis_population', {
+                    year: row.meta.rate.inputs.populationYear,
+                  })}
+                </dt>
+                <dd>{formatBigNumber(row.meta.rate.inputs.population)}</dd>
+              </div>
+              <div className="token-basis__row">
+                <dt>{t('tokens.basis_iso3')}</dt>
+                <dd>{row.meta.rate.iso3}</dd>
+              </div>
+              {row.meta.rate.inputs.gdpSynthetic && (
+                <div className="token-basis__row">
+                  <dt>{t('tokens.basis_synthetic')}</dt>
+                  <dd>{row.meta.rate.inputs.gdpSynthetic}</dd>
+                </div>
+              )}
+              <p className="token-basis__formula muted small">
+                {t('tokens.basis_formula')}
+              </p>
+            </>
+          ) : (
+            <p className="token-basis__formula warn small">
+              {t('tokens.basis_unresolved', {
+                reason: row.meta.unresolvedReason ?? t('tokens.basis_unknown_reason'),
+              })}
+            </p>
+          )}
+          <p className="token-basis__addr addr small muted" title={row.address}>
+            {row.address}
+          </p>
+        </dl>
+      )}
+    </li>
+  );
+}

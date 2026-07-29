@@ -1,8 +1,16 @@
 // token-visibility.ts — 토큰 목록 화면의 "가리기 상태 · 검색 · 정렬" 순수 로직 + 영속화.
 //
+// 확장판(apps/extension/entrypoints/popup/lib/token-visibility.ts)의 복사본이다.
+// 안드로이드 셸에는 vitest 설정이 없어 테스트는 확장 쪽 token-visibility.test.ts 가
+// 계속 들고 있다 — 두 파일은 로직이 같으므로 그 테스트(38 개)가 이쪽도 덮는다.
+// 저장 백엔드를 인터페이스(`HiddenTokensBackend`)로 받는 구조라 셸 의존이 하나도
+// 없다: wallet-sdk 뿐. 확장은 ChromeLocalBackend, 안드로이드는 LocalStorageBackend
+// 를 주입한다 — 둘 다 shell-core 가 같은 Promise 표면으로 내주므로 이 파일은
+// 그 차이를 알 필요가 없다.
+//
 // TTL 체인에 통화 스테이블이 66 종 발행돼 있다. 목록 화면이 쓸 판단(무엇을
 // 보여줄지, 어떤 순서로, 검색어에 걸리는지)을 전부 여기로 뺐다. UI 를 렌더하지
-// 않고 vitest(node 환경)로 그대로 검증하기 위해서다 — 확장 vitest 에는 jsdom 이 없다.
+// 않고 node 환경에서 그대로 검증하기 위해서다.
 //
 // 저장 규칙: **가린 목록만 저장한다(deny-list).** allowlist 로 저장하면 새 통화
 // 토큰이 발행됐을 때 목록에 영영 안 나타난다. 지갑이 자동 감지하는 값이므로
