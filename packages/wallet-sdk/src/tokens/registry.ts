@@ -7,11 +7,15 @@
 // 의도적으로 wrapped native(WETH/WBNB/WMATIC) 도 포함했다 — 사용자가
 // DEX 에서 받아오는 케이스가 압도적으로 많기 때문.
 //
-// TTL(7777) 은 빈 배열로 시작. TTL 생태계가 자라면 여기로 합류시키되, 그때
-// 까진 사용자가 "토큰 추가" 버튼으로 직접 등록하도록 한다 — 잘못된 컨트랙트가
-// 디폴트로 들어가 있는 것보다 빈 게 낫다.
+// TTL(7777) 은 환율 스냅샷(rates/snapshot.ts — 커밋된 앵커)에서 66 종을
+// 생성한다. 예전에는 빈 배열이었고 익스플로러 API(loadTtlScanTokens)로만
+// 채웠는데, 그 목록이 들어가는 registry 와 어댑터 폴백 registry 가 **서로 다른
+// 인스턴스**라 자동 발견에 한 번도 반영되지 않았다 (실기기 0.5.8~0.5.10 에서
+// 교환 화면 자산이 TTL 하나뿐이던 원인). 스냅샷은 저장소에 커밋된 검증 가능한
+// 앵커고 창세 시딩의 입력과 같은 출처라, 네트워크 없이도 항상 정확하다.
 
 import type { Address } from '../types.js';
+import { RATE_SNAPSHOT } from '../rates/snapshot.js';
 
 export interface TokenInfo {
   /** ERC-20 컨트랙트 주소 (체크섬/소문자 무관). */
@@ -289,7 +293,13 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       coingeckoId: 'dai',
     },
   ],
-  [CHAIN_TTL]: [],
+  // 환율 스냅샷에서 기계 생성 — 주소·심볼·decimals 의 출처는 커밋된 앵커다.
+  [CHAIN_TTL]: RATE_SNAPSHOT.rates.map((r) => ({
+    address: r.address as Address,
+    symbol: r.symbol,
+    name: `TTL ${r.iso} Stable`,
+    decimals: r.decimals,
+  })),
 };
 
 /**
@@ -348,6 +358,20 @@ export class TokenRegistry {
   listChainIds(): number[] {
     return Array.from(this.tokens.keys());
   }
+}
+
+/**
+ * 프로세스 전역 공용 registry.
+ *
+ * 어댑터의 폴백 registry 와 셸(wallet-service)의 registry 가 서로 다른
+ * 인스턴스면, ttlscan 톱업·수동 추가 토큰이 자동 발견 경로에 영영 반영되지
+ * 않는다 — 실제로 그 사고가 났다. 셸과 어댑터 폴백은 반드시 이 하나를 쓴다.
+ * (테스트나 격리가 필요한 곳만 `new TokenRegistry()` 로 따로 만든다.)
+ */
+let shared: TokenRegistry | undefined;
+export function defaultTokenRegistry(): TokenRegistry {
+  shared ??= new TokenRegistry();
+  return shared;
 }
 
 // 빌트인 체인 ID 상수도 외부에 노출 (테스트 등에서 마법 숫자 회피).

@@ -3,6 +3,7 @@
 export { Erc20, ERC20_ABI, decodeBalanceOf } from './erc20.js';
 export {
   TokenRegistry,
+  defaultTokenRegistry,
   BUILTIN_CHAIN_IDS,
   type TokenInfo,
 } from './registry.js';

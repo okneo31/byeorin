@@ -23,6 +23,12 @@ import {
 
 const OWNER = '0xcccccccccccccccccccccccccccccccccccccccc';
 
+// 빌트인이 하나도 없는 합성 체인. 예전에는 TTL(7777)이 그 역할이었는데,
+// 이제 TTL 빌트인이 환율 스냅샷에서 66 종 생성되므로 "깨끗한 체인" 전제가
+// 필요한 테스트는 전부 이쪽을 쓴다.
+const CLEAN_CHAIN = { ...TTL_CHAIN, id: 424_242 };
+const CLEAN_ID = CLEAN_CHAIN.id;
+
 interface Patched {
   client: Record<string, unknown>;
 }
@@ -35,7 +41,7 @@ function patchReadContract(adapter: EvmAdapter, impl: (a: ReadArgs) => unknown):
 }
 
 function makeAdapter(opts: Partial<EvmAdapterOptions> = {}): EvmAdapter {
-  return new EvmAdapter({ chain: TTL_CHAIN, ...opts });
+  return new EvmAdapter({ chain: CLEAN_CHAIN, ...opts });
 }
 
 function token(suffix: string, over: Partial<TokenInfo> = {}): TokenInfo {
@@ -59,8 +65,8 @@ describe('EvmAdapter — TokenCapableAdapter 적합성', () => {
     // 빌트인 표기는 아래 Avalanche 테스트에서 본다.
     const first0 = token('1');
     const second0 = token('2', { symbol: 'CUS', decimals: 6 });
-    reg.addCustomToken(BUILTIN_CHAIN_IDS.ttl, first0);
-    reg.addCustomToken(BUILTIN_CHAIN_IDS.ttl, second0);
+    reg.addCustomToken(CLEAN_ID, first0);
+    reg.addCustomToken(CLEAN_ID, second0);
 
     const adapter = makeAdapter({ tokenRegistry: reg });
     patchReadContract(adapter, ({ address }) => (address.endsWith('1') ? 100n : 250n));
@@ -119,11 +125,11 @@ describe('EvmAdapter — TokenCapableAdapter 적합성', () => {
 
   it('decimals 가 정수가 아니거나 범위를 벗어난 항목은 버린다 (18 로 추측하지 않는다)', async () => {
     const reg = new TokenRegistry();
-    reg.addCustomToken(BUILTIN_CHAIN_IDS.ttl, token('1', { decimals: 6.5 }));
-    reg.addCustomToken(BUILTIN_CHAIN_IDS.ttl, token('2', { decimals: -1 }));
-    reg.addCustomToken(BUILTIN_CHAIN_IDS.ttl, token('3', { decimals: 99 }));
-    reg.addCustomToken(BUILTIN_CHAIN_IDS.ttl, token('4', { decimals: Number.NaN }));
-    reg.addCustomToken(BUILTIN_CHAIN_IDS.ttl, token('5', { decimals: 8 }));
+    reg.addCustomToken(CLEAN_ID, token('1', { decimals: 6.5 }));
+    reg.addCustomToken(CLEAN_ID, token('2', { decimals: -1 }));
+    reg.addCustomToken(CLEAN_ID, token('3', { decimals: 99 }));
+    reg.addCustomToken(CLEAN_ID, token('4', { decimals: Number.NaN }));
+    reg.addCustomToken(CLEAN_ID, token('5', { decimals: 8 }));
 
     const adapter = makeAdapter({ tokenRegistry: reg });
     patchReadContract(adapter, () => 42n);
@@ -135,8 +141,8 @@ describe('EvmAdapter — TokenCapableAdapter 적합성', () => {
 
   it('모든 조회가 실패하면 빈 배열 (던지지 않는다)', async () => {
     const reg = new TokenRegistry();
-    reg.addCustomToken(BUILTIN_CHAIN_IDS.ttl, token('1'));
-    reg.addCustomToken(BUILTIN_CHAIN_IDS.ttl, token('2'));
+    reg.addCustomToken(CLEAN_ID, token('1'));
+    reg.addCustomToken(CLEAN_ID, token('2'));
 
     const adapter = makeAdapter({ tokenRegistry: reg });
     patchReadContract(adapter, () => {
@@ -165,8 +171,8 @@ describe('EvmAdapter — TokenCapableAdapter 적합성', () => {
   // 표시 정책을 섞지 않는다.
   it('잔액 0 도 포함한다 — 감추는 것은 화면의 판단이다', async () => {
     const reg = new TokenRegistry();
-    reg.addCustomToken(BUILTIN_CHAIN_IDS.ttl, token('1'));
-    reg.addCustomToken(BUILTIN_CHAIN_IDS.ttl, token('2'));
+    reg.addCustomToken(CLEAN_ID, token('1'));
+    reg.addCustomToken(CLEAN_ID, token('2'));
 
     const adapter = makeAdapter({ tokenRegistry: reg });
     patchReadContract(adapter, ({ address }) => (address.endsWith('1') ? 0n : 5n));
@@ -181,7 +187,7 @@ describe('EvmAdapter — 토큰 스캔 상한', () => {
   it('상한을 넘으면 콜백으로 알린다 (조용히 자르지 않는다)', async () => {
     const reg = new TokenRegistry();
     for (let i = 1; i <= 5; i += 1) {
-      reg.addCustomToken(BUILTIN_CHAIN_IDS.ttl, token(String(i)));
+      reg.addCustomToken(CLEAN_ID, token(String(i)));
     }
 
     const seen: EvmTokenScanTruncation[] = [];
@@ -201,12 +207,12 @@ describe('EvmAdapter — 토큰 스캔 상한', () => {
     const out = await adapter.discoverTokens(OWNER);
     expect(calls).toBe(3);
     expect(out.length).toBe(3);
-    expect(seen).toEqual([{ chainId: TTL_CHAIN.id, known: 5, scanned: 3 }]);
+    expect(seen).toEqual([{ chainId: CLEAN_ID, known: 5, scanned: 3 }]);
   });
 
   it('상한 안이면 콜백이 안 불린다', async () => {
     const reg = new TokenRegistry();
-    reg.addCustomToken(BUILTIN_CHAIN_IDS.ttl, token('1'));
+    reg.addCustomToken(CLEAN_ID, token('1'));
 
     let fired = 0;
     const adapter = makeAdapter({
@@ -224,7 +230,7 @@ describe('EvmAdapter — 토큰 스캔 상한', () => {
   it('기본 상한은 TTL Scan 의 66 종을 자르지 않는다', async () => {
     const reg = new TokenRegistry();
     for (let i = 1; i <= 66; i += 1) {
-      reg.addCustomToken(BUILTIN_CHAIN_IDS.ttl, token(String(i)));
+      reg.addCustomToken(CLEAN_ID, token(String(i)));
     }
 
     let fired = 0;

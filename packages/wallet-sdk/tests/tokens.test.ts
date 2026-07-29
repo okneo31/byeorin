@@ -16,9 +16,10 @@ import {
 import { encodeFunctionData, type Hex } from 'viem';
 import { ERC20_ABI } from '../src/tokens/erc20.js';
 
-// 결정성을 위한 dummy adapter 인스턴스 — TTL_CHAIN 만 있으면 충분.
+// 결정성을 위한 dummy adapter — 빌트인 없는 합성 체인. TTL(7777) 을 쓰면
+// 이제 스냅샷 유래 66종 빌트인이 함께 조회돼 extraTokens 검증이 오염된다.
 function makeAdapter(): EvmAdapter {
-  return new EvmAdapter({ chain: TTL_CHAIN });
+  return new EvmAdapter({ chain: { ...TTL_CHAIN, id: 424_242 } });
 }
 
 interface Patched {
@@ -98,7 +99,7 @@ describe('Erc20', () => {
 });
 
 describe('TokenRegistry', () => {
-  it('builtin tokens 7 EVM 체인 + TTL 빈 배열', () => {
+  it('builtin tokens 7 EVM 체인 + TTL 66종 (환율 스냅샷 유래)', () => {
     const reg = new TokenRegistry();
     expect(reg.getKnownTokens(BUILTIN_CHAIN_IDS.ethereum).length).toBe(4);
     expect(reg.getKnownTokens(BUILTIN_CHAIN_IDS.polygon).length).toBe(4);
@@ -106,12 +107,25 @@ describe('TokenRegistry', () => {
     expect(reg.getKnownTokens(BUILTIN_CHAIN_IDS.optimism).length).toBe(4);
     expect(reg.getKnownTokens(BUILTIN_CHAIN_IDS.base).length).toBe(3); // USDT 빠짐
     expect(reg.getKnownTokens(BUILTIN_CHAIN_IDS.bsc).length).toBe(4);
-    expect(reg.getKnownTokens(BUILTIN_CHAIN_IDS.ttl)).toEqual([]);
+    // TTL 은 커밋된 환율 스냅샷에서 생성 — 네트워크 없이도 66종이 보여야 한다.
+    // 빈 배열이던 시절엔 자동 발견이 TTL 에서 0건이었다 (실기기 0.5.8~0.5.10).
+    const ttl = reg.getKnownTokens(BUILTIN_CHAIN_IDS.ttl);
+    expect(ttl.length).toBe(66);
+    const usd = ttl.find((t) => t.symbol === 'tUSD');
+    expect(usd?.address).toBe('0xc00d0FF37e9CE83C269e762644202D4Ab82F023c');
+    expect(usd?.decimals).toBe(18);
+    // 빌트인은 custom 표식이 없어야 한다 — 화면이 출처를 구분한다.
+    expect(usd?.custom).toBeUndefined();
+  });
+
+  it('defaultTokenRegistry 는 항상 같은 인스턴스 — 셸과 어댑터 폴백의 결합점', async () => {
+    const { defaultTokenRegistry } = await import('../src/tokens/registry.js');
+    expect(defaultTokenRegistry()).toBe(defaultTokenRegistry());
   });
 
   it('addCustomToken 은 idempotent (동일 주소 재추가 시 no-op)', () => {
     const reg = new TokenRegistry();
-    const cid = BUILTIN_CHAIN_IDS.ttl;
+    const cid = 424_242; // 빌트인 없는 합성 체인 — TTL 은 이제 66종이 내장이다
     reg.addCustomToken(cid, {
       address: '0xDEADBEEFcafebabeDEADBEEFcafebabeDEADBEEF',
       symbol: 'TST',

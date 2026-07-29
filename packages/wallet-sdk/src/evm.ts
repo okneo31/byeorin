@@ -26,6 +26,7 @@ export {
   ERC20_ABI,
   decodeBalanceOf,
   TokenRegistry,
+  defaultTokenRegistry,
   BUILTIN_CHAIN_IDS,
   discoverTokens,
   fetchTtlScanTokens,

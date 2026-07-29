@@ -26,7 +26,7 @@ import {
   EvmAdapter,
   Erc20,
   TTL_CHAIN,
-  TokenRegistry,
+  defaultTokenRegistry,
   discoverTokens,
   fetchTtlScanTokens,
   authoritativeDecimals,
@@ -68,7 +68,9 @@ export function getTtlAdapter(): EvmAdapter {
 // 사용자 커스텀 토큰을 누적해야 하므로 singleton 이 자연스럽다.
 // chrome.storage.local 의 'nd:custom-tokens' 키로 영속화 — popup 부팅 시
 // loadCustomTokensFromStorage() 가 storage → registry 로 복원한다.
-const tokenRegistry = new TokenRegistry();
+// **어댑터 폴백과 같은 인스턴스**여야 한다 — 따로 만들면 ttlscan 톱업·커스텀
+// 토큰이 자동 발견에 반영되지 않는다 (실기기 0.5.8~0.5.10 의 원인).
+const tokenRegistry = defaultTokenRegistry();
 
 const CUSTOM_TOKENS_KEY = 'nd:custom-tokens';
 

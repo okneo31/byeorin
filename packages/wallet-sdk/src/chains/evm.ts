@@ -27,7 +27,7 @@ import { discoverTokens as discoverRegistryTokens } from '../tokens/discovery.js
 // 이미 있는 read 구현(symbol/name/decimals/balanceOf)이라 그대로 쓴다 —
 // 같은 호출을 두 벌 만들면 둘이 어긋난다.
 import { Erc20 } from '../tokens/erc20.js';
-import { TokenRegistry } from '../tokens/registry.js';
+import { TokenRegistry, defaultTokenRegistry } from '../tokens/registry.js';
 import type { PortableTokenBalance, TokenCapableAdapter } from '../tokens/portable.js';
 import type { Signer, Address, TransferIntent, TxHash } from '../types.js';
 import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
@@ -93,16 +93,15 @@ const MAX_TOKEN_DECIMALS = 36;
 const EVM_CONTRACT_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 
 /**
- * 레지스트리를 주입받지 못한 어댑터가 쓰는 폴백 — 빌트인만 들어 있다.
+ * 레지스트리를 주입받지 못한 어댑터가 쓰는 폴백 — **프로세스 전역 공용 registry**.
  *
- * 모듈 스코프에 한 번만 만든다. 어댑터마다 사본을 들려 주면 인스턴스마다 상태가
- * 생기고, 매 조회마다 새로 만들면 빌트인을 계속 복사하게 된다. 여기에는 아무도
- * `addCustomToken` 을 하지 않으므로 사실상 읽기 전용이다.
+ * 예전에는 이 모듈만의 사본(new TokenRegistry)이었는데, 셸이 ttlscan 톱업·수동
+ * 추가를 넣는 registry 와 인스턴스가 달라 자동 발견에 반영되지 않는 사고가
+ * 났다 (multichain 의 spec.build() 는 registry 를 주입하지 않는다). 폴백과
+ * 셸이 같은 하나를 보도록 defaultTokenRegistry() 로 통일한다.
  */
-let fallbackRegistry: TokenRegistry | undefined;
 function builtinOnlyRegistry(): TokenRegistry {
-  fallbackRegistry ??= new TokenRegistry();
-  return fallbackRegistry;
+  return defaultTokenRegistry();
 }
 
 export interface EvmAdapterOptions {

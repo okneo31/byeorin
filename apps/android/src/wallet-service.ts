@@ -14,7 +14,7 @@ import {
   EvmAdapter,
   Erc20,
   TTL_CHAIN,
-  TokenRegistry,
+  defaultTokenRegistry,
   discoverTokens,
   fetchTtlScanTokens,
   authoritativeDecimals,
@@ -40,7 +40,10 @@ export function getTtlAdapter(): EvmAdapter {
 // 영속화 위치는 localStorage (`byeorin:custom-tokens`). 시드가 아니라 공개
 // 메타데이터이므로 암호화 대상이 아니다.
 
-const tokenRegistry = new TokenRegistry();
+// **어댑터 폴백과 같은 인스턴스**여야 한다. new TokenRegistry() 로 따로 만들면
+// ttlscan 톱업·커스텀 토큰이 자동 발견(discoverPortableTokens → 어댑터 내부
+// registry)에 영영 반영되지 않는다 — 실기기 0.5.8~0.5.10 의 원인.
+const tokenRegistry = defaultTokenRegistry();
 const CUSTOM_TOKENS_KEY = 'byeorin:custom-tokens';
 
 /** 영속화 형식: { [chainId]: TokenInfo[] } */
