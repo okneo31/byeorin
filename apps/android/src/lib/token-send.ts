@@ -159,8 +159,24 @@ export function formatAssetAmount(base: bigint | null, decimals: number): string
   const factor = 10n ** BigInt(decimals);
   const whole = base / factor;
   const frac = base % factor;
-  const fracStr = (Number(frac) / Number(factor)).toFixed(4).slice(2);
+  // 반올림 아닌 절사 — 소수부가 0.99995 이상이면 toFixed(4) 가 "1.0000" 이
+  // 되고 .slice(2) 는 "0000" 이라, 정수부 올림 없이 1 작게 보이는 사고가
+  // 난다. 잔액 표시는 가진 것보다 많게 보이지 않는 절사가 맞다.
+  const fracStr = frac.toString().padStart(decimals, '0').slice(0, 4).padEnd(4, '0');
   return `${withCommas(whole.toString())}.${fracStr}`;
+}
+
+/**
+ * base-unit → 입력창 문자열 (정밀도 손실 없음, 뒤 0 제거).
+ *
+ * "최대" 버튼 전용. formatAssetAmount 는 표시용 4자리 절사라 이걸로 입력을
+ * 채우면 실제 잔액과 어긋난 값이 전송된다 — 입력 채우기는 반드시 이 함수.
+ */
+export function assetAmountToInputString(units: bigint, decimals: number): string {
+  const factor = 10n ** BigInt(decimals);
+  const whole = units / factor;
+  const frac = (units % factor).toString().padStart(decimals, '0').replace(/0+$/, '');
+  return frac.length > 0 ? `${whole}.${frac}` : whole.toString();
 }
 
 /** 정수 문자열에 천 단위 쉼표. */

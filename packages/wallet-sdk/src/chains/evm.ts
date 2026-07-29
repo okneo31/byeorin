@@ -269,6 +269,22 @@ export class EvmAdapter
     return base;
   }
 
+  /**
+   * native 전송 1건의 예상 수수료(wei) — "최대 보내기"가 잔액에서 뺄 몫.
+   *
+   * 잔액 전부를 수량에 넣으면 가스 낼 몫이 없어 전송이 실패한다. 화면의 최대
+   * 버튼은 `잔액 − 이 값` 을 채운다. 20% 여유를 두는 이유: 채우기와 실제 전송
+   * 사이에 gasPrice 가 움직일 수 있고, 과하게 남기는 쪽이 실패보다 낫다 —
+   * 남은 잔액은 어디로도 사라지지 않는다.
+   *
+   * @param gasUnits 예상 가스량. 순수 native 전송은 21,000. 스왑처럼 무거운
+   *                 호출은 호출자가 크게 잡는다 (라우터 스왑 실측 ~15만 안팎).
+   */
+  async estimateNativeSendFee(gasUnits: bigint = 21_000n): Promise<bigint> {
+    const gasPrice = await this.client.getGasPrice();
+    return (gasPrice * gasUnits * 12n) / 10n;
+  }
+
   async signRequests(tx: EvmUnsignedTx): Promise<SignRequest[]> {
     const serialized = serializeTransaction(tx);
     return [{ message: hexToBytes(keccak256(serialized)), prehashed: true }];

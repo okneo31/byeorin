@@ -137,6 +137,8 @@ export const en: Catalog = {
   'send.to_label': 'Recipient address',
   'send.to_invalid': 'Invalid address (must be 0x + 40 hex characters).',
   'send.amount_label': 'Amount ({symbol})',
+  'send.max_button': 'Max',
+  'send.max_native_note': 'Filled with balance minus estimated gas.',
   'send.amount_invalid': 'Invalid amount.',
   'send.amount_invalid_positive': 'Amount must be greater than 0.',
   'send.pending': 'Sending… please wait.',

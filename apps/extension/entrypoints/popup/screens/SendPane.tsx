@@ -22,6 +22,7 @@ import { walletStore } from '../../../src/lib/wallet-service.js';
 import { useAddressbookSuggestions } from './AddressbookPane.js';
 import {
   buildTransferIntent,
+  assetAmountToInputString,
   formatAssetAmount,
   parseAssetAmount,
   type AssetKey,
@@ -73,6 +74,9 @@ export function SendPane({
   const [amount, setAmount] = useState('');
   const [assetKey, setAssetKey] = useState<AssetKey>('native');
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
+  // "최대" 로 채웠고 아직 사용자가 수정하지 않았다는 표시 — native 는 가스를
+  // 뺀 값이라 왜 잔액보다 작은지 화면이 설명해야 한다.
+  const [maxNote, setMaxNote] = useState(false);
 
   // 주소록 자동완성 후보 — 활성 체인 엔트리만. book 이 null 이면 빈 배열.
   const suggestions = useAddressbookSuggestions(book, chainKey);
@@ -115,6 +119,41 @@ export function SendPane({
     trimmedAmount.length > 0 && !parsed.ok ? amountErrorText(parsed.reason) : null;
   const locked = status.kind === 'pending' || status.kind === 'sent';
   const canProceed = validAddress && validAmount && !locked;
+
+  // native 전송 수수료를 추정할 수 있는 어댑터의 구조적 표면 (EVM 계열).
+  type NativeFeeEstimator = { estimateNativeSendFee(gasUnits?: bigint): Promise<bigint> };
+  const feeEstimator =
+    typeof (adapter as Partial<NativeFeeEstimator>).estimateNativeSendFee === 'function'
+      ? (adapter as unknown as NativeFeeEstimator)
+      : null;
+  // 토큰은 전액이 항상 가능하고(가스는 native 로 낸다), native 는 수수료를
+  // 추정할 수 있을 때만 최대 버튼을 그린다 — 전액을 채워 실패를 만들지 않는다.
+  const canMax = asset.balance !== null && (asset.kind !== 'native' || feeEstimator !== null);
+
+  /**
+   * "최대" — 토큰은 전액, native 는 잔액 − 예상 가스.
+   *
+   * 잔액 전부를 수량에 넣으면 가스 낼 몫이 없어 전송이 반드시 실패한다
+   * (실기기 보고: 100 TTL 보유에서 100 입력 → 전송 불가). 수수료 추정이
+   * 실패하면 채우지 않는다 — 틀린 값을 넣느니 아무것도 안 한다.
+   */
+  async function fillMax(): Promise<void> {
+    if (asset.balance === null || locked) return;
+    if (asset.kind !== 'native') {
+      setAmount(assetAmountToInputString(asset.balance, asset.decimals));
+      setMaxNote(false);
+      return;
+    }
+    if (feeEstimator === null) return;
+    try {
+      const fee = await feeEstimator.estimateNativeSendFee();
+      const max = asset.balance > fee ? asset.balance - fee : 0n;
+      setAmount(assetAmountToInputString(max, asset.decimals));
+      setMaxNote(true);
+    } catch {
+      // 수수료를 모르면 조용히 둔다 — 사용자는 손으로 입력할 수 있다.
+    }
+  }
 
   function amountErrorText(reason: 'format' | 'decimals' | 'insufficient'): string {
     if (reason === 'insufficient') {
@@ -318,10 +357,26 @@ export function SendPane({
         inputMode="decimal"
         className="verify-row__input"
         value={amount}
-        onChange={(e) => setAmount(e.target.value)}
+        onChange={(e) => {
+          setAmount(e.target.value);
+          setMaxNote(false);
+        }}
         placeholder="0.0"
         disabled={locked}
       />
+      {canMax && (
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() => {
+            void fillMax();
+          }}
+          disabled={locked}
+        >
+          {t('send.max_button')}
+        </button>
+      )}
+      {maxNote && <p className="muted small">{t('send.max_native_note')}</p>}
       {amountError !== null && <p className="error small">{amountError}</p>}
 
       <button

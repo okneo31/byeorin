@@ -142,6 +142,8 @@ export const ko: Catalog = {
   'send.to_label': '받는 주소',
   'send.to_invalid': '주소 형식이 올바르지 않습니다 (0x + 40자리 16진수).',
   'send.amount_label': '금액 ({symbol})',
+  'send.max_button': '최대',
+  'send.max_native_note': '잔액에서 예상 가스를 빼고 채웠습니다.',
   'send.amount_invalid': '금액 형식이 올바르지 않습니다.',
   'send.amount_invalid_positive': '금액은 0보다 커야 합니다.',
   'send.pending': '송금을 처리하고 있습니다. 잠시만 기다려주세요...',

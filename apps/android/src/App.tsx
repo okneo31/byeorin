@@ -2041,7 +2041,10 @@ function formatAmount(base: bigint | null, decimals: number): string {
   const factor = 10n ** BigInt(decimals);
   const whole = base / factor;
   const frac = base % factor;
-  const fracStr = (Number(frac) / Number(factor)).toFixed(4).slice(2);
+  // 반올림 아닌 절사 — 소수부가 0.99995 이상이면 toFixed(4) 가 "1.0000" 이
+  // 되고 .slice(2) 는 "0000" 이라, 정수부 올림 없이 1 작게 보이는 사고가
+  // 난다. 잔액 표시는 가진 것보다 많게 보이지 않는 절사가 맞다.
+  const fracStr = frac.toString().padStart(decimals, '0').slice(0, 4).padEnd(4, '0');
   return `${withCommas(whole.toString())}.${fracStr}`;
 }
 

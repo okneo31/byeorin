@@ -26,6 +26,7 @@ import { ShellError } from '@byeorin/shell-core';
 import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../wallet-service.js';
 import {
+  assetAmountToInputString,
   formatAssetAmount,
   parseAssetAmount,
   type SelectedAsset,
@@ -55,7 +56,7 @@ export interface TtlAmmQuoteLike {
   amountOutEst: bigint;
   minAmountOut: bigint;
   route: readonly TtlAmmPoolLike[];
-  /** 수수료 합 (홉당 33bps 누적) — **보내는 자산의 base unit** 기준 추정. */
+  /** 수수료 합 (홉당 33bps 누적) — **받는(출력) 토큰의 base unit** 기준 추정 (types.ts 와 동일). */
   feeEst: bigint;
 }
 
@@ -267,6 +268,8 @@ export function ExchangePane({
   const [quoteState, setQuoteState] = useState<QuoteState>({ kind: 'idle' });
   // 2단계 확정 — approve 와 swap 의 상태를 따로 정직하게 추적한다.
   const [approveStatus, setApproveStatus] = useState<TxStatus>({ kind: 'idle' });
+  // "최대" 로 채웠고 아직 수정 전 — native 는 가스를 뺀 값이라 설명이 필요하다.
+  const [maxNote, setMaxNote] = useState(false);
   const [swapStatus, setSwapStatus] = useState<TxStatus>({ kind: 'idle' });
 
   const isTtl = chainKey === TTL_CHAIN_KEY;
@@ -411,6 +414,40 @@ export function ExchangePane({
   const quoteReady = quoteState.kind === 'ok';
   const canProceed = !sameAsset && quoteReady && amountValue !== null && !locked;
 
+  // native 전송 수수료를 추정할 수 있는 어댑터의 구조적 표면 (EVM 계열).
+  type NativeFeeEstimator = { estimateNativeSendFee(gasUnits?: bigint): Promise<bigint> };
+  const feeEstimator =
+    typeof (adapter as Partial<NativeFeeEstimator>).estimateNativeSendFee === 'function'
+      ? (adapter as unknown as NativeFeeEstimator)
+      : null;
+  const canMax =
+    fromAsset.balance !== null && (fromAsset.kind !== 'native' || feeEstimator !== null);
+  /** 라우터 스왑 가스 여유 — 실측 스왑은 ~15만 안팎이지만 2홉·초기화 케이스를
+   *  덮게 40만으로 잡는다. 남는 몫은 지갑에 그대로 남는다. */
+  const SWAP_GAS_UNITS = 400_000n;
+
+  /**
+   * "최대" — 토큰은 전액(가스는 native 로 낸다), native 는 잔액 − 예상 스왑 가스.
+   * 잔액 전부를 넣으면 가스 낼 몫이 없어 스왑이 반드시 실패한다.
+   */
+  async function fillMax(): Promise<void> {
+    if (fromAsset.balance === null || locked) return;
+    if (fromAsset.kind !== 'native') {
+      setAmount(assetAmountToInputString(fromAsset.balance, fromAsset.decimals));
+      setMaxNote(false);
+      return;
+    }
+    if (feeEstimator === null) return;
+    try {
+      const fee = await feeEstimator.estimateNativeSendFee(SWAP_GAS_UNITS);
+      const max = fromAsset.balance > fee ? fromAsset.balance - fee : 0n;
+      setAmount(assetAmountToInputString(max, fromAsset.decimals));
+      setMaxNote(true);
+    } catch {
+      // 수수료를 모르면 조용히 둔다.
+    }
+  }
+
   /** compose 로 되돌아갈 때 서명 상태를 초기화한다 — 이미 보낸 tx 는 체인에 남는다. */
   function backToCompose(): void {
     setStep('compose');
@@ -498,9 +535,10 @@ export function ExchangePane({
         <div className="muted small">
           {t('swap.fee_label')}:{' '}
           {t('exchange.fee_hops', {
-            // feeEst 는 **출력 토큰 단위**다 (types.ts) — 받는 자산 자릿수로 표시한다.
+            // feeEst 는 **출력 토큰 단위**다 (types.ts) — 금액도 심볼도 받는 자산.
+            // (이전엔 보내는 자산 심볼을 붙여 tUSD 금액에 "TTL" 이 찍혔다.)
             fee: formatAssetAmount(q.feeEst, toAsset.decimals),
-            symbol: fromAsset.symbol,
+            symbol: toAsset.symbol,
             bps: (FEE_BPS / 100).toFixed(2),
             hops: routeFind.hops,
           })}
@@ -732,10 +770,26 @@ export function ExchangePane({
         inputMode="decimal"
         className="verify-row__input"
         value={amount}
-        onChange={(e) => setAmount(e.target.value)}
+        onChange={(e) => {
+          setAmount(e.target.value);
+          setMaxNote(false);
+        }}
         placeholder="0.0"
         disabled={locked}
       />
+      {canMax && (
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() => {
+            void fillMax();
+          }}
+          disabled={locked}
+        >
+          {t('send.max_button')}
+        </button>
+      )}
+      {maxNote && <p className="muted small">{t('send.max_native_note')}</p>}
       {amountError !== null && <p className="error small">{amountError}</p>}
 
       {/* 실패 정직성 — 풀 없음 / 준비금 0 / 견적 실패를 구분해 그린다. */}
