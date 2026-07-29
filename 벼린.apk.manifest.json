@@ -1,15 +1,15 @@
 {
   "artifact": "벼린.apk",
-  "sha256": "9fbd671c92e2da2f3eabfa98c2edf240cc7cf216583cd2a4ddd54da16c4f6928",
-  "sizeBytes": 5527912,
-  "versionName": "0.5.10",
-  "versionCode": 11,
+  "sha256": "331236ba882e4a6705e81c6df0c74211bda51bec53189e3a1c2999fce2ea7e92",
+  "sizeBytes": 5541840,
+  "versionName": "0.5.11",
+  "versionCode": 12,
   "signer": {
     "certSha256": "303f801bb44af8c494b6e89844fbe86c36bd6f48ab404a4b6c0228fa3f103480"
   },
   "source": {
-    "commit": "0f5f1b8d33c2a808aa5ddaacb38891dfd7f5e1ac",
-    "commitShort": "0f5f1b8",
+    "commit": "6af326b4908c0e72f88fa195c827332902161a9b",
+    "commitShort": "6af326b",
     "branch": "main",
     "workingTreeClean": true
   },
