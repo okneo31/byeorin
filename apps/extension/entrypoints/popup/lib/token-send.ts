@@ -131,9 +131,18 @@ export function buildTransferIntent(
   if (asset.kind === 'native' || asset.address === null) {
     return { to, amount: value };
   }
-  // ERC-20 송금은 EVM 체인에서만 도달한다 (SendPane 이 비-EVM 에서 토큰 선택
-  // UI 자체를 그리지 않는다). Erc20 는 adapter 의 viem client 만 꺼내 쓰는데,
-  // transfer() 는 calldata 인코딩만 하므로 RPC 를 건드리지 않는다.
+  // 이 함수는 **호출자가 EVM 임을 확인한 뒤에만** 부른다 (SendPane 의 isEvm 분기).
+  //
+  // 예전 주석은 "SendPane 이 비-EVM 에서 토큰 선택 UI 를 안 그리므로 여기 도달할
+  // 수 없다" 였는데, 이제 자산 선택은 체인을 묻지 않으므로 그 이유는 틀렸다.
+  // 안전한 이유는 바뀌었다 — 호출부가 명시적으로 가른다.
+  //
+  // 비-EVM 은 TransferIntent.asset 규약을 쓰고 이 경로로 오지 않는다. EvmAdapter
+  // 도 이제 asset 을 읽으므로 언젠가 이 분기를 없애고 규약 하나로 합칠 수 있다 —
+  // 다만 자산이 오가는 경로라 실증 없이 바꾸지 않는다.
+  //
+  // Erc20 는 adapter 의 viem client 만 꺼내 쓰는데, transfer() 는 calldata
+  // 인코딩만 하므로 RPC 를 건드리지 않는다.
   const erc20 = new Erc20(adapter as unknown as EvmAdapter);
   return erc20.transfer(asset.address, to, value);
 }
