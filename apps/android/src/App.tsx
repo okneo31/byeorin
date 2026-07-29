@@ -26,6 +26,7 @@ import {
 } from '@byeorin/shell-core';
 import { LocaleSwitch, useT } from '@byeorin/i18n/react';
 import type { EvmAdapter } from '@byeorin/wallet-sdk/evm';
+import { TtlAmmClient } from '@byeorin/wallet-sdk/evm';
 import {
   discoverPortableTokens,
   readPortableToken,
@@ -337,13 +338,18 @@ export function App() {
   const [sendTokens, setSendTokens] = useState<PortableTokenBalance[] | null>(null);
   const [sendNativeBalance, setSendNativeBalance] = useState<bigint | null>(null);
 
-  // 내부 거래소(TTL AMM) 클라이언트.
-  //
-  // **컨트랙트가 아직 배포되지 않았다** — 주소 세 개(factory/router/wttl)가
-  // 나오면 아래 상수를 채우고 TtlAmmClient 를 생성하게 바꾼다. null 이면 화면이
-  // "거래소가 아직 배포되지 않았습니다" 를 정직하게 그린다. 배포 전인데 있는
-  // 척하는 것보다 낫다.
-  const ttlAmmClient: TtlAmmClientLike | null = null;
+  // 내부 거래소(TTL AMM) 클라이언트 — 2026-07-29 창세 완료.
+  // 주소 출처: packages/ttl-amm-contracts/deployments/ttl.json (배포 기록,
+  // 생성자 배선 4/4 검증 · 64풀 시딩 wei 정확 일치 검산 완료).
+  const ttlAmmClient = useMemo<TtlAmmClientLike | null>(
+    () =>
+      new TtlAmmClient({
+        factory: '0x0Aa9A48eB91AA49e61cb22D9DB5c0494e1Bcd2F8',
+        router: '0xa9AFd8042A7E306784f3EdCF02Ab3BB0fbcA928c',
+        wttl: '0xC555ee718E5330Ac41a0587e464f6e4Aad5B8Def',
+      }),
+    [],
+  );
 
   // 주소록 — 저장은 localStorage 평문 JSON (공개키 파생물인 주소만 담는다).
   // 확장은 ChromeLocalBackend, 안드로이드 WebView 는 LocalStorageBackend.
