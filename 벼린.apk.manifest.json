@@ -8,11 +8,10 @@
     "certSha256": "303f801bb44af8c494b6e89844fbe86c36bd6f48ab404a4b6c0228fa3f103480"
   },
   "source": {
-    "commit": "eaa48946094511610b798af502be69853604ab66",
-    "commitShort": "eaa4894",
+    "commit": "6bd8f0f0bc665f469b4c38c1f2dc965674752078",
+    "commitShort": "6bd8f0f",
     "branch": "main",
-    "workingTreeClean": false,
-    "warning": "커밋되지 않은 변경이 섞인 빌드다. 이 산출물은 소스로 추적할 수 없다."
+    "workingTreeClean": true
   },
   "toolchain": {
     "node": "v24.15.0",
