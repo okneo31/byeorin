@@ -1,0 +1,81 @@
+{
+  "host": "69.181.198.153",
+  "port": 8333,
+  "ok": true,
+  "error": null,
+  "connectMs": 156,
+  "totalMs": 3807,
+  "bytesIn": 7935426,
+  "bytesOut": 500,
+  "tipHeight": 960450,
+  "tipHash": "00000000000000000000408f69c0d7a6cc5e3725e0c34b0863c18912c8aebb3c",
+  "scannedFilterCount": 300,
+  "matchedBlockCount": 2,
+  "records": [
+    {
+      "height": 960300,
+      "blockHash": "0000000000000000000213fec6801df8384373ebcf60f8ba9fd290c645f8205d",
+      "txid": "dedcaf15e3fd102ca345769493529dbbee916e7c02090fda8539d8bc4e22b245",
+      "timestamp": 1785440560,
+      "receivedOutputs": [
+        {
+          "vout": 0,
+          "value": "8042543",
+          "scriptPubKeyHex": "0014d0eea6d65fbc59fbbeef2a55f6bc8c18be519e08"
+        }
+      ],
+      "spentOutpoints": []
+    },
+    {
+      "height": 960300,
+      "blockHash": "0000000000000000000213fec6801df8384373ebcf60f8ba9fd290c645f8205d",
+      "txid": "bafc97640ee630131b450883469bdae6cc036a867abff64a3db5c897ec3ef9d7",
+      "timestamp": 1785440560,
+      "receivedOutputs": [
+        {
+          "vout": 0,
+          "value": "2181041",
+          "scriptPubKeyHex": "00146a8bd7ecc0cc9dc48e19b7cab993681d6ae63d4a"
+        }
+      ],
+      "spentOutpoints": []
+    },
+    {
+      "height": 960300,
+      "blockHash": "0000000000000000000213fec6801df8384373ebcf60f8ba9fd290c645f8205d",
+      "txid": "a711d1ac1e4616e70a5121283585ee0761987bc7ae852eaabe9fbe94939dacdb",
+      "timestamp": 1785440560,
+      "receivedOutputs": [
+        {
+          "vout": 0,
+          "value": "7732676",
+          "scriptPubKeyHex": "0014d1f5b4b31da67324800a852ecd1982f498144bb6"
+        }
+      ],
+      "spentOutpoints": []
+    },
+    {
+      "height": 960316,
+      "blockHash": "0000000000000000000206fda42195e6582c3ffdfc69317ee5eabd3a2929640d",
+      "txid": "1dfb8f65ee1623625889a72fc815f4ca60b53317395d181377553dc9bb53d751",
+      "timestamp": 1785446786,
+      "receivedOutputs": [],
+      "spentOutpoints": [
+        {
+          "txid": "a711d1ac1e4616e70a5121283585ee0761987bc7ae852eaabe9fbe94939dacdb",
+          "vout": 0
+        }
+      ]
+    }
+  ],
+  "expectedFound": [
+    "dedcaf15e3fd102ca345769493529dbbee916e7c02090fda8539d8bc4e22b245",
+    "bafc97640ee630131b450883469bdae6cc036a867abff64a3db5c897ec3ef9d7",
+    "a711d1ac1e4616e70a5121283585ee0761987bc7ae852eaabe9fbe94939dacdb"
+  ],
+  "expectedMissing": [],
+  "ownedOutpoints": [
+    "dedcaf15e3fd102ca345769493529dbbee916e7c02090fda8539d8bc4e22b245:0",
+    "bafc97640ee630131b450883469bdae6cc036a867abff64a3db5c897ec3ef9d7:0"
+  ]
+}

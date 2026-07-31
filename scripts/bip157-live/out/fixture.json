@@ -1,0 +1,59 @@
+{
+  "checkpoint": {
+    "height": 960150,
+    "blockHash": "00000000000000000001c52969b436512d0415a9bc46bc15a4b2f564af602c2d",
+    "filterHeader": "1204805cc9d87eb521b8069334b39a251ce7b6e030a5a4a9dbb7b80a415426bf"
+  },
+  "stopAtHeight": 960450,
+  "watchScripts": [
+    "0014d0eea6d65fbc59fbbeef2a55f6bc8c18be519e08",
+    "00146a8bd7ecc0cc9dc48e19b7cab993681d6ae63d4a",
+    "0014d1f5b4b31da67324800a852ecd1982f498144bb6"
+  ],
+  "expected": [
+    {
+      "txid": "dedcaf15e3fd102ca345769493529dbbee916e7c02090fda8539d8bc4e22b245",
+      "height": 960300
+    },
+    {
+      "txid": "bafc97640ee630131b450883469bdae6cc036a867abff64a3db5c897ec3ef9d7",
+      "height": 960300
+    },
+    {
+      "txid": "a711d1ac1e4616e70a5121283585ee0761987bc7ae852eaabe9fbe94939dacdb",
+      "height": 960300
+    }
+  ],
+  "meta": {
+    "tipHash": "00000000000000000000408f69c0d7a6cc5e3725e0c34b0863c18912c8aebb3c",
+    "quorum": {
+      "asked": 13,
+      "agreed": 13,
+      "peers": [
+        "211.54.72.211",
+        "126.94.88.240",
+        "106.51.20.106",
+        "174.31.125.203",
+        "69.181.198.153",
+        "69.234.58.210",
+        "101.0.96.62",
+        "27.109.193.156",
+        "67.82.77.110",
+        "92.27.11.83",
+        "82.67.102.15",
+        "168.243.224.161",
+        "86.22.13.215"
+      ]
+    },
+    "headerSyncMs": 38552,
+    "headerCount": 960450,
+    "syncPeer": "126.94.88.240",
+    "groundTruthPeer": "126.94.88.240",
+    "groundTruthBlock": "0000000000000000000213fec6801df8384373ebcf60f8ba9fd290c645f8205d",
+    "filterCrossCheck": {
+      "matched": true,
+      "filterHashHex": "534adf86ebc3be9e5c11b2b88fbceddb75a39b9b3aa175b5920a9224f875364a"
+    },
+    "generatedAtIso": "2026-07-31T19:11:57.713Z"
+  }
+}
