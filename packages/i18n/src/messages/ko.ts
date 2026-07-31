@@ -148,6 +148,8 @@ export const ko: Catalog = {
   'theme.light': '라이트',
   'theme.dark': '다크',
   'send.max_native_note': '잔액에서 예상 가스를 빼고 채웠습니다.',
+  'send.memo_label': '메모 (선택)',
+  'send.memo_placeholder': '이 체인은 메모를 기록에 남깁니다',
   'send.amount_invalid': '금액 형식이 올바르지 않습니다.',
   'send.amount_invalid_positive': '금액은 0보다 커야 합니다.',
   'send.pending': '송금을 처리하고 있습니다. 잠시만 기다려주세요...',

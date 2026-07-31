@@ -143,6 +143,8 @@ export const en: Catalog = {
   'theme.light': 'Light',
   'theme.dark': 'Dark',
   'send.max_native_note': 'Filled with balance minus estimated gas.',
+  'send.memo_label': 'Memo (optional)',
+  'send.memo_placeholder': 'This chain records memos on-chain',
   'send.amount_invalid': 'Invalid amount.',
   'send.amount_invalid_positive': 'Amount must be greater than 0.',
   'send.pending': 'Sending… please wait.',

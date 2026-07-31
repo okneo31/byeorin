@@ -73,6 +73,13 @@ export function SendPane({
   const [to, setTo] = useState('');
   const [amount, setAmount] = useState('');
   const [assetKey, setAssetKey] = useState<AssetKey>('native');
+  // 메모 — **체인이 프로토콜에 원래 가진 기능만 노출한다** (CLAUDE.md 경계 원칙).
+  // Cosmos 계열(ZION)은 tx memo 필드, TON 은 코멘트 셀이 네이티브다.
+  // EVM 등 메모 개념이 없는 체인에서는 입력칸 자체를 그리지 않는다 —
+  // 지갑이 관행·트릭으로 체인에 없는 기능을 발명하지 않는다.
+  const [memo, setMemo] = useState('');
+  const memoCapable = chainKey.startsWith('cosmos:') || chainKey === 'ton';
+  const trimmedMemo = memo.trim();
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   // "최대" 로 채웠고 아직 사용자가 수정하지 않았다는 표시 — native 는 가스를
   // 뺀 값이라 왜 잔액보다 작은지 화면이 설명해야 한다.
@@ -180,6 +187,7 @@ export function SendPane({
     }
     // native 면 예전과 같은 { to, amount }. 토큰이면 체인에 맞는 형식.
     const intent = buildAssetIntent(asset, trimmedTo, result.value, adapter, isEvm);
+    if (memoCapable && trimmedMemo.length > 0) intent.memo = trimmedMemo;
     setStatus({ kind: 'pending' });
     try {
       // 활성 체인 어댑터로 송금 — defaultAdapter(TTL) 아님.
@@ -215,6 +223,12 @@ export function SendPane({
             <span className="small addr" title={asset.address}>
               {shorten(asset.address)}
             </span>
+          </div>
+        )}
+        {memoCapable && trimmedMemo.length > 0 && (
+          <div className="send-review__row">
+            <span className="muted small">{t('send.memo_label')}</span>
+            <span className="small">{trimmedMemo}</span>
           </div>
         )}
         <div className="send-review__row">
@@ -377,6 +391,24 @@ export function SendPane({
         </button>
       )}
       {maxNote && <p className="muted small">{t('send.max_native_note')}</p>}
+
+      {memoCapable && (
+        <>
+          <label className="label" htmlFor="send-memo">
+            {t('send.memo_label')}
+          </label>
+          <input
+            id="send-memo"
+            type="text"
+            className="verify-row__input"
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+            placeholder={t('send.memo_placeholder')}
+            maxLength={256}
+            disabled={locked}
+          />
+        </>
+      )}
       {amountError !== null && <p className="error small">{amountError}</p>}
 
       <button
