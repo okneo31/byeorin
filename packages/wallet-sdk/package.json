@@ -23,6 +23,11 @@
       "import": "./dist/evm.js",
       "require": "./dist/evm.cjs"
     },
+    "./btc-history": {
+      "types": "./dist/btc-history.d.ts",
+      "import": "./dist/btc-history.js",
+      "require": "./dist/btc-history.cjs"
+    },
     "./multichain": {
       "types": "./dist/multichain.d.ts",
       "import": "./dist/multichain.js",

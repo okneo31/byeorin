@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // 로컬 플러그인은 브리지가 뜨기 전에 등록해야 웹 레이어에서 즉시 보인다.
         registerPlugin(VaultCryptoPlugin.class);
+        registerPlugin(TcpSocketPlugin.class);
 
         super.onCreate(savedInstanceState);
 

@@ -16,6 +16,15 @@ tauri-build = { version = "2" }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# ── BTC 이력 트랙 B: TCP 브리지 (src/tcp_bridge.rs) ──────────────────────
+# tokio: tauri 가 이미 의존 — 새 크레이트 추가 없이 feature 만 켠다.
+tokio = { version = "1", features = ["net", "io-util", "time", "sync"] }
+# TLS 는 native-tls: OS TLS 스택(SChannel/SecureTransport/OpenSSL) 바인딩이라
+# rustls(+ring/aws-lc, Windows 에선 NASM/cmake 요구 가능)보다 컴파일이 가볍고
+# OS 루트 인증서 저장소를 그대로 쓴다. 근거 상세는 tcp_bridge.rs 머리주석.
+native-tls = "0.2"
+tokio-native-tls = "0.3"
+base64 = "0.22"
 
 [features]
 # default to web features; native + custom-protocol enabled in release.
