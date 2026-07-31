@@ -15,8 +15,8 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         // 모노레포 로드맵 버전(PLAN.md v0.5)과 맞춘다. 실기기 배포마다 versionCode
         // 를 1 씩 올려야 같은 단말에 덮어 설치된다.
-        versionCode 15
-        versionName "0.5.14"
+        versionCode 16
+        versionName "0.5.15"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
