@@ -471,6 +471,35 @@ export function decodeTx(r: ByteReader): DecodedTx {
   return { txid, version, inputs, outputs, lockTime, hasWitness };
 }
 
+// ---------------------------------------------------------------------------
+// 머클루트 — BIP141 이후에도 헤더의 머클루트는 wtxid 가 아니라 txid 트리다.
+// ---------------------------------------------------------------------------
+
+/**
+ * 리프 = txid(internal 순서), 페어링 = dsha256(left+right), 홀수 레벨은 마지막 노드 복제.
+ * CVE-2012-2459 방어: 명시적 짝의 두 노드가 동일하면 거부 — 홀수 복제로 만든 루트와
+ * 구분이 불가능해, 같은 루트를 내는 서로 다른 tx 목록(mutation)을 허용하게 되기 때문.
+ * 홀수 복제 자체(짝이 없는 마지막 노드)는 규격이므로 검사 대상이 아니다.
+ */
+export function computeMerkleRoot(txids: Uint8Array[]): Uint8Array {
+  if (txids.length === 0) throw new Error('block: no transactions');
+  let level = txids;
+  while (level.length > 1) {
+    const next: Uint8Array[] = [];
+    for (let i = 0; i < level.length; i += 2) {
+      const left = level[i]!;
+      const hasRight = i + 1 < level.length;
+      const right = hasRight ? level[i + 1]! : left;
+      if (hasRight && bytesEqual(left, right)) {
+        throw new Error('block: duplicate merkle node (CVE-2012-2459)');
+      }
+      next.push(dsha256(concatBytes(left, right)));
+    }
+    level = next;
+  }
+  return level[0]!;
+}
+
 export interface DecodedBlock {
   header: BlockHeader;
   transactions: DecodedTx[];

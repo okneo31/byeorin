@@ -47,6 +47,10 @@ export class NodeTcpTransport {
       this.#sock.once('error', onErr);
     });
 
+    // Nagle 비활성 — 요청/응답 왕복 프로토콜에서 작은 프레임이 지연되면
+    // 라운드트립이 2배로 뛴다 (실측 519ms → 259ms).
+    this.#sock.setNoDelay(true);
+
     this.#sock.on('data', (buf) => {
       const bytes = new Uint8Array(buf);
       // onData 등록 전에 온 조각은 버려지면 안 된다 — 모아 뒀다 흘려보낸다.

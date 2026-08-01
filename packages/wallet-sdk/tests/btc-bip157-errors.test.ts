@@ -120,10 +120,13 @@ interface FakeHeader {
 }
 
 function buildHeader(prev: Uint8Array, nonce: number): FakeHeader {
+  // merkleRoot 는 getdata 기본 응답(코인베이스 1건 = 루트가 곧 txid)의 실제 루트 —
+  // D1 머클 검증이 들어온 뒤에도 이 하네스가 "정직한 피어"로 남으려면 헤더가
+  // 실제 서빙할 블록 바디와 일치해야 하기 때문. 헤더 유일성은 nonce 필드가 담보한다.
   const raw = new ByteWriter()
     .writeU32LE(1)
     .writeBytes(prev)
-    .writeBytes(new Uint8Array(32).fill(nonce & 0xff))
+    .writeBytes(dsha256(coinbaseTx(WATCH_SCRIPT, 5_000_000_000n)))
     .writeU32LE(1_700_000_000 + nonce)
     .writeU32LE(0x1d00ffff)
     .writeU32LE(nonce)

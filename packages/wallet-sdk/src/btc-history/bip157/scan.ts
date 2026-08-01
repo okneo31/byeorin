@@ -26,6 +26,7 @@ import {
   MAX_CFILTERS_PER_REQUEST,
   bytesEqual,
   bytesToHex,
+  computeMerkleRoot,
   decodeBlock,
   decodeCfHeaders,
   decodeCfilter,
@@ -75,7 +76,9 @@ export interface ScanOptions {
   /** 관심 scriptPubKey 원문 (주소를 스크립트로 변환해 넣는다). */
   watchScripts: Uint8Array[];
   checkpoint: ScanCheckpoint;
-  /** 이미 보유로 아는 outpoint ("txid display hex:vout") — 지출 감지 시드. */
+  /** 이미 보유로 아는 outpoint ("txid display hex:vout") — 지출 감지 시드.
+   *  체크포인트 시점의 미지출 outpoint 를 전부 넣어야 한다. 빠뜨리면 그 지출은
+   *  이력에서 누락되고, 해당 블록은 emptyMatchedBlockHeights 로만 나타난다. */
   knownOutpoints?: string[];
   /** 이 높이까지만 스캔 (기본: 피어의 최신까지). */
   stopAtHeight?: number;
@@ -111,32 +114,37 @@ export interface ScanResult {
   scannedFilterCount: number;
   /** 스캔 후 보유 outpoint 집합 ("txid:vout") — 다음 스캔의 knownOutpoints 로. */
   ownedOutpoints: string[];
+  /** 필터는 매칭됐는데 레코드가 0건인 블록 높이 — GCS 오탐(희박) 또는
+   *  knownOutpoints 미시드로 인한 지출 누락 신호. 다른 트랙 재검증 후보. */
+  emptyMatchedBlockHeights: number[];
 }
 
 // ---------------------------------------------------------------------------
 // 피어 래퍼 — 메시지 큐 + 요청/응답 대기. ping 자동 pong, 협상 메시지 무시.
 // ---------------------------------------------------------------------------
 
-/** 스캔에 안 쓰는 협상·릴레이 메시지 — 받으면 조용히 버린다 (sendheaders 포함). */
-const IGNORED_COMMANDS = new Set([
-  'sendheaders',
-  'sendcmpct',
-  'wtxidrelay',
-  'sendaddrv2',
-  'addr',
-  'addrv2',
-  'inv',
-  'tx',
-  'feefilter',
-  'getheaders',
-  'getaddr',
-  'alert',
-  'pong',
+/** next() 로 소비하는 응답 명령 전집합 — 이 밖의 명령은 큐잉하지 않는다.
+ *  미지 명령 무시는 P2P 규격의 표준 동작이고, 여기서 큐잉해 봐야 소비자가 없다
+ *  (협상·릴레이 메시지 sendheaders/inv/addr 류도 같은 이유로 여기서 걸러진다). */
+const RESPONSE_COMMANDS = new Set([
+  'version',
+  'verack',
+  'headers',
+  'cfheaders',
+  'cfilter',
+  'block',
+  'notfound',
 ]);
+
+/** 큐 백스톱 — 정직한 최대 백로그(getcfilters 1회 = 1000통)의 2배. */
+const MAX_QUEUE_MESSAGES = 2048;
+/** cfilter 1000개 배치(메인넷 수십 KB/개)는 통과시키되 무한 축적은 차단. */
+const MAX_QUEUE_BYTES = 64 * 1024 * 1024;
 
 class Peer {
   private readonly decoder: P2PFrameDecoder;
   private queue: P2PMessage[] = [];
+  private queueBytes = 0;
   private waiter: {
     commands: Set<string>;
     resolve: (m: P2PMessage) => void;
@@ -166,14 +174,34 @@ class Peer {
     }
     for (const msg of messages) {
       if (msg.command === 'ping') {
-        // ping → 같은 nonce 로 pong (응답 대기 없음)
-        void this.send('pong', buildPongPayload(parsePingPayload(msg.payload))).catch(
-          () => undefined,
-        );
+        // BIP31 이전 ping 은 페이로드가 없을 수 있다 — 파싱 실패는 위반이 아니라
+        // 구식 노드이므로 pong 만 생략하고 연결은 유지한다. handleChunk 전체를
+        // 감싸면 waiter.resolve 의 동기 continuation 예외까지 삼키므로 여기만 감싼다.
+        try {
+          void this.send('pong', buildPongPayload(parsePingPayload(msg.payload))).catch(
+            () => undefined,
+          );
+        } catch {
+          // nonce 없는 ping — 응답 불가, 무시
+        }
         continue;
       }
-      if (IGNORED_COMMANDS.has(msg.command)) continue;
+      if (!RESPONSE_COMMANDS.has(msg.command)) continue;
+      if (
+        this.queue.length >= MAX_QUEUE_MESSAGES ||
+        this.queueBytes + msg.payload.length > MAX_QUEUE_BYTES
+      ) {
+        // 순차 프로토콜에서 이만한 백로그는 정상 경로에 없다 — 오래된 것을 조용히
+        // 버리면 진짜 응답이 사라져 타임아웃까지 침묵하므로, 끊고 예외로 드러낸다.
+        const err = new Error(
+          `peer: message queue overflow — peer flooding (${this.queue.length} msgs / ${this.queueBytes} bytes)`,
+        );
+        this.handleClose(err);
+        void this.transport.close().catch(() => undefined);
+        return;
+      }
       this.queue.push(msg);
+      this.queueBytes += msg.payload.length;
       this.tryDeliver();
     }
   }
@@ -193,6 +221,7 @@ class Peer {
     const idx = this.queue.findIndex((m) => this.waiter!.commands.has(m.command));
     if (idx < 0) return;
     const msg = this.queue.splice(idx, 1)[0]!;
+    this.queueBytes -= msg.payload.length;
     clearTimeout(this.waiter.timer);
     const { resolve } = this.waiter;
     this.waiter = null;
@@ -301,7 +330,23 @@ export async function bip157Scan(
       knownIndex.set(bytesToHex(entry.hash), chain.length - 1);
     };
 
+    // 피어가 version 에 알린 높이 기준 라운드 상한 — 정상 동기 라운드 수의 2배에
+    // 규격상 허용되는 소배치 응답 여유 8을 더한다. 이 상한을 넘는 요청은
+    // 피어 상태와 무관하게 클라이언트 쪽 이상이다.
+    const expectedRounds = Math.max(
+      1,
+      Math.ceil(Math.max(remote.startHeight - opts.checkpoint.height, 1) / 2000),
+    );
+    const maxRounds = expectedRounds * 2 + 8;
+    let rounds = 0;
+
     for (;;) {
+      rounds += 1;
+      if (rounds > maxRounds) {
+        throw new Error(
+          `scan: 헤더 동기 라운드 상한 ${maxRounds} 초과 (peer height ${remote.startHeight})`,
+        );
+      }
       // locator: tip 쪽 몇 개 + 체크포인트 (재조직 시 공통 조상 탐색용)
       const locator: Uint8Array[] = [];
       for (let i = chain.length - 1; i >= 0 && locator.length < 8; i -= 1) {
@@ -314,10 +359,22 @@ export async function bip157Scan(
       const headersMsg = await peer.next('headers');
       const headers = decodeHeadersMessage(headersMsg.payload);
       if (headers.length === 0) break;
+      const lenBefore = chain.length;
+      const tipBefore = chain[chain.length - 1]!.hash;
       for (const h of headers) appendHeader(h);
+      // 무진전 = locator 창(끝 8 + 체크포인트) 밖 갈림점이거나 악의적 반복 —
+      // 같은 locator 를 다시 보내 봐야 같은 응답이라 재시도는 의미가 없다.
+      // 즉시 끊고 예외로 드러낸다 (다음 스캔이 새 체크포인트로 다시 시도한다).
+      if (
+        chain.length === lenBefore &&
+        bytesEqual(chain[chain.length - 1]!.hash, tipBefore)
+      ) {
+        throw new Error('scan: 무진전 — 헤더 응답에 체인 진전 없음, 동기 중단');
+      }
       if (opts.stopAtHeight !== undefined && chain[chain.length - 1]!.height >= opts.stopAtHeight)
         break;
-      if (headers.length < 2000) break; // 끝까지 받음
+      // 규격상 소배치도 허용 — 소배치이면서 피어가 알린 팁에 닿았을 때만 끝으로 본다
+      if (headers.length < 2000 && chain[chain.length - 1]!.height >= remote.startHeight) break;
     }
 
     // stopAtHeight 로 상한 자르기
@@ -337,6 +394,7 @@ export async function bip157Scan(
       matchedBlockCount: 0,
       scannedFilterCount: 0,
       ownedOutpoints: [...(opts.knownOutpoints ?? [])],
+      emptyMatchedBlockHeights: [],
     };
     if (newBlocks.length === 0) return result;
 
@@ -367,19 +425,23 @@ export async function bip157Scan(
     }
 
     // --- 4. cfilter — 관심 스크립트 매칭 -----------------------------------
-    const entryByHash = new Map<string, ChainEntry>();
-    for (const e of newBlocks) entryByHash.set(bytesToHex(e.hash), e);
     const matched: ChainEntry[] = [];
 
     for (let i = 0; i < newBlocks.length; i += MAX_CFILTERS_PER_REQUEST) {
       const batch = newBlocks.slice(i, i + MAX_CFILTERS_PER_REQUEST);
       const stop = batch[batch.length - 1]!;
       await peer.send('getcfilters', encodeGetCfilters(batch[0]!.height, stop.hash));
+      // 배치 전용 맵 — 요청 범위 밖 cfilter 가 seen 을 부풀려 수신 루프를
+      // 조기 종료시키는 것을 막는다. getcfilters 는 순차 1건씩이므로
+      // 배치 밖 응답은 전부 unsolicited — 즉시 끊는다.
+      const batchByHash = new Map<string, ChainEntry>();
+      for (const e of batch) batchByHash.set(bytesToHex(e.hash), e);
       const seen = new Set<number>();
       while (seen.size < batch.length) {
         const msg = await peer.next('cfilter');
         const cf = decodeCfilter(msg.payload);
-        const entry = entryByHash.get(bytesToHex(cf.blockHash));
+        if (cf.filterType !== FILTER_TYPE_BASIC) throw new Error('scan: unexpected filter type');
+        const entry = batchByHash.get(bytesToHex(cf.blockHash));
         if (entry === undefined) throw new Error('scan: cfilter for unknown block');
         if (seen.has(entry.height)) throw new Error('scan: duplicate cfilter');
         seen.add(entry.height);
@@ -447,14 +509,34 @@ export async function bip157Scan(
         encodeGetData(batch.map((e) => ({ type: INV_BLOCK, hash: e.hash }))),
       );
       const pending = new Map(batch.map((e) => [bytesToHex(e.hash), e]));
+      // 도착 순서는 피어 재량 — 지출 블록이 수신 블록보다 먼저 스캔되면 owned 에
+      // outpoint 가 아직 없어 지출이 통째로 빠진다. 배치를 전부 모은 뒤 높이
+      // 오름차순으로 스캔한다. matched 는 정렬돼 있고 배치는 그 연속 슬라이스라
+      // 배치 간 순서는 이미 보장된다.
+      const collected = new Map<string, DecodedTx[]>();
       while (pending.size > 0) {
         const msg = await peer.next('block', 'notfound');
         if (msg.command === 'notfound') throw new Error('scan: peer has no block data (pruned?)');
         const block = decodeBlock(msg.payload);
-        const entry = pending.get(bytesToHex(block.header.hash));
+        const hashHex = bytesToHex(block.header.hash);
+        const entry = pending.get(hashHex);
         if (!entry) continue; // 요청 안 한 블록 — 무시
-        pending.delete(bytesToHex(block.header.hash));
-        for (const tx of block.transactions) scanTx(tx, entry);
+        // 헤더 자체는 cfheader 체인으로 신뢰를 얻지만 tx 목록은 아니다 — 머클루트로
+        // 헤더에 못 박아야 피어가 입금 tx 를 빼거나 지어내는 조작이 여기서 걸린다.
+        const merkleRoot = computeMerkleRoot(block.transactions.map((tx) => tx.txid));
+        if (!bytesEqual(merkleRoot, block.header.merkleRoot)) {
+          throw new Error(
+            `scan: block merkle root mismatch at height ${entry.height} — peer lied`,
+          );
+        }
+        pending.delete(hashHex);
+        collected.set(hashHex, block.transactions);
+      }
+      for (const entry of batch) {
+        const before = result.records.length;
+        for (const tx of collected.get(bytesToHex(entry.hash))!) scanTx(tx, entry);
+        // 필터가 맞았는데 레코드 0 — 오탐이거나 미시드 지출. 호출자 재검증용 신호.
+        if (result.records.length === before) result.emptyMatchedBlockHeights.push(entry.height);
       }
     }
 

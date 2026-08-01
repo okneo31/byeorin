@@ -34,6 +34,7 @@ export {
   decodeCfilter,
   encodeGetData,
   decodeTx,
+  computeMerkleRoot,
   decodeBlock,
   isCoinbase,
 } from './messages.js';

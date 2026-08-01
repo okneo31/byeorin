@@ -33,6 +33,7 @@ import {
   bytesToHex,
   computeFilterHash,
   computeFilterHeader,
+  computeMerkleRoot,
   concatBytes,
   dsha256,
   encodeGcsFilter,
@@ -98,10 +99,12 @@ function serializeTx(inputs: TxIn[], outputs: TxOut[], version = 2, lockTime = 0
 const txidOf = (txBytes: Uint8Array): Uint8Array => dsha256(txBytes);
 const txidDisplay = (txBytes: Uint8Array): string => internalHashToDisplay(txidOf(txBytes));
 
-function buildHeaderRaw(prevHash: Uint8Array, seed: number, timestamp: number): Uint8Array {
-  const merkleRoot = dsha256(
-    new Uint8Array([seed & 0xff, (seed >> 8) & 0xff, (seed >> 16) & 0xff, (seed >>> 24) & 0xff]),
-  );
+function buildHeaderRaw(
+  prevHash: Uint8Array,
+  seed: number,
+  timestamp: number,
+  merkleRoot: Uint8Array,
+): Uint8Array {
   return new ByteWriter()
     .writeU32LE(0x20000000)
     .writeBytes(prevHash)
@@ -148,8 +151,6 @@ function mine(opts: {
     const height = opts.startHeight + k;
     const seed = opts.branch * 1_000_000 + height;
     const timestamp = 1_700_000_000 + height * 600 + opts.branch;
-    const raw = buildHeaderRaw(prev, seed, timestamp);
-    const hash = dsha256(raw);
     const planned = opts.plan?.(height) ?? null;
     const cbScript = uniqueScript(seed);
     const coinbase = serializeTx(
@@ -162,13 +163,18 @@ function mine(opts: {
       ],
       [{ value: 625_000_000n, script: cbScript }],
     );
+    // D1 검증이 들어온 뒤에도 이 모의 피어가 "정직한 피어"로 남으려면 헤더의
+    // merkleRoot 가 실제 서빙할 tx 목록에서 계산돼야 한다 — 그래서 tx 를 먼저 만든다.
+    const txs = [coinbase, ...(planned?.txs ?? [])];
+    const raw = buildHeaderRaw(prev, seed, timestamp, computeMerkleRoot(txs.map(txidOf)));
+    const hash = dsha256(raw);
     const block: FakeBlock = {
       height,
       hash,
       prevHash: prev,
       raw,
       timestamp,
-      txs: [coinbase, ...(planned?.txs ?? [])],
+      txs,
       filterItems: [cbScript, ...(planned?.filterItems ?? [])],
     };
     opts.registry.set(bytesToHex(hash), block);

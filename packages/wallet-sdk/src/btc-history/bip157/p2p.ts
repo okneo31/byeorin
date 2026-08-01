@@ -7,6 +7,8 @@
 //   - sendheaders: 페이로드 없는 협상 메시지 — 우리는 무시한다 (scan.ts 의 무시 목록).
 //   - ping → pong: 페이로드 빌더/파서만 여기, 자동 응답은 scan.ts.
 
+import { randomBytes } from '@noble/hashes/utils';
+
 import {
   ByteReader,
   ByteWriter,
@@ -89,7 +91,9 @@ export function encodeMessage(
 
 /**
  * 스트림 → 프레임 조립기. ByteTransport.onData 가 주는 임의 조각을 push 하면
- * 완성된 메시지 배열을 돌려준다. 매직/체크섬 불일치는 즉시 throw — 스트림 동기가
+ * 완성된 메시지 배열을 돌려준다. push 는 chunk 를 복사해 보관한다 — 셸 전송이
+ * 재사용 버퍼를 넘겨도 안전하다 (계약을 셸 3종에 강제하는 것보다 프레임 1개분
+ * 복사가 싸다). 매직/체크섬 불일치는 즉시 throw — 스트림 동기가
  * 깨진 것이므로 연결을 끊는 것이 맞다.
  */
 export class P2PFrameDecoder {
@@ -98,7 +102,9 @@ export class P2PFrameDecoder {
   constructor(private readonly magic: Uint8Array = MAINNET_MAGIC) {}
 
   push(chunk: Uint8Array): P2PMessage[] {
-    this.buffer = this.buffer.length === 0 ? chunk : concatBytes(this.buffer, chunk);
+    // 버퍼가 비어 있을 때만 호출자 버퍼 참조가 남는다 — 그 경로만 복사한다.
+    // (concatBytes 경로는 이미 복사, 이후 subarray 는 자기 소유 버퍼의 뷰)
+    this.buffer = this.buffer.length === 0 ? chunk.slice() : concatBytes(this.buffer, chunk);
     const out: P2PMessage[] = [];
     for (;;) {
       if (this.buffer.length < HEADER_SIZE) break;
@@ -152,6 +158,13 @@ export interface BuildVersionOptions {
   protocolVersion?: number;
 }
 
+/** u64 nonce — 자기연결 감지용이므로 64비트 전역을 CSPRNG 로 채운다.
+ *  @noble/hashes randomBytes = globalThis.crypto 기반 — 전 셸 공통. */
+function randomNonce64(): bigint {
+  const b = randomBytes(8);
+  return new DataView(b.buffer, b.byteOffset, 8).getBigUint64(0, true);
+}
+
 /** net_addr (version 메시지 내부, 타임스탬프 없는 26바이트): services + IPv6(16) + port(BE). */
 function writeNetAddr(w: ByteWriter, services: bigint): void {
   w.writeU64LE(services).writeBytes(new Uint8Array(16)).writeU16BE(0);
@@ -161,7 +174,7 @@ export function buildVersionPayload(opts: BuildVersionOptions = {}): Uint8Array 
   const {
     services = 0n,
     timestampSec = BigInt(Math.floor(Date.now() / 1000)),
-    nonce = BigInt(Math.floor(Math.random() * 0xffffffff)),
+    nonce = randomNonce64(),
     userAgent = DEFAULT_USER_AGENT,
     startHeight = 0,
     relay = false,
