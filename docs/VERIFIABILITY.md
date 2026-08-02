@@ -38,8 +38,24 @@ Kerckhoffs 원칙: 키를 뺀 모든 것이 공개돼도 안전해야 한다.
 
 ### 안드로이드 APK
 
-배포하는 `벼린.apk` 옆에 항상 `벼린.apk.manifest.json` 이 함께 나간다.
+배포하는 APK 는 **파일명에 버전이 들어간다** — `벼린0.5.16.apk`. 그 옆에 항상
+같은 이름의 매니페스트 `벼린0.5.16.apk.manifest.json` 이 함께 나간다.
+버전 문자열은 손으로 적지 않고 `apps/android/app/build.gradle` 의 `versionName`
+을 읽어 조립하므로, 파일명과 매니페스트 안의 `versionName` 이 어긋날 수 없다.
 빌드 스크립트가 자동 생성하며, 사람이 손댈 수 없다.
+
+#### 파일명에 버전을 넣는 것이 검증에 주는 영향
+
+주장하는 것과 주장하지 않는 것을 여기서도 나눈다.
+
+| | |
+|---|---|
+| 나아지는 것 | **같은 이름의 서로 다른 빌드가 섞이지 않는다.** 예전에는 0.5.15 와 0.5.16 이 둘 다 `벼린.apk` 였고, 받는 쪽 폴더에서 하나가 다른 하나를 덮어썼다. 어느 매니페스트가 어느 파일의 것인지 파일명만으로는 알 수 없었다. 이제 버전이 다르면 이름이 다르므로 그 사고가 없다. |
+| 나빠지는 것 | 사용자가 **자기가 받은 버전의 매니페스트를 직접 찾아야 한다.** "그냥 `벼린.apk.manifest.json` 을 받으면 된다" 가 더는 성립하지 않는다. 손에 든 파일이 `벼린0.5.16.apk` 면 짝은 `벼린0.5.16.apk.manifest.json` 이고, 버전을 잘못 짚으면 검증기가 `FAIL` 을 낸다. |
+| 주장하지 **않는** 것 | 파일명이 버전을 말한다고 해서 그 파일이 **정말** 그 버전이라는 뜻은 아니다. 파일명은 누구나 바꿀 수 있다. 근거는 매니페스트의 `sha256` 과 `signer.certSha256` 이지 이름이 아니다. 이름은 짝을 찾기 위한 편의일 뿐이다. |
+
+버전이 같은데 바이트가 다른 두 빌드는 **여전히 같은 이름을 가진다** (재현 빌드가
+없으므로 그런 일이 생긴다 — §2.1). 그 경우를 가르는 것도 이름이 아니라 해시다.
 
 담기는 값:
 
@@ -55,7 +71,7 @@ Kerckhoffs 원칙: 키를 뺀 모든 것이 공개돼도 안전해야 한다.
 검증 (우리 서버에 아무것도 묻지 않는다):
 
 ```sh
-node scripts/verify-byeorin-apk.mjs 벼린.apk 벼린.apk.manifest.json
+node scripts/verify-byeorin-apk.mjs 벼린0.5.16.apk 벼린0.5.16.apk.manifest.json
 ```
 
 ```
@@ -252,7 +268,7 @@ BYEORIN_ANCHOR_KEY=0x… node scripts/anchor-release.mjs --send
 
 **4) 매니페스트 기록 — 스크립트가 자동으로 한다**
 
-`--send` 가 성공하면 기록기가 `벼린.apk.manifest.json` 에 `anchor` 를 써넣는다.
+`--send` 가 성공하면 기록기가 `벼린0.5.16.apk.manifest.json` 에 `anchor` 를 써넣는다.
 **손으로 넣을 필요가 없다.**
 
 ```json
@@ -273,7 +289,7 @@ BYEORIN_ANCHOR_KEY=0x… node scripts/anchor-release.mjs --send
 **5) 재검증 — 제3자와 똑같은 방법으로**
 
 ```sh
-node scripts/verify-byeorin-apk.mjs 벼린.apk 벼린.apk.manifest.json
+node scripts/verify-byeorin-apk.mjs 벼린0.5.16.apk 벼린0.5.16.apk.manifest.json
 ```
 
 기대하는 결과:
@@ -293,7 +309,7 @@ node scripts/verify-byeorin-apk.mjs 벼린.apk 벼린.apk.manifest.json
 다른 RPC 로도 같은 결과가 나오는지 확인하려면:
 
 ```sh
-TTL_RPC_URL=https://다른-ttl-노드 node scripts/verify-byeorin-apk.mjs 벼린.apk 벼린.apk.manifest.json
+TTL_RPC_URL=https://다른-ttl-노드 node scripts/verify-byeorin-apk.mjs 벼린0.5.16.apk 벼린0.5.16.apk.manifest.json
 ```
 
 #### 실패하면 — 되돌리는 방법은 없다

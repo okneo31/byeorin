@@ -6,7 +6,12 @@
  * 손에 든 파일을 대조할 뿐, 우리 서버에 아무것도 묻지 않는다. 저장소 없이
  * 이 파일 하나 + APK + 매니페스트만 있으면 돌아간다.
  *
- *   node verify-byeorin-apk.mjs 벼린.apk 벼린.apk.manifest.json
+ *   node verify-byeorin-apk.mjs 벼린0.5.16.apk 벼린0.5.16.apk.manifest.json
+ *
+ * 인자를 생략하면 **현재 폴더**에서 `벼린*.apk` 를 찾는다. 정확히 하나일 때만
+ * 그걸 쓰고, 여러 개면 고르지 않고 실패한다 — 이 도구의 존재 이유가 "무엇을
+ * 검증했는지 사용자가 안다" 이므로, 대상이 애매할 때 조용히 하나를 고르면
+ * 사용자는 자기가 설치할 파일이 아닌 것을 검증하고 안심할 수 있다.
  *
  * 확인하는 것:
  *   1. 무결성  — 파일 SHA-256 이 매니페스트와 같은가 (전송 중 변조/손상 없음)
@@ -27,14 +32,41 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 
-const apkPath = process.argv[2] ?? '벼린.apk';
-const manifestPath = process.argv[3] ?? '벼린.apk.manifest.json';
+const apkPath = process.argv[2] ?? findApk('.');
+// 매니페스트는 산출물과 짝 이름이다: <APK>.manifest.json. 이름을 붙여서 만들면
+// 버전이 다른 APK 와 매니페스트를 섞어 검증하는 사고가 구조적으로 안 난다.
+const manifestPath = process.argv[3] ?? (apkPath ? `${apkPath}.manifest.json` : null);
 
-if (!existsSync(apkPath) || !existsSync(manifestPath)) {
-  console.error(`사용법: node verify-byeorin-apk.mjs <APK> <manifest.json>`);
-  console.error(`  APK      : ${apkPath} ${existsSync(apkPath) ? '' : '(없음)'}`);
-  console.error(`  manifest : ${manifestPath} ${existsSync(manifestPath) ? '' : '(없음)'}`);
+if (!apkPath || !manifestPath || !existsSync(apkPath) || !existsSync(manifestPath)) {
+  console.error(`사용법: node verify-byeorin-apk.mjs <APK> [manifest.json]`);
+  console.error(`  APK      : ${apkPath ?? '(미지정)'} ${apkPath && existsSync(apkPath) ? '' : '(없음)'}`);
+  console.error(
+    `  manifest : ${manifestPath ?? '(미지정)'} ${manifestPath && existsSync(manifestPath) ? '' : '(없음)'}`,
+  );
   process.exit(2);
+}
+
+/**
+ * 인자가 없을 때만 쓰는 자동 탐색. `벼린*.apk` 가 정확히 하나면 그걸 쓰고,
+ * 0개거나 2개 이상이면 null 을 돌려 실패시킨다(후보를 화면에 찍는다).
+ * 최신 버전을 자동으로 고르지 않는 이유: 사용자가 손에 든 파일이 최신이라는
+ * 보장이 없고, 검증 대상이 사용자의 의도와 달라지면 이 도구는 안심만 준다.
+ */
+function findApk(dir) {
+  let cands;
+  try {
+    cands = readdirSync(dir).filter((f) => /^벼린.*\.apk$/.test(f));
+  } catch {
+    return null;
+  }
+  if (cands.length === 1) return join(dir, cands[0]);
+  if (cands.length === 0) {
+    console.error('현재 폴더에서 벼린*.apk 를 찾지 못했습니다. 경로를 직접 지정하세요.');
+  } else {
+    console.error('벼린*.apk 가 여러 개입니다. 검증할 파일을 직접 지정하세요:');
+    for (const c of cands.sort()) console.error(`  - ${c}`);
+  }
+  return null;
 }
 
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));

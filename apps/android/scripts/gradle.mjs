@@ -67,6 +67,9 @@ if (res.status !== 0) process.exit(res.status ?? 1);
 
 // ── 4. 산출물 보고 ────────────────────────────────────────────────────────
 const releaseApk = join(androidDir, 'app/build/outputs/apk/release/app-release.apk');
+// 배포 파일명은 버전을 품는다 — 사용자가 받은 파일이 어느 릴리스인지 파일명만
+// 보고 알 수 있어야 하고, 옛 버전을 덮어써 흔적이 사라지는 일도 없어야 한다.
+const distName = existsSync(releaseApk) ? `벼린${readVersionName()}.apk` : null;
 const outputs = [
   ['debug  ', join(androidDir, 'app/build/outputs/apk/debug/app-debug.apk')],
   ['release', releaseApk],
@@ -78,18 +81,21 @@ for (const [label, p] of outputs) {
   if (!existsSync(p)) continue;
   found = true;
   const mb = (statSync(p).size / 1024 / 1024).toFixed(1);
-  console.log(`  ${label}  ${mb} MB  ${p}`);
+  // release 는 아래에서 배포 이름으로 복사되므로 그 이름을 같이 찍어준다.
+  const as = p === releaseApk && distName ? `  → ${distName}` : '';
+  console.log(`  ${label}  ${mb} MB  ${p}${as}`);
 }
 if (!found) console.log('  (산출된 APK 없음)');
 
 // ── 5. 실기기용 고정 경로로 복사 ──────────────────────────────────────────
 //
 // Gradle 산출 경로는 깊어서 매번 찾아 들어가기 번거롭다. 서명된 release APK 를
-// 저장소 루트의 `벼린.apk` 로 항상 덮어써, 폰에 옮길 파일 위치를 하나로 고정한다.
+// 저장소 루트의 `벼린<versionName>.apk` 로 복사해, 폰에 옮길 파일 위치를 한 곳으로
+// 고정하면서 버전은 파일명에 남긴다.
 // 같은 키로 서명되므로 이 파일을 덮어 설치하면 기존 지갑(금고)이 그대로 유지된다.
 if (existsSync(releaseApk)) {
   const repoRoot = resolve(appRoot, '..', '..');
-  const dest = join(repoRoot, '벼린.apk');
+  const dest = join(repoRoot, distName);
   copyFileSync(releaseApk, dest);
   const mb = (statSync(dest).size / 1024 / 1024).toFixed(1);
   console.log(`\n[byeorin] 실기기용 복사본 갱신: ${dest}  (${mb} MB)`);
@@ -108,6 +114,23 @@ if (existsSync(releaseApk)) {
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────
+
+// 배포 파일명에 넣을 versionName. **하드코딩하지 않고** build.gradle 에서 읽는다 —
+// 버전을 올리는 곳은 한 군데뿐이어야 한다.
+// 읽지 못하면 곧바로 죽인다. 옛 이름(`벼린.apk`)으로 조용히 떨어지면 이전 릴리스를
+// 덮어쓰고, 매니페스트도 짝이 어긋난 채 나간다 — 실패는 드러나야 한다.
+function readVersionName() {
+  const file = join(androidDir, 'app/build.gradle');
+  let text;
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch (e) {
+    fail(`build.gradle 을 읽지 못했습니다 (${file}): ${e.message}`);
+  }
+  const m = /versionName\s+"([^"]+)"/.exec(text);
+  if (!m) fail(`build.gradle 에서 versionName 을 찾지 못했습니다: ${file}`);
+  return m[1];
+}
 
 function findSdk() {
   const candidates = [

@@ -31,8 +31,12 @@
 
 우리 서버에 아무것도 묻지 않고, 손에 든 파일만으로 확인합니다.
 
+**파일명이 버전을 담습니다.** 산출물은 `벼린<versionName>.apk`, 매니페스트는
+`벼린<versionName>.apk.manifest.json` 입니다. 릴리스마다 이름이 바뀌므로
+아래 예시의 `0.5.16` 자리에 손에 든 파일의 버전을 넣으십시오.
+
 ```sh
-node scripts/verify-byeorin-apk.mjs 벼린.apk 벼린.apk.manifest.json
+node scripts/verify-byeorin-apk.mjs 벼린0.5.16.apk 벼린0.5.16.apk.manifest.json
 ```
 
 ```
@@ -99,8 +103,11 @@ scrypt 로 잠긴 blob 입니다 — 반대 순서였으면 한 겹에 끝이었
 ```sh
 pnpm install
 pnpm -r build                    # 워크스페이스 패키지
-cd apps/android && pnpm apk      # → D:\...\벼린.apk + manifest
+cd apps/android && pnpm apk      # → D:\...\벼린<versionName>.apk + manifest
 ```
+
+`<versionName>` 은 `apps/android/android/app/build.gradle` 의 `versionName` 에서
+읽어 붙습니다 — 별도로 이름을 정하지 않습니다.
 
 상세: [`apps/android/README.md`](apps/android/README.md)
 

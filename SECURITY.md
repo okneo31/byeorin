@@ -44,10 +44,14 @@
 
 ## 릴리스 진위 확인
 
-받은 APK 가 진짜인지 우리를 믿지 않고 확인할 수 있습니다:
+받은 APK 가 진짜인지 우리를 믿지 않고 확인할 수 있습니다.
+
+산출물과 매니페스트의 이름에는 버전이 들어갑니다 — `벼린<versionName>.apk` 와
+`벼린<versionName>.apk.manifest.json`. 릴리스마다 달라지므로 아래 `0.5.16` 자리에
+손에 든 파일의 버전을 넣으십시오.
 
 ```sh
-node scripts/verify-byeorin-apk.mjs 벼린.apk 벼린.apk.manifest.json
+node scripts/verify-byeorin-apk.mjs 벼린0.5.16.apk 벼린0.5.16.apk.manifest.json
 ```
 
 서명 인증서 지문 (이 값과 다르면 벼린이 만든 것이 아닙니다):

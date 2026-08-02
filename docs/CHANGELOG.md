@@ -6,6 +6,41 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Unt
 
 ---
 
+## [v0.5.16] btc-history: BIP157 실피어 시험 + 결함 9건 수정 · 릴리스 파일명에 버전 포함 — 2026-08-01
+
+커밋: `15dd271`(BTC 이력 3중 트랙) → `1c78b20`(실피어 통합 시험) → `aa25ecc`(결함 9건 수정). 안드로이드 `versionCode 17 / versionName 0.5.16`.
+
+### Added — BTC 이력 3중 트랙 (`15dd271`)
+- Electrum · BIP157 라이트클라이언트 · WS 릴레이 3 경로. 상세는 [`docs/BTC-HISTORY.md`](./BTC-HISTORY.md).
+
+### Tested — 실피어 통합 시험 (`1c78b20`)
+- **E2E 실주소 스캔 성립**: 피자 tx 10,000 BTC 수취 + 다음 블록 지출까지 추적. SegWit 구간 717 레코드 전량 원문 재확인, 거짓음성 0. 정답은 구간 블록 원문을 따로 받아 독립으로 만들었다 — 필터로 필터를 검증하는 순환논증을 피하려고.
+- 삼각 검증: BIP158 공식 벡터 = 실 Core 노드 바이트 = SDK 디코더, 8 개 높이 × 3 피어 전부 일치. SDK 무수정으로 testnet 동작.
+- 헤더 96만 개 PoW 전량 통과 + 제네시스 앵커 검증, 89 피어 교차 불일치 0, Electrum↔BIP157 txid 집합 4/5 창 완전 일치, 주소 5 유형 입출력 양방향 매칭.
+- **취약점 4 건을 실패하는 테스트로 고정했다** — 구현에 맞춰 기대값을 낮추지 않았다.
+
+### Fixed — BIP157 결함 9 건 (`aa25ecc`, 보고서 [`docs/BIP157-FIX-ROUND.md`](./BIP157-FIX-ROUND.md))
+사용자 관점에서 이것이 고쳐지기 전에는 **"피어가 거짓말하면 내 입금 이력이 조용히 사라질 수 있었다."**
+- **D1 (심각) 블록 tx 목록이 머클루트로 검증되지 않았다.** 피어가 내 입금 tx 를 빼고 보내면 "이력 없음" 이 되고 예외도 안 났다. `computeMerkleRoot` 신설(txid 트리 · 홀수 복제 · CVE-2012-2459 짝중복 거부) + 블록마다 `header.merkleRoot` 대조. 실피어 블록으로 tx 제거 · tx 추가 · CVE 복제 3 종 위조 전부 거부, 정상 블록 통과 (피어 2 곳 재현).
+- **D2 (심각) 헤더 요청 루프가 무한 반복.** 정직한 Core 상대로도 재현됐다 — 깊이 8 초과 재조직에서 진전 없이 영구 반복. 무진전 시 원인을 밝힌 예외로 즉시 종료 + 라운드 절대 상한.
+- **D3 (심각) 피어 메시지 큐 무제한.** 응답 화이트리스트 + 2048 통/64MiB 상한. 폭주 실측 힙 증가 **64.6MB → 0.52MiB (124 분의 1)**, 상한 발동은 정확히 2,049 통째.
+- **D4 (심각) 지출 이력 조용한 누락.** getdata 배치를 도착 순서가 아니라 높이 오름차순으로 스캔 + `knownOutpoints` 계약 명문화 + `emptyMatchedBlockHeights` 신호 필드.
+- **N1 (심각) cfilter 배치 오염** — 매칭을 현 배치 전용 맵으로 한정.
+- 중·경미 3 건: D5 ping 파싱 예외가 소켓 콜백 밖으로 탈출, N2 `cfilter.filterType` 미검증, N3 version nonce 32 비트 `Math.random` → CSPRNG u64.
+- 부수 2 건: `P2PFrameDecoder` 진입 시 chunk 복사(셸 재사용 버퍼 안전), 시험용 전송 `setNoDelay` (실측 519ms → 259ms, 10 회 중 9 회 재현).
+- 검증: BIP157 3 스위트 **118/118 통과**(수정 전 60 건 중 56 통과 · 4 실패), 패키지 전체 685 건 중 675 통과 · 10 skip · **0 실패**, `tsc --noEmit` 무오류. 실피어 5 곳 회귀 기준값과 전건 일치(tipHeight 960450 · 필터 300 · records 4), 성능 중앙값 **−31.6%**.
+- **테스트 약화 없음**: 의도적 실패 4 건의 본문·기대값 diff 0 줄, `.skip`/`xit`/`xdescribe` 0 건. 테스트 변경은 모의 피어가 D1 이후에도 "정직한 피어" 로 남도록 픽스처 `merkleRoot` 를 실값화한 것뿐.
+- **고치지 않고 남긴 것 5 건**은 `docs/BIP157-FIX-ROUND.md` §6 에 그대로 적혀 있다 (handleChunk closedErr 가드 없음 · `blockBatchSize > 16` 에서 정직한 피어도 상한 접촉 가능 · expectedRounds 의 2000헤더 가정 · 깊이 8 초과 재조직은 명시적 실패 · locator 가 지수 back-off 아님).
+- 이 코드는 **아직 어느 셸에도 배선되지 않았다.**
+
+### Changed — 릴리스 산출물 파일명에 버전이 들어간다
+- `벼린.apk` / `벼린.apk.manifest.json` → **`벼린<versionName>.apk` / `벼린<versionName>.apk.manifest.json`** (이번 릴리스는 `벼린0.5.16.apk`).
+- 이름은 하드코딩이 아니라 `apps/android/android/app/build.gradle` 의 `versionName` 을 읽어 조립한다 — 버전을 올릴 때 이름이 저절로 따라오지 않으면 매니페스트가 가리키는 파일과 실제 배포 파일이 어긋난다.
+- 고정 이름이면 여러 버전의 APK 와 그 검증 근거를 동시에 둘 수 없었다. 매니페스트는 git 추적 대상이라 릴리스마다 별도 파일로 남는다.
+- 검증 명령도 같이 바뀐다: `node scripts/verify-byeorin-apk.mjs 벼린0.5.16.apk 벼린0.5.16.apk.manifest.json`.
+
+---
+
 ## [91d40b5…8a13047] rates + anchor: 벼린 환율 도입 · 온체인 앵커 실발행 · Stage E2/E3 — 2026-07-29
 
 커밋 14개: `91d40b5` `606a218` `30f5e85` `8005923` `dabbdab` `560e39e` `b9b4263` `cdd2197` `be1e56f` `b44bc80` `65953a0` `c9a6771` `8a13047` (+ `555eb46` docs).

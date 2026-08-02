@@ -15,7 +15,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -24,7 +24,9 @@ const repoRoot = resolve(appRoot, '..', '..');
 export function buildManifest(apkPath) {
   const bytes = readFileSync(apkPath);
   return {
-    artifact: '벼린.apk',
+    // 실제로 배포되는 파일 이름을 그대로 적는다 — 사용자가 받은 파일과
+    // 대조하는 값이라 고정 이름을 박아 두면 매니페스트가 거짓말을 한다.
+    artifact: basename(apkPath),
     sha256: createHash('sha256').update(bytes).digest('hex'),
     sizeBytes: bytes.length,
     ...readVersion(),
@@ -49,6 +51,16 @@ function readVersion() {
     versionName: name ? name[1] : null,
     versionCode: code ? Number(code[1]) : null,
   };
+}
+
+/**
+ * 배포 산출물 파일명. 버전을 하드코딩하지 않고 build.gradle 의 versionName 에서
+ * 조립한다 — 버전을 올릴 때 고쳐야 할 곳이 build.gradle 하나로 끝나야 한다.
+ * versionName 을 못 읽으면 버전 없는 옛 이름으로 떨어진다.
+ */
+export function apkFileName() {
+  const { versionName } = readVersion();
+  return versionName ? `벼린${versionName}.apk` : '벼린.apk';
 }
 
 /** 서명 인증서 SHA-256. 사용자가 받은 APK 가 우리 키로 서명됐는지 대조하는 값. */
@@ -105,7 +117,13 @@ function readGitProvenance() {
     // 한다. 그런데 빌드가 그 파일을 다시 쓰므로, 빼지 않으면 "매니페스트를 쓰는
     // 행위 자체가 트리를 더럽혀 다음 매니페스트가 더럽다고 말하는" 자기참조에
     // 빠진다. 여기서 보고 싶은 것은 **소스**가 커밋된 상태인가이다.
-    const artifacts = new Set(['벼린.apk', '벼린.apk.manifest.json']);
+    //
+    // 버전이 이름에 들어가므로 고정 목록이 아니라 패턴으로 판정한다 — 0.5.16 을
+    // 찍고 나서 목록을 고쳐야 한다면 다음 릴리스에서 반드시 잊는다.
+    // 버전 없는 옛 이름(벼린.apk / 벼린.apk.manifest.json)도 패턴에 포함한다:
+    // 옛 매니페스트가 아직 추적 중이라 지우거나 남기는 판단이 끝나기 전까지는
+    // 그 파일의 상태 변화가 소스의 더러움으로 오인되면 안 된다.
+    const artifactRe = /^벼린[\d.]*\.apk(\.manifest\.json)?$/;
     const dirty = git(['status', '--porcelain'])
       .split('\n')
       .map((l) => l.trim())
@@ -114,7 +132,7 @@ function readGitProvenance() {
       // 한글 경로는 git 이 따옴표로 감싸므로 벗겨서 비교한다.
       .filter((l) => {
         const path = l.slice(2).trim().replace(/^"(.*)"$/, '$1');
-        return !artifacts.has(path);
+        return !artifactRe.test(path);
       })
       .length > 0;
     return {
@@ -172,13 +190,15 @@ function readToolchain() {
 // 슬래시가 셋이라 `file://` + 경로 로는 영영 어긋난다 (실제로 조용히 아무것도
 // 안 하고 끝나는 것을 확인했다). pathToFileURL 로 정규화해서 비교한다.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const apk = process.argv[2] ?? join(repoRoot, '벼린.apk');
+  // 인자 없이 단독 실행해도 동작하도록 기본 경로도 버전에서 조립한다.
+  const apk = process.argv[2] ?? join(repoRoot, apkFileName());
   if (!existsSync(apk)) {
     console.error(`[byeorin] APK 가 없습니다: ${apk}`);
     process.exit(1);
   }
   const manifest = buildManifest(apk);
-  const dest = join(repoRoot, '벼린.apk.manifest.json');
+  // 매니페스트 이름은 산출물과 짝을 맞춘다 — 어느 APK 의 근거인지 이름만으로 안다.
+  const dest = join(repoRoot, `${manifest.artifact}.manifest.json`);
   writeFileSync(dest, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
   console.log(`[byeorin] 릴리스 매니페스트: ${dest}`);
   console.log(`  sha256  ${manifest.sha256}`);

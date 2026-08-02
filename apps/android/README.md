@@ -138,17 +138,21 @@ pnpm apk:release    # 릴리스만
 ```
 android/app/build/outputs/apk/debug/app-debug.apk       (~6.4 MB)
 android/app/build/outputs/apk/release/app-release.apk   (~5.0 MB, 서명됨)
-D:\TTLCOINWalet\벼린.apk                                 ← release 복사본 (실기기용)
+D:\TTLCOINWalet\벼린0.5.16.apk                            ← release 복사본 (실기기용)
 ```
 
-release 빌드는 저장소 루트의 **`벼린.apk`** 로 항상 복사된다. 폰에 옮길 파일 위치를
-하나로 고정해 깊은 Gradle 경로를 매번 찾지 않게 하려는 것. gitignore 대상.
+release 빌드는 저장소 루트의 **`벼린<versionName>.apk`** 로 복사된다 (예: 0.5.16 이면
+`벼린0.5.16.apk`). 이름은 build.gradle 의 versionName 에서 조립되므로 버전을 올리면
+파일명도 따라 바뀐다 — 서로 다른 빌드가 같은 이름으로 덮여 섞이는 일을 없애려는 것.
+APK 자체는 gitignore 대상이고, 짝이 되는 `벼린<versionName>.apk.manifest.json` 은
+공개 검증 근거라 추적한다.
 
 ### 업데이트인가, 지우고 새로 까는 것인가
 
 **업데이트다.** release APK 는 언제나 같은 키(`byeorin-release.jks`)로 서명되고
-applicationId 도 같으므로, 새 `벼린.apk` 를 덮어 설치하면 안드로이드가 이를 앱
-업데이트로 처리한다. 앱 데이터(= 암호화 금고)는 그대로 남고 기존 비밀번호로 열린다.
+applicationId 도 같으므로, 새 `벼린<versionName>.apk` 를 설치하면 파일명이 달라도
+안드로이드가 이를 앱 업데이트로 처리한다 — 판정 기준은 파일명이 아니라 서명 키와
+applicationId 다. 앱 데이터(= 암호화 금고)는 그대로 남고 기존 비밀번호로 열린다.
 
 실측 (2026-07-25, 에뮬레이터):
   v0.5.0(code 1) 설치 → 지갑 복구·금고 생성 → v0.5.1(code 2) 를 `install -r`

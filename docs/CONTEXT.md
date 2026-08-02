@@ -3,7 +3,8 @@
 > 이 문서의 역할: **새 세션에서 5분 안에 풀 컨텍스트 잡기.**
 > 단일 진실원은 [`PLAN.md`](./PLAN.md)지만, "방금 무엇이 어디까지 됐는가"는 이 문서에서 본다.
 >
-> 마지막 갱신: **2026-07-29** (벼린 환율 도입 + 온체인 앵커 실발행 + Stage E2/E3)
+> 마지막 갱신: **2026-08-01** (BTC 이력 3중 트랙 + BIP157 실피어 시험·결함 9건 수정 + 릴리스 파일명 버전화)
+> 현재 버전: **v0.5.16 (versionCode 17)** · 릴리스 산출물 = `벼린0.5.16.apk` + `벼린0.5.16.apk.manifest.json`
 > GitHub: <https://github.com/okneo31/byeorin> (private)
 
 ---
@@ -16,7 +17,23 @@
 - **2026-07-25 라운드: 안드로이드 APK 완성.** `apps/android` 신설 — Capacitor 8 + Vite WebView 셸에 Extension popup UI 를 이식. **9 체인 전부 실기기 경로에서 동작 검증** (Pixel 7 Pro 에뮬레이터, release APK). 확장에 없던 계층 추가: 비밀번호 금고 · 자동 잠금 · 뒤로가기.
 - **2026-07-26 라운드: 검증 가능한 보안 + 공개 저장소 준비.** 금고를 AndroidKeyStore(TEE/StrongBox) 키로 한 겹 더 감쌈 · 릴리스 매니페스트/검증기 도입 · **재현 빌드가 실측에서 실패**(clean 후 재빌드 시 해시 불일치, [VERIFIABILITY §2.1](./VERIFIABILITY.md)) · 이력 재작성(force push)으로 APK blob 제거 · LICENSE Apache-2.0 + NOTICE + README + SECURITY 추가 · 온체인 앵커 기록기/검증기 구현(**발행 대기**).
 - **2026-07-29 라운드: 벼린 환율 + 온체인 앵커 실발행 + Stage E2/E3.** `1 TTL = 노동자 1일 품삯` 을 산식으로 못 박고 통화토큰 66 종 환율을 산출(`docs/RATES.md`) · **BTC 페깅 해제**(2026-07-29 앵커로 한 번 쓰고 끝) · 온체인 릴리스 앵커 **2 건 실제 발행**(0.5.3 / 0.5.4) · 확장·안드로이드에 Stage E2/E3 이식 · TTL 발행 토큰 66 종 자동 감지 · 활동 내역 SDK 경로 수정.
+- **2026-08-01 라운드: BTC 이력 3중 트랙 + BIP157 결함 9건 수정.** Electrum · BIP157 라이트클라이언트 · WS 릴레이 3 경로 제작(`15dd271`) → 실피어 통합 시험으로 E2E 성립 확인 + 취약점 4 건을 실패 테스트로 노출(`1c78b20`) → 결함 9 건 전부 수정(`aa25ecc`, 머클루트 검증 · 무한루프 · 큐 상한 · 출금 누락). BIP157 3 스위트 118/118. **이 코드는 아직 어느 셸에도 배선되지 않았다.** 남은 것 5 건은 [`docs/BIP157-FIX-ROUND.md`](./BIP157-FIX-ROUND.md) §6.
+- **2026-08-01: 릴리스 파일명이 버전을 포함한다.** `벼린.apk` → **`벼린<versionName>.apk`** (§4 파일 트리 · §릴리스 검증 명령 참조).
 - **다음 행동: 실기기 테스트 피드백 반영** → 송금/스왑 브로드캐스트 확인 → 릴리스 전 항목([apps/android/README.md](../apps/android/README.md) 하단). 환율 트랙은 갱신 동력 설계, 검증 트랙은 재현 빌드(§7 D).
+
+### 2026-08-01 라운드 — BTC 이력 3중 트랙 · BIP157 결함 9건 수정 · 릴리스 파일명 버전화
+
+커밋 `15dd271` → `1c78b20` → `aa25ecc`.
+
+| 항목 | 내용 |
+|---|---|
+| BTC 이력 3중 트랙 (`15dd271`) | Electrum · BIP157 라이트클라이언트 · WS 릴레이. 상세 [`docs/BTC-HISTORY.md`](./BTC-HISTORY.md) |
+| 실피어 통합 시험 (`1c78b20`) | E2E 실주소 스캔 성립(피자 tx 10,000 BTC 수취 + 다음 블록 지출까지, SegWit 구간 717 레코드 전량 재확인, 거짓음성 0 — 정답은 블록 원문을 따로 받아 독립 생성해 순환논증 회피). 삼각 검증: BIP158 공식 벡터 = 실 Core 바이트 = SDK 디코더, 8 높이 × 3 피어 일치. 헤더 96만 개 PoW 전량 통과, 89 피어 교차 불일치 0. **취약점 4 건을 실패 테스트로 고정** — 기대값을 구현에 맞추지 않았다 |
+| BIP157 결함 9건 수정 (`aa25ecc`) | D1 머클루트 미검증(피어가 내 입금 tx 를 빼면 "이력 없음" 이 되고 예외도 없었다) → `computeMerkleRoot` + 블록마다 대조, 위조 3 종 전부 거부 · D2 헤더 루프 무한 반복(정직한 Core 상대로도 재현) → 무진전 즉시 예외 + 라운드 상한 · D3 메시지 큐 무제한 → 화이트리스트 + 2048통/64MiB(힙 증가 64.6MB → 0.52MiB) · D4 출금 이력 조용한 누락 → 높이 오름차순 스캔 · N1 cfilter 배치 오염 · D5·N2·N3 중경미 3 건. 보고서 [`docs/BIP157-FIX-ROUND.md`](./BIP157-FIX-ROUND.md) |
+| 검증 실측 | BIP157 3 스위트 **118/118**, 패키지 전체 685 중 675 통과 · 10 skip · 0 실패, `tsc --noEmit` 무오류. 실피어 5 곳 회귀 전건 일치, 성능 중앙값 −31.6%. 테스트 약화 없음(의도적 실패 4 건 diff 0 줄, skip 0 건) |
+| 배선 상태 | **아직 어느 셸에도 배선되지 않았다.** 미수정 5 건은 보고서 §6 |
+| **릴리스 파일명 규칙** | `벼린<versionName>.apk` + `벼린<versionName>.apk.manifest.json`. 이름은 `apps/android/android/app/build.gradle` 의 `versionName` 을 읽어 조립한다 — 하드코딩하면 버전을 올릴 때 매니페스트가 가리키는 파일과 실제 배포 파일이 어긋난다. 현재 = `벼린0.5.16.apk` |
+| 산출물 버전 | `top.ttl1.byeorin` **v0.5.16 (versionCode 17)** |
 
 ### 2026-07-29 라운드 — 벼린 환율 · 온체인 앵커 실발행 · Stage E2/E3
 
@@ -224,7 +241,8 @@ D:\TTLCOINWalet\
 ├── LICENSE, NOTICE, README.md, SECURITY.md   공개 저장소 세트 (2026-07-26)
 ├── anchor-publishers.json   앵커 publisher 허용 목록 (chainId 7777, 단일 키 0x52B5dE96…f533)
 ├── rate-snapshot.json       벼린 환율 스냅샷 (66종, anchoredAt 2026-07-29) — 사람이 검증하는 사본
-├── 벼린.apk (git 미추적) + 벼린.apk.manifest.json (추적 — 공개 검증 근거)
+├── 벼린<versionName>.apk (git 미추적) + 벼린<versionName>.apk.manifest.json (추적 — 공개 검증 근거)
+│                            현재 = 벼린0.5.16.apk / 벼린0.5.16.apk.manifest.json (이름은 build.gradle 의 versionName 에서 조립)
 ├── BYEORINWordMark.png, lockup{가로,세로}.png, 벼린 워드마크.png, logo0.{png,svg,_dark.png}
 └── package.json (byeorin-wallet, pnpm workspace)
 ```
@@ -376,8 +394,9 @@ python scripts/migrate_brand.py            # dry-run
 python scripts/migrate_brand.py --apply    # 실제 적용
 
 # 릴리스 검증 (매니페스트는 release 빌드 시 자동 생성)
-cd apps/android && pnpm apk                 # → 벼린.apk + 벼린.apk.manifest.json
-node scripts/verify-byeorin-apk.mjs 벼린.apk 벼린.apk.manifest.json
+# 파일명은 build.gradle 의 versionName 에서 조립된다 — 버전을 올리면 이름이 따라 바뀐다
+cd apps/android && pnpm apk                 # → 벼린0.5.16.apk + 벼린0.5.16.apk.manifest.json
+node scripts/verify-byeorin-apk.mjs 벼린0.5.16.apk 벼린0.5.16.apk.manifest.json
 node scripts/anchor-release.mjs                              # 앵커 드라이런
 BYEORIN_ANCHOR_KEY=0x… node scripts/anchor-release.mjs --send  # 실제 발행 (2건 발행됨)
 

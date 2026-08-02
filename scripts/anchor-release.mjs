@@ -107,13 +107,32 @@ async function estimateCost(data) {
   };
 }
 
+/**
+ * 산출물 이름은 build.gradle 의 versionName 에서 조립한다 — 버전을 여기 박아 두면
+ * 릴리스마다 두 곳을 고쳐야 하고, 어긋나면 엉뚱한 매니페스트를 앵커링하게 된다.
+ */
+function readVersionName() {
+  const gradle = readFileSync(join(repoRoot, 'apps/android/android/app/build.gradle'), 'utf8');
+  const m = /versionName\s+"([^"]+)"/.exec(gradle);
+  if (!m) throw new Error('build.gradle 에서 versionName 을 찾지 못했다');
+  return m[1];
+}
+
 async function main() {
-  const manifestPath = join(repoRoot, '벼린.apk.manifest.json');
+  const versionName = readVersionName();
+  const versioned = join(repoRoot, `벼린${versionName}.apk.manifest.json`);
+  // 옛 릴리스는 버전 없는 이름으로 남아 있다. 새 이름이 없을 때만 그쪽을 읽는다.
+  const legacy = join(repoRoot, '벼린.apk.manifest.json');
+  const manifestPath = existsSync(versioned) ? versioned : legacy;
+  if (manifestPath === legacy) {
+    console.log(`[anchor] 벼린${versionName}.apk.manifest.json 이 없어 옛 이름(벼린.apk.manifest.json)을 읽는다.`);
+  }
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const payload = buildPayload(manifest);
   const data = toHexData(payload);
 
   console.log('\n[anchor] TTL 체인 릴리스 앵커\n');
+  console.log(`  매니페스트 ${manifestPath.slice(repoRoot.length + 1)}`);
   console.log(`  체인      ${TTL_CHAIN.chainId} (${TTL_CHAIN.rpcUrl})`);
   console.log(`  페이로드  ${payload}`);
   console.log(`  data      ${data.slice(0, 42)}… (${(data.length - 2) / 2} bytes)`);
