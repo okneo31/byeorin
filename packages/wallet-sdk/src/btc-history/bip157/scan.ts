@@ -86,7 +86,8 @@ export interface ScanOptions {
   userAgent?: string;
   /** 메시지 응답 대기 상한 (ms). 기본 20000. */
   messageTimeoutMs?: number;
-  /** getdata 한 번에 요청할 블록 수. 기본 16. */
+  /** getdata 한 번에 요청할 블록 수. 기본 16, 1..64 로 클램프.
+   *  최악 상주 메모리 = 이 값 × 4MB (기본 64MB). */
   blockBatchSize?: number;
   tls?: boolean;
   connectTimeoutMs?: number;
@@ -136,15 +137,54 @@ const RESPONSE_COMMANDS = new Set([
   'notfound',
 ]);
 
-/** 큐 백스톱 — 정직한 최대 백로그(getcfilters 1회 = 1000통)의 2배. */
+// 상한의 목적은 "아무도 기다리지 않는 메시지의 무제한 축적" 차단이다. 요청한
+// 응답까지 같은 잣대로 세면, 우리가 직접 64블록을 요청해 놓고 그 응답에 죽는다.
+// 그래서 예산은 방금 보낸 요청에서 계산한다 — 피어의 주장이 아니라.
 const MAX_QUEUE_MESSAGES = 2048;
-/** cfilter 1000개 배치(메인넷 수십 KB/개)는 통과시키되 무한 축적은 차단. */
-const MAX_QUEUE_BYTES = 64 * 1024 * 1024;
+const MAX_QUEUE_BYTES_HARD = 268_800_000;
+/** Core 의 MAX_PROTOCOL_MESSAGE_LENGTH — 정직한 피어의 1블록 상한. */
+const MAX_BLOCK_SERIALIZED_BYTES = 4_000_000;
+
+export interface QueueBudget {
+  msgs: number;
+  bytes: number;
+}
+
+/** 통수 하한 — 요청 밖 응답을 통수로 끊으면 "무시하고 타임아웃" 이라는 기존
+ *  계약이 깨진다. 실제 메모리 경계는 bytes 가 잡으므로 통수는 백스톱으로만 둔다. */
+const MIN_BUDGET_MESSAGES = 256;
+
+function clampBudget(b: QueueBudget): QueueBudget {
+  return {
+    msgs: Math.min(Math.max(b.msgs, MIN_BUDGET_MESSAGES), MAX_QUEUE_MESSAGES),
+    bytes: Math.min(b.bytes, MAX_QUEUE_BYTES_HARD),
+  };
+}
+
+/** 요청 없는 상태의 예산 — 현행 단일 상한보다 좁다(적대적 축적을 더 빨리 끊는다). */
+const IDLE_BUDGET: QueueBudget = { msgs: 256, bytes: 8 * 1024 * 1024 };
+const HEADER_BUDGET: QueueBudget = { msgs: 64, bytes: 4 * 1024 * 1024 };
+
+/** 계산식 자체를 테스트가 고정할 수 있도록 순수 함수로 뺀다. */
+export function blockBatchBudget(batchSize: number): QueueBudget {
+  return clampBudget({
+    msgs: 2 * batchSize + 16,
+    bytes: Math.ceil(batchSize * MAX_BLOCK_SERIALIZED_BYTES * 1.05),
+  });
+}
+
+export function cfilterBudget(count: number): QueueBudget {
+  return clampBudget({
+    msgs: count + 64,
+    bytes: Math.min(64 * 1024 * 1024, count * 512 * 1024),
+  });
+}
 
 class Peer {
   private readonly decoder: P2PFrameDecoder;
   private queue: P2PMessage[] = [];
   private queueBytes = 0;
+  private budget: QueueBudget = IDLE_BUDGET;
   private waiter: {
     commands: Set<string>;
     resolve: (m: P2PMessage) => void;
@@ -164,6 +204,9 @@ class Peer {
   }
 
   private handleChunk(chunk: Uint8Array): void {
+    // 닫힌 뒤 도착분은 소비자가 없다 — next() 가 이미 무조건 reject 하므로
+    // 디코드·큐잉·재차단 모두 순수 낭비다. 진입부에서 끊는다.
+    if (this.closedErr) return;
     let messages: P2PMessage[];
     try {
       messages = this.decoder.push(chunk);
@@ -188,13 +231,13 @@ class Peer {
       }
       if (!RESPONSE_COMMANDS.has(msg.command)) continue;
       if (
-        this.queue.length >= MAX_QUEUE_MESSAGES ||
-        this.queueBytes + msg.payload.length > MAX_QUEUE_BYTES
+        this.queue.length >= this.budget.msgs ||
+        this.queueBytes + msg.payload.length > this.budget.bytes
       ) {
         // 순차 프로토콜에서 이만한 백로그는 정상 경로에 없다 — 오래된 것을 조용히
         // 버리면 진짜 응답이 사라져 타임아웃까지 침묵하므로, 끊고 예외로 드러낸다.
         const err = new Error(
-          `peer: message queue overflow — peer flooding (${this.queue.length} msgs / ${this.queueBytes} bytes)`,
+          `peer: message queue overflow — peer flooding (${this.queue.length} msgs / ${this.queueBytes} bytes exceeds budget ${this.budget.msgs}/${this.budget.bytes})`,
         );
         this.handleClose(err);
         void this.transport.close().catch(() => undefined);
@@ -228,8 +271,16 @@ class Peer {
     resolve(msg);
   }
 
-  async send(command: string, payload: Uint8Array): Promise<void> {
+  private async send(command: string, payload: Uint8Array): Promise<void> {
     await this.transport.send(encodeMessage(command, payload, this.magic));
+  }
+
+  /** 예산 없이 나가는 요청이 있으면 유휴 예산에 정상 응답이 걸린다 — 호출부가
+   *  예산을 빼먹지 못하게 send 대신 이 문만 노출한다. 리셋은 하지 않는다:
+   *  늦게 도착한 중복 응답도 직전 요청의 예산으로 세야 정상 경로가 산다. */
+  async request(command: string, payload: Uint8Array, budget: QueueBudget): Promise<void> {
+    this.budget = clampBudget(budget);
+    await this.send(command, payload);
   }
 
   /** commands 중 하나가 올 때까지 대기 (동시에 하나의 대기만 지원 — 순차 프로토콜). */
@@ -270,7 +321,8 @@ export async function bip157Scan(
 ): Promise<ScanResult> {
   const magic = opts.magic ?? MAINNET_MAGIC;
   const timeoutMs = opts.messageTimeoutMs ?? 20_000;
-  const blockBatchSize = opts.blockBatchSize ?? 16;
+  // 큐 상주 메모리 = batch × 4MB. 64 초과는 순차 소비라 이득 없이 상주만 늘린다.
+  const blockBatchSize = Math.max(1, Math.min(64, opts.blockBatchSize ?? 16));
 
   if (opts.watchScripts.length === 0) throw new Error('scan: watchScripts is empty');
   if (opts.checkpoint.blockHash.length !== 32 || opts.checkpoint.filterHeader.length !== 32) {
@@ -285,9 +337,10 @@ export async function bip157Scan(
 
   try {
     // --- 1. 핸드셰이크 -----------------------------------------------------
-    await peer.send(
+    await peer.request(
       'version',
       buildVersionPayload({ userAgent: opts.userAgent, relay: false }),
+      IDLE_BUDGET,
     );
     const versionMsg = await peer.next('version');
     const remote = parseVersionPayload(versionMsg.payload);
@@ -296,7 +349,7 @@ export async function bip157Scan(
         `scan: peer lacks NODE_COMPACT_FILTERS (services=0x${remote.services.toString(16)})`,
       );
     }
-    await peer.send('verack', new Uint8Array(0));
+    await peer.request('verack', new Uint8Array(0), IDLE_BUDGET);
     await peer.next('verack');
 
     // --- 2. 헤더 체인 따라가기 --------------------------------------------
@@ -330,15 +383,55 @@ export async function bip157Scan(
       knownIndex.set(bytesToHex(entry.hash), chain.length - 1);
     };
 
-    // 피어가 version 에 알린 높이 기준 라운드 상한 — 정상 동기 라운드 수의 2배에
-    // 규격상 허용되는 소배치 응답 여유 8을 더한다. 이 상한을 넘는 요청은
-    // 피어 상태와 무관하게 클라이언트 쪽 이상이다.
-    const expectedRounds = Math.max(
-      1,
-      Math.ceil(Math.max(remote.startHeight - opts.checkpoint.height, 1) / 2000),
-    );
-    const maxRounds = expectedRounds * 2 + 8;
+    // 라운드 상한을 "라운드당 2000헤더" 가정에서 뗀다 — 규격은 피어가 더 작은
+    // 배치로 답하는 것을 허용하고, 그런 피어도 진전 중이면 죽이면 안 된다.
+    // 그래서 세는 단위는 라운드가 아니라 실제로 붙은 헤더 수다.
+    const headerSpan = Math.max(remote.startHeight - opts.checkpoint.height, 1);
+    // 4000 = 되감기 여유(mainnet 최대 실측 재조직 53블록의 75배), 144 = 동기 중 새로 채굴될 1일치
+    const maxAppends = headerSpan + 4000 + 144;
+    // 16 = 정직한 구현이 결코 밑돌지 않는 평균 배치 하한(규격 상한 2000의 1/125).
+    // 이보다 잘게 끊는 피어는 진전을 핑계로 라운드만 태우는 것이다.
+    const MIN_AVG_BATCH = 16;
+    const maxRounds = Math.ceil(maxAppends / MIN_AVG_BATCH) + 12;
     let rounds = 0;
+    let totalAppends = 0;
+    let widenUsed = 0; // 무진전일 때만 쓰는 locator 넓힘 예산 (상한 2)
+    let anchorLowHeight = opts.checkpoint.height; // 피어와 일치가 확인된 최고 높이
+
+    const entryAt = (h: number): ChainEntry | undefined => {
+      const idx = h - opts.checkpoint.height;
+      return idx >= 0 && idx < chain.length ? chain[idx] : undefined;
+    };
+    // 평시 모양(끝 8 + 체크포인트)은 손대지 않는다 — 평시에 넓히면 정상 재조직
+    // 경로의 요청 크기만 커진다. 넓힘은 무진전 라운드에서만 발동한다.
+    const buildLocator = (): Uint8Array[] => {
+      const out: Uint8Array[] = [];
+      if (widenUsed === 0) {
+        for (let i = chain.length - 1; i >= 0 && out.length < 8; i -= 1) out.push(chain[i]!.hash);
+      } else {
+        // 1회차는 확인된 하한(anchorLowHeight)~tip 구간만, 2회차는 체크포인트까지
+        // 전부 — 2회차가 이미 최대 해상도라 3회차가 줄 새 정보는 0이다.
+        const low = widenUsed === 1
+          ? Math.max(anchorLowHeight, opts.checkpoint.height)
+          : opts.checkpoint.height;
+        let h = chain[chain.length - 1]!.height;
+        let step = 1;
+        let n = 0;
+        while (h > low) {
+          const e = entryAt(h);
+          if (e) out.push(e.hash);
+          n += 1;
+          if (n > 10) step *= 2;
+          h -= step;
+        }
+        const lowEntry = entryAt(low);
+        if (lowEntry) out.push(lowEntry.hash);
+      }
+      if (!out.some((x) => bytesEqual(x, opts.checkpoint.blockHash))) {
+        out.push(opts.checkpoint.blockHash);
+      }
+      return out;
+    };
 
     for (;;) {
       rounds += 1;
@@ -347,29 +440,45 @@ export async function bip157Scan(
           `scan: 헤더 동기 라운드 상한 ${maxRounds} 초과 (peer height ${remote.startHeight})`,
         );
       }
+      // 진전 대비 라운드 소모가 바닥을 밑돌면, 피어가 진전을 핑계로 라운드만
+      // 태우는 것이다 — span 만큼 끌려다니지 않도록 여기서 끊는다.
+      if (rounds > 8 && totalAppends < (rounds - 8 - widenUsed - 1) * MIN_AVG_BATCH) {
+        throw new Error(`scan: 헤더 동기 생산성 미달 (${rounds}라운드에 ${totalAppends}헤더)`);
+      }
       // locator: tip 쪽 몇 개 + 체크포인트 (재조직 시 공통 조상 탐색용)
-      const locator: Uint8Array[] = [];
-      for (let i = chain.length - 1; i >= 0 && locator.length < 8; i -= 1) {
-        locator.push(chain[i]!.hash);
-      }
-      if (!locator.some((h) => bytesEqual(h, opts.checkpoint.blockHash))) {
-        locator.push(opts.checkpoint.blockHash);
-      }
-      await peer.send('getheaders', encodeGetHeaders(locator));
+      const locator = buildLocator();
+      await peer.request('getheaders', encodeGetHeaders(locator), HEADER_BUDGET);
       const headersMsg = await peer.next('headers');
       const headers = decodeHeadersMessage(headersMsg.payload);
       if (headers.length === 0) break;
       const lenBefore = chain.length;
       const tipBefore = chain[chain.length - 1]!.hash;
       for (const h of headers) appendHeader(h);
-      // 무진전 = locator 창(끝 8 + 체크포인트) 밖 갈림점이거나 악의적 반복 —
-      // 같은 locator 를 다시 보내 봐야 같은 응답이라 재시도는 의미가 없다.
-      // 즉시 끊고 예외로 드러낸다 (다음 스캔이 새 체크포인트로 다시 시도한다).
-      if (
-        chain.length === lenBefore &&
-        bytesEqual(chain[chain.length - 1]!.hash, tipBefore)
-      ) {
-        throw new Error('scan: 무진전 — 헤더 응답에 체인 진전 없음, 동기 중단');
+      const grew = chain.length - lenBefore;
+      const progressed = grew !== 0 || !bytesEqual(chain[chain.length - 1]!.hash, tipBefore);
+      if (progressed) {
+        totalAppends += Math.max(grew, 1);
+        widenUsed = 0;
+        anchorLowHeight = chain[chain.length - 1]!.height;
+      } else {
+        // 무진전 — 갈림길은 하나뿐이다: 이 응답에 우리가 모르는 갈림 구간이
+        // 남아 있는가. 피어가 우리 tip 을 아는 지점부터 답했다면 locator 를
+        // 넓혀도 새 정보가 0 이므로 재시도가 수학적으로 무의미하다.
+        let topKnown = -1;
+        for (const h of headers) {
+          const idx = knownIndex.get(bytesToHex(h.hash));
+          if (idx !== undefined) topKnown = Math.max(topKnown, chain[idx]!.height);
+        }
+        if (topKnown < 0 || topKnown >= chain[chain.length - 1]!.height) {
+          throw new Error('scan: 무진전 — 헤더 응답에 체인 진전 없음, 동기 중단');
+        }
+        if (widenUsed >= 2) {
+          throw new Error('scan: 무진전 — locator 를 최대로 넓혀도 공통 조상 없음, 동기 중단');
+        }
+        // locator 창 밖에서 갈라진 정직한 깊은 재조직 후보 — 넓혀 재시도한다.
+        widenUsed += 1;
+        anchorLowHeight = topKnown;
+        continue;
       }
       if (opts.stopAtHeight !== undefined && chain[chain.length - 1]!.height >= opts.stopAtHeight)
         break;
@@ -405,7 +514,11 @@ export async function bip157Scan(
     for (let i = 0; i < newBlocks.length; i += MAX_CFHEADERS_PER_REQUEST) {
       const batch = newBlocks.slice(i, i + MAX_CFHEADERS_PER_REQUEST);
       const stop = batch[batch.length - 1]!;
-      await peer.send('getcfheaders', encodeGetCfHeaders(batch[0]!.height, stop.hash));
+      await peer.request(
+        'getcfheaders',
+        encodeGetCfHeaders(batch[0]!.height, stop.hash),
+        HEADER_BUDGET,
+      );
       const msg = await peer.next('cfheaders');
       const cf = decodeCfHeaders(msg.payload);
       if (cf.filterType !== FILTER_TYPE_BASIC) throw new Error('scan: unexpected filter type');
@@ -430,7 +543,11 @@ export async function bip157Scan(
     for (let i = 0; i < newBlocks.length; i += MAX_CFILTERS_PER_REQUEST) {
       const batch = newBlocks.slice(i, i + MAX_CFILTERS_PER_REQUEST);
       const stop = batch[batch.length - 1]!;
-      await peer.send('getcfilters', encodeGetCfilters(batch[0]!.height, stop.hash));
+      await peer.request(
+        'getcfilters',
+        encodeGetCfilters(batch[0]!.height, stop.hash),
+        cfilterBudget(batch.length),
+      );
       // 배치 전용 맵 — 요청 범위 밖 cfilter 가 seen 을 부풀려 수신 루프를
       // 조기 종료시키는 것을 막는다. getcfilters 는 순차 1건씩이므로
       // 배치 밖 응답은 전부 unsolicited — 즉시 끊는다.
@@ -504,9 +621,10 @@ export async function bip157Scan(
 
     for (let i = 0; i < matched.length; i += blockBatchSize) {
       const batch = matched.slice(i, i + blockBatchSize);
-      await peer.send(
+      await peer.request(
         'getdata',
         encodeGetData(batch.map((e) => ({ type: INV_BLOCK, hash: e.hash }))),
+        blockBatchBudget(batch.length),
       );
       const pending = new Map(batch.map((e) => [bytesToHex(e.hash), e]));
       // 도착 순서는 피어 재량 — 지출 블록이 수신 블록보다 먼저 스캔되면 owned 에
