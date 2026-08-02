@@ -1,6 +1,6 @@
 [package]
 name = "byeorin-desktop"
-version = "0.1.0"
+version = "0.5.16"
 description = "벼린 — 데스크톱 (Tauri 2.x)"
 edition = "2021"
 rust-version = "1.77"
@@ -10,7 +10,7 @@ name = "byeorin_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2" }
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
