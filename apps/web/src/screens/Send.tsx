@@ -7,10 +7,11 @@ import {
   type DiscoveredBalance,
   type TransferIntent,
 } from '@byeorin/wallet-sdk';
-import { ShellError } from '@byeorin/shell-core';
+import { ShellError, parseScanned } from '@byeorin/shell-core';
 import { Button, Card, Input } from '@byeorin/design-system';
 import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../wallet-store.js';
+import { QrScanModal } from '../components/QrScanModal.js';
 
 interface Props {
   onBack: () => void;
@@ -48,6 +49,9 @@ export function Send({ onBack }: Props) {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [tokens, setTokens] = useState<DiscoveredBalance[]>([]);
   const [asset, setAsset] = useState<AssetKey>('native');
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanNote, setScanNote] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +61,9 @@ export function Send({ onBack }: Props) {
       const adapter = walletStore.getDefaultAdapter() as unknown as Parameters<
         typeof discoverTokens
       >[0];
-      void discoverTokens(adapter, sharedRegistry, acc.address).then((rows) => {
+      // rows 를 명시한다 — QR 모듈을 들여오면서 shell-core 타입이 함께 실려
+      // discoverTokens 의 반환 추론이 any 로 무너진다.
+      void discoverTokens(adapter, sharedRegistry, acc.address).then((rows: DiscoveredBalance[]) => {
         if (!cancelled) setTokens(rows);
       });
     });
@@ -97,6 +103,51 @@ export function Send({ onBack }: Props) {
 
   const locked = status.kind === 'pending' || status.kind === 'sent';
   const canProceed = validAddress && validAmount && !locked;
+
+  // ── QR 스캔 결과 반영 ─────────────────────────────────────
+  // 돈 보내는 자리라 스캔값을 그대로 입력란에 넣지 않는다. 형식 파싱과 주소
+  // 검증을 shell-core 가 한 번에 하고(parseScanned), 실패하면 입력을 건드리지
+  // 않고 이유만 보인다. 이 셸은 TTL 체인만 다루므로 검증 기준도 evm:ttl 이다.
+  const applyScan = (text: string) => {
+    const r = parseScanned(text, 'evm:ttl');
+    if (!r.ok) {
+      const key = `scan.error.${r.code.replace(/-/g, '_')}`;
+      setScanError(t(key, { chain: 'TTL' }));
+      setScanNote(null);
+      setScanOpen(false); // 모달이 덮고 있으면 이유가 보이지 않는다
+      return;
+    }
+
+    const notes: string[] = [];
+    let noteSymbol = 'TTL';
+    if (r.tokenAddress) {
+      // EIP-681 /transfer — 이미 목록에 있는 토큰일 때만 자산을 바꾼다.
+      const wanted = r.tokenAddress.toLowerCase();
+      const hit = tokens.find((tk) => tk.token.address.toLowerCase() === wanted);
+      if (hit) {
+        setAsset(hit.token.address);
+        noteSymbol = hit.token.symbol;
+      } else {
+        notes.push(t('scan.error.unsupported_scheme'));
+      }
+    }
+    setTo(r.address);
+    if (r.amount && AMOUNT_RE.test(r.amount)) {
+      setAmount(r.amount);
+      notes.push(t('scan.amount_filled', { amount: r.amount, symbol: noteSymbol }));
+    } else if (r.amount) {
+      notes.push(t('scan.amount_ignored'));
+    }
+    if (r.tokenAmountRaw) {
+      notes.push(t('scan.token_raw_amount', { v: r.tokenAmountRaw }));
+    }
+    // 형식만 본 검증이라는 사실을 숨기지 않는다.
+    notes.push(t('scan.address_unchecked'));
+
+    setScanError(null);
+    setScanNote(notes.join(' '));
+    setScanOpen(false);
+  };
 
   // 실제 송금 호출 — review 화면에서만 실행된다.
   const performSend = async () => {
@@ -276,6 +327,22 @@ export function Send({ onBack }: Props) {
                 : undefined
             }
           />
+          <div className="web-send__scan-row">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setScanError(null);
+                setScanNote(null);
+                setScanOpen(true);
+              }}
+              disabled={locked}
+            >
+              {t('scan.button')}
+            </Button>
+          </div>
+          {scanError && <div className="nd-error">{scanError}</div>}
+          {scanNote && <div className="nd-warn">{scanNote}</div>}
         </Card>
 
         <Card>
@@ -310,6 +377,10 @@ export function Send({ onBack }: Props) {
           {t('common.back')}
         </Button>
       </form>
+
+      {scanOpen && (
+        <QrScanModal onDetected={applyScan} onClose={() => setScanOpen(false)} />
+      )}
     </div>
   );
 }

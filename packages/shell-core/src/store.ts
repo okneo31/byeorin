@@ -194,6 +194,23 @@ export class WalletStore {
     return idx;
   }
 
+  /**
+   * 계정 라벨을 변경한다. 생성 시에만 줄 수 있었으므로 나중에 바꿀 길을 연다.
+   *
+   * 빈 문자열/공백만 주면 null 로 되돌린다 — 라벨이 null 이어야 UI 가 다시
+   * 자동 이름(`계정 N`)을 쓰기 때문이다.
+   *
+   * activeAccountCache 는 건드리지 않는다. 라벨은 주소·서명에 관여하지 않는다.
+   */
+  async setAccountLabel(idx: number, label: string | null): Promise<void> {
+    this.assertIndex(idx);
+    const next = normalizeLabel(label);
+    const slot = this.accounts[idx]!;
+    if (slot.label === next) return;
+    slot.label = next;
+    await this.persist();
+  }
+
   /** 활성 계정 인덱스 변경. */
   async selectAccount(idx: number): Promise<void> {
     this.assertIndex(idx);
@@ -529,6 +546,24 @@ function normalizePrivateKeyHex(input: string): string {
     throw shellError('privateKey.invalid', 'privateKey contains non-hex characters');
   }
   return '0x' + s.toLowerCase();
+}
+
+/** 라벨 저장 상한. 확장 popup(360px) 의 라벨 영역이 라틴 기준 약 29자라 32 로 끊는다. */
+const LABEL_MAX_LENGTH = 32;
+
+/**
+ * 라벨 정규화 — 빈 값은 null 로 접는다(자동 이름 복귀).
+ *
+ * 제어문자를 지우는 이유: 라벨은 계정 목록에 한 줄로 렌더되고 세션 blob 으로
+ * 왕복한다. 개행이 섞이면 레이아웃이 깨진다.
+ * 초과 길이는 throw 대신 자른다 — 4종 셸이 각자 에러 문구를 다루게 만들지 않는다.
+ */
+function normalizeLabel(input: string | null): string | null {
+  if (input === null) return null;
+  // eslint-disable-next-line no-control-regex
+  const cleaned = input.replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (cleaned === '') return null;
+  return cleaned.slice(0, LABEL_MAX_LENGTH);
 }
 
 /** privateKey hex 문자열의 표시용 helper — UI 가 호출. */

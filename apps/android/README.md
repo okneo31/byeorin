@@ -236,7 +236,11 @@ release APK 를 설치해 실제로 확인한 것:
 - [ ] `versionCode` 증가 규칙 — 배포마다 +1 (지금 1).
 - [ ] Play 배포 시 AAB (`bundleRelease`) + Play App Signing 등록.
 - [ ] 생체 인증 잠금 해제 (androidx.biometric) — 비밀번호 대체가 아니라 보조 수단.
-- [ ] QR 스캐너 (카메라 권한) — 주소 입력 편의.
+- [x] ~~QR 스캐너 (카메라 권한)~~ — 실시간 카메라 + 이미지 파일 (2026-08-02).
+      `CAMERA` 권한을 선언했다. 이 앱이 INTERNET 외에 요구하는 유일한 권한이고,
+      선언하지 않으면 WebView 의 `getUserMedia` 가 런타임 프롬프트도 없이 즉시
+      거부된다. `uses-feature required="false"` 를 함께 둬서 카메라 없는 단말이
+      스토어에서 걸러지지 않게 했다 — 스캔은 이미지 파일로도 되기 때문.
 - [ ] 저사양 단말 대응: scrypt N 을 단말 성능에 따라 조정할지 결정.
 
 ## 알려진 함정 (다시 밟지 말 것)

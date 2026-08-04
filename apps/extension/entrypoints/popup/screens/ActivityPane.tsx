@@ -15,7 +15,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { Activity } from '@byeorin/wallet-sdk';
-import type { ChainAdapter } from '@byeorin/wallet-sdk/core';
+// 토큰 메타는 core 서브패스에서 가져온다 — 루트 배럴은 이 심볼을 export 하지 않고,
+// core 는 이미 정적으로 쓰고 있어 popup 번들이 늘지 않는다.
+import { readPortableToken } from '@byeorin/wallet-sdk/core';
+import type { ChainAdapter, PortableTokenBalance } from '@byeorin/wallet-sdk/core';
 import type { EvmAdapter } from '@byeorin/wallet-sdk/evm';
 import { ShellError } from '@byeorin/shell-core';
 import { useT } from '@byeorin/i18n/react';
@@ -43,11 +46,9 @@ const FALLBACK_LOOKBACK = 60;
 const TTL_CHAIN_KEY = 'evm:ttl';
 const TTL_EXPLORER = 'https://scan.ttl1.top';
 
-// ActivityLog 는 토큰의 decimals 를 돌려주지 않는다 (explorer 의 tokentx 응답에도
-// 넣지 않고, RPC fallback 은 Transfer 로그의 raw value 만 본다). 데스크톱과 같이
-// ERC-20 다수파인 18 로 가정한다. USDC(6) 같은 토큰은 자릿수가 어긋나므로 금액
-// 옆에 토큰 컨트랙트를 함께 보여 사용자가 식별할 수 있게 했다.
-const ASSUMED_TOKEN_DECIMALS = 18;
+// 온체인 보충 조회의 고유 컨트랙트 상한. 활동 20건이 전부 다른 토큰이면 주소당
+// 최대 3콜(symbol/decimals/balanceOf)이라 공개 RPC rate limit 을 친다.
+const TOKEN_META_LOOKUP_LIMIT = 8;
 
 // ────────── 순수 헬퍼 (테스트 대상) ──────────
 
@@ -89,6 +90,30 @@ export function formatAmount(base: bigint, decimals: number): string {
   // 난다. 잔액 표시는 가진 것보다 많게 보이지 않는 절사가 맞다.
   const fracStr = frac.toString().padStart(decimals, '0').slice(0, 4).padEnd(4, '0');
   return `${withCommas(whole.toString())}.${fracStr}`;
+}
+
+/**
+ * 활동 항목의 token 주소로 셸이 이미 발견한 토큰 목록을 조회한다.
+ *
+ * 대소문자를 맞춰 비교하는 이유: explorer 의 tokentx 응답은 소문자 주소를 주고
+ * discovery 는 체크섬 주소를 준다. 그대로 비교하면 목록에 있는 토큰도 미상으로
+ * 떨어진다.
+ */
+export function lookupToken(
+  tokens: PortableTokenBalance[] | null,
+  addr: string,
+): PortableTokenBalance | undefined {
+  if (!tokens) return undefined;
+  const key = addr.toLowerCase();
+  return tokens.find((tk) => tk.id.toLowerCase() === key);
+}
+
+/**
+ * 자릿수를 모르는 토큰의 금액 표기. 소수점을 만들지 않는다 — 자릿수를 모르는 채
+ * 환산하면 화면 숫자 자체가 틀린다.
+ */
+export function rawAmount(v: bigint): string {
+  return withCommas(v.toString());
 }
 
 /**
@@ -160,6 +185,8 @@ export interface ActivityPaneProps {
   /** native 금액 표기용. */
   nativeSymbol: string;
   nativeDecimals: number;
+  /** 셸이 이미 발견한 토큰 목록. 활동의 token 주소로 심볼·자릿수를 찾는다. */
+  tokens: PortableTokenBalance[] | null;
 }
 
 export function ActivityPane({
@@ -169,6 +196,7 @@ export function ActivityPane({
   chainKey,
   nativeSymbol,
   nativeDecimals,
+  tokens,
 }: ActivityPaneProps) {
   const t = useT();
   const [items, setItems] = useState<Activity[] | null>(null);
@@ -178,6 +206,8 @@ export function ActivityPane({
   // 상대 시간의 기준 시각. mount/재조회 시점에 한 번 고정한다 — 매 렌더마다
   // Date.now() 를 읽으면 같은 목록이 리렌더될 때마다 문구가 흔들린다.
   const [now, setNow] = useState<number>(() => Date.now());
+  // 셸 목록에 없어 체인에서 직접 읽어 온 토큰 메타. 키는 소문자 컨트랙트 주소.
+  const [fetchedMeta, setFetchedMeta] = useState<Record<string, PortableTokenBalance>>({});
 
   const isEvm = isEvmChainKey(chainKey);
 
@@ -222,6 +252,39 @@ export function ActivityPane({
       cancelled = true;
     };
   }, [address, adapter, isEvm, reloadKey, t]);
+
+  // 온체인 보충 — 셸 목록에 없는 토큰만 뒤늦게 채운다. 조회 useEffect 와 분리한
+  // 이유: 첫 페인트를 막지 않기 위해서다. 실패는 조용히 버린다 (미상 토큰 하나가
+  // 화면 전체를 에러로 만들면 안 된다).
+  useEffect(() => {
+    if (!isEvm || !address || !items || items.length === 0) return;
+    const missing: string[] = [];
+    for (const it of items) {
+      if (!it.token) continue;
+      const key = it.token.toLowerCase();
+      if (lookupToken(tokens, key)) continue;
+      if (fetchedMeta[key]) continue;
+      if (!missing.includes(key)) missing.push(key);
+      if (missing.length >= TOKEN_META_LOOKUP_LIMIT) break;
+    }
+    if (missing.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      for (const id of missing) {
+        try {
+          const meta = await readPortableToken(adapter, id, address);
+          if (cancelled) return;
+          if (meta) setFetchedMeta((prev) => ({ ...prev, [id]: meta }));
+        } catch {
+          // readPortableToken 은 설계상 던진다. 활동 화면은 사용자가 요청한 조회가
+          // 아니므로 삼킨다 — 해당 토큰은 raw 표기로 남는다.
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [items, tokens, fetchedMeta, adapter, address, isEvm]);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
@@ -282,8 +345,21 @@ export function ActivityPane({
             const peer = out ? it.to : it.from;
             const rel = relativeParts(it.timestamp, now);
             const abs = absoluteTime(it.timestamp);
-            const decimals = it.token ? ASSUMED_TOKEN_DECIMALS : nativeDecimals;
-            const symbol = it.token ? t('activity.label.token') : nativeSymbol;
+            // 3단계 우선순위: 셸 목록 → 온체인 조회분 → 없으면 raw 표기.
+            // 자릿수를 모르면 추측하지 않는다 (모르는 것을 아는 척한 표기가 이
+            // 화면의 금액을 틀리게 만들었던 원인이다).
+            const meta = it.token
+              ? (lookupToken(tokens, it.token) ?? fetchedMeta[it.token.toLowerCase()])
+              : undefined;
+            const rawToken = it.token !== null && it.token !== undefined && !meta;
+            const amountText = rawToken
+              ? rawAmount(it.value)
+              : formatAmount(it.value, meta ? meta.decimals : nativeDecimals);
+            const symbol = it.token
+              ? meta
+                ? meta.symbol
+                : shortenHex(it.token)
+              : nativeSymbol;
             const url = explorerTxUrl(chainKey, it.hash);
             return (
               // RPC fallback 경로에서는 같은 hash 가 native/토큰 양쪽으로 잡힐 수
@@ -310,15 +386,21 @@ export function ActivityPane({
                     className={`activity-row__amount activity-row__amount--${out ? 'out' : 'in'}`}
                   >
                     {out ? '−' : '+'}
-                    {formatAmount(it.value, decimals)}{' '}
+                    {amountText}{' '}
                     <span className="activity-row__symbol">{symbol}</span>
+                    {/* 숫자만 두면 사용자가 소수로 읽는다. 금액 옆에 최소 단위임을 붙인다. */}
+                    {rawToken && (
+                      <span className="muted small"> {t('activity.label.raw_units')}</span>
+                    )}
                   </span>
                 </div>
 
                 <div className="activity-row__line activity-row__line--foot">
                   <span className="muted small" title={it.token ?? undefined}>
                     {it.token
-                      ? `${t('activity.label.token')} · ${shortenHex(it.token)}`
+                      ? meta
+                        ? `${meta.symbol} · ${shortenHex(it.token)}`
+                        : `${t('activity.label.unknown_token')} · ${shortenHex(it.token)} · ${t('activity.label.raw_units')}`
                       : nativeSymbol}
                     {' · '}
                     <span

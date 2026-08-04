@@ -39,7 +39,12 @@
 
     <!-- Permissions -->
 
-    <!-- 지갑이 필요로 하는 유일한 권한. 카메라(QR 스캔)·저장소·연락처 어느 것도
-         요구하지 않는다 — 요구하지 않는 권한이 곧 방어선이다. -->
+    <!-- 저장소·연락처는 요구하지 않는다 — 요구하지 않는 권한이 곧 방어선이다.
+         카메라는 QR 스캔 하나 때문에 선언한다. 선언이 없으면 WebView 의
+         getUserMedia 요청이 런타임 프롬프트조차 뜨지 못하고 즉시 거부된다
+         (Capacitor BridgeWebChromeClient 가 매니페스트 선언을 전제로 동작). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- 카메라 없는 기기가 스토어에서 걸러지지 않게 한다 — 스캔은 이미지 파일로도 된다. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>

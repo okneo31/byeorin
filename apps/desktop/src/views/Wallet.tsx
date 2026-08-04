@@ -53,6 +53,26 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
   const [ttlPrice, setTtlPrice] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
+  // 계정 이름 — WalletAccount 에는 label 이 없어 listAccounts() 에서 따로 읽는다.
+  // rawLabel 은 자동 이름이 아닌 원본(null 가능)이어야 편집 후에도 자동 이름 경로가 산다.
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
+  const [rawLabel, setRawLabel] = useState<string | null>(null);
+  // null 이면 보기 모드, 문자열이면 편집 중(현재 입력값).
+  const [editingLabel, setEditingLabel] = useState<string | null>(null);
+  const [labelError, setLabelError] = useState<string | null>(null);
+
+  // 잠금 화면에서 부르면 빈 배열이므로 find 결과가 undefined 인 경로를 막는다.
+  const syncActiveLabel = useCallback(() => {
+    if (!walletStore.isUnlocked()) {
+      setActiveIdx(null);
+      setRawLabel(null);
+      return;
+    }
+    const found = walletStore.listAccounts().find((a) => a.active);
+    setActiveIdx(found ? found.idx : null);
+    setRawLabel(found ? found.label : null);
+  }, []);
+
   const refreshTokens = useCallback(async (acc: WalletAccount) => {
     setTokensLoading(true);
     setTokensError(null);
@@ -88,12 +108,14 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
       return;
     }
     void walletStore.getAccount().then((a) => {
-      if (!cancelled) setAccount(a);
+      if (cancelled) return;
+      setAccount(a);
+      syncActiveLabel();
     });
     return () => {
       cancelled = true;
     };
-  }, [unlocked]);
+  }, [unlocked, syncActiveLabel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -175,12 +197,32 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
     })();
   };
 
+  // 저장 시 빈 문자열은 null 로 넘긴다 — null 이어야 자동 이름(계정 N)으로 돌아간다.
+  const saveLabel = () => {
+    if (activeIdx === null || editingLabel === null) return;
+    const next = editingLabel.trim();
+    void (async () => {
+      try {
+        await walletStore.setAccountLabel(activeIdx, next === '' ? null : next);
+        setEditingLabel(null);
+        setLabelError(null);
+        syncActiveLabel();
+      } catch (e) {
+        setLabelError(e instanceof Error ? e.message : String(e));
+      }
+    })();
+  };
+
   const lock = () => {
     void walletStore.lock();
     setAccount(null);
     setMode('idle');
     setBalance(null);
     setBalanceError(null);
+    setActiveIdx(null);
+    setRawLabel(null);
+    setEditingLabel(null);
+    setLabelError(null);
     onLock();
   };
 
@@ -190,6 +232,61 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
         <header className="nd-view__header">
           <h1 className="nd-h1">{t('nav.wallet')}</h1>
           <p className="nd-lead">{t('account.unlocked_lead')}</p>
+          {activeIdx !== null && editingLabel === null && (
+            <div className="nd-row">
+              <span className="nd-muted">
+                {rawLabel ?? t('accounts.no_label', { idx: activeIdx + 1 })}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setLabelError(null);
+                  setEditingLabel(rawLabel ?? '');
+                }}
+              >
+                {t('accounts.rename_button')}
+              </Button>
+            </div>
+          )}
+          {activeIdx !== null && editingLabel !== null && (
+            <div className="nd-row">
+              <input
+                className="nd-input"
+                value={editingLabel}
+                maxLength={32}
+                autoFocus
+                aria-label={t('accounts.rename_aria')}
+                placeholder={t('accounts.rename_placeholder')}
+                onChange={(e) => setEditingLabel(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveLabel();
+                  if (e.key === 'Escape') {
+                    setEditingLabel(null);
+                    setLabelError(null);
+                  }
+                }}
+              />
+              <Button variant="primary" size="sm" onClick={saveLabel}>
+                {t('accounts.rename_save')}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditingLabel(null);
+                  setLabelError(null);
+                }}
+              >
+                {t('common.cancel')}
+              </Button>
+            </div>
+          )}
+          {labelError && (
+            <div className="nd-error" role="alert">
+              {t('accounts.rename_failed', { reason: labelError })}
+            </div>
+          )}
         </header>
 
         <Card as="section">

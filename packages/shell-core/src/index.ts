@@ -30,6 +30,7 @@ export {
   type AddressbookEntry,
   type SelfAddressInput,
 } from './addressbook.js';
+export * from './qr/index.js';
 export {
   ShellError,
   shellError,

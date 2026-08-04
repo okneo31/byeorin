@@ -6,6 +6,65 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Unt
 
 ---
 
+## [v0.5.18] 활동 화면에 토큰 이름과 정확한 금액이 뜬다 — 2026-08-04
+
+안드로이드 `versionCode 19 / versionName 0.5.18`. 같은 이름으로 내용이 다른 산출물을 내면 매니페스트 sha256 과 versionName 이 어긋나므로 올린다.
+
+### Fixed — 활동 내역의 토큰 금액이 틀리게 보이던 문제
+- 지금까지 활동 내역의 토큰 전송 금액은 **모든 토큰의 자릿수를 18 로 가정**해서 계산했다. 자릿수가 6 인 USDC 같은 토큰은 1.5 USDC 를 보내도 화면에 `0.0000` 으로 떴다. 돈 숫자가 틀리게 보였다는 뜻이다.
+- 이제 지갑이 이미 발견한 토큰 목록에서 그 토큰의 **실제 자릿수**를 찾아 계산한다. 목록에 없으면 체인에서 직접 자릿수·심볼을 읽어와 채운다(모바일·확장 프로그램).
+- 자릿수를 끝내 모르는 토큰은 **추측하지 않는다.** 소수로 환산하지 않고 최소 단위 그대로 보여주면서 `최소 단위(자릿수 미상)` 라고 밝힌다. 모르는 것을 아는 척해서 틀린 숫자를 보여주지 않는다.
+
+### Fixed — 활동 내역에 "토큰" 이라고만 뜨던 문제
+- 토큰 전송이 심볼 없이 고정 문구 `토큰` 으로만 표시됐다. 이제 `USDC`, `WBTC` 처럼 실제 심볼이 뜬다.
+- 심볼을 못 찾은 토큰은 `미확인 토큰` 과 함께 컨트랙트 주소 축약(`0x1234…cdef`)을 보여준다.
+- 셸 4 종(웹·확장 프로그램·안드로이드·데스크톱) 전부 적용. 웹 셸은 아직 토큰 목록 상태가 없어 심볼 대신 주소 축약까지만 뜬다(금액 오류는 웹에서도 해소).
+
+### Added — 한국어/영어 문구
+- `activity.label.raw_units`(최소 단위(자릿수 미상)), `activity.label.unknown_token`(미확인 토큰) 신설.
+
+## [v0.5.17] 계정 이름 편집 · QR 스캔이 처음으로 APK 에 들어감 — 2026-08-04
+
+안드로이드 `versionCode 18 / versionName 0.5.17`. 버전을 올린 이유: 배포된 `벼린0.5.16.apk`(08-01 14:38 빌드)는 QR 작업(08-02 23:03) 이전 산출물이라 스캔 기능이 **없다**. 같은 0.5.16 이름으로 내용이 다른 APK 를 두 번 내면 매니페스트 sha256 과 versionName 이 어긋나 검증 체계가 무너진다.
+
+### Added — 계정 이름 편집
+- `WalletStore.setAccountLabel(idx, label)` 신설 (`packages/shell-core/src/store.ts`). 지금까지 라벨은 계정을 **만들 때만** 줄 수 있었고 나중에 바꿀 경로가 없었다. 주소록의 `updateLabel(id, label)`(`addressbook.ts:121`) 과 같은 모양 — 식별자 + 새 라벨, void 반환, 저장까지 수행. 범위 밖 idx 는 다른 idx API 와 같이 `account.not_found` throw.
+- 빈 문자열·공백만 입력하면 `null` 로 접힌다 → UI 가 다시 자동 이름(`accounts.no_label` = "계정 N")을 쓴다. 라벨 상한 32자, 초과분은 throw 가 아니라 잘라서 저장한다.
+- 4 종 셸 전부 활성 계정 카드에서 인라인 편집(입력창 + 저장/취소). 모달·연필 아이콘을 쓰지 않은 이유는 저장소에 그 패턴이 없어서다 — 주소록 삭제 확인의 인라인 버튼 방식을 그대로 따랐다.
+- 비밀번호 재입력 없음. 라벨 편집은 잠금 해제 상태에서만 가능하고 passphrase 는 이미 메모리에 캐시되어 있다.
+
+### Added — QR 스캔이 실제 APK 에 처음 들어감
+- 08-02 에 만든 QR 스캔(`packages/shell-core/src/qr/*`, 카메라 + 이미지 파일)이 배포 산출물에 포함되는 첫 빌드다. 코드는 이미 있었으나 사용자가 받은 APK 에는 없었다.
+
+### Changed — BTC 페그 제거분이 배포에 반영됨
+- TTL 잔액 옆은 환산값이 아니라 정의(`노동자 N 일 품삯`)라는 08-02 변경이 이 빌드부터 실제 기기에 나간다. kWR 은 값 표시가 없는 상태 그대로다.
+
+### Changed — web · desktop Vite 5 → 8
+- pnpm 중첩 의존 해석 문제로 `pnpm -r build` 가 깨져 있었다. Vite 8 로 올려 4 종 EXIT=0 복구.
+
+---
+
+## [Unreleased] TTL 이 기준 단위 · QR 스캔 — 2026-08-02
+
+미커밋 작업 트리. 상세 보고서: [`docs/TTL-BASE-UNIT-AND-QR.md`](./TTL-BASE-UNIT-AND-QR.md).
+
+### Changed — BTC 페그 제거, TTL 이 기준 단위 (`apps/android/src/App.tsx` · `apps/extension/entrypoints/popup/App.tsx`)
+- 지운 것: `PEG_ANNUAL_BTC` · `PEG_DAYS_PER_YEAR` · `PEG_TTL_PER_DAY` · `TTL_PEG_BTC` · `KWR_PEG_BTC` · `PRICE_PEG_TO_BTC` · `TTL_ANCHOR_BTC` · `nativeToTtl` · `usdToTtl` · `nativeToBtcRatio` · `nativeToBtc` · `btcPerNative`. 저장소 grep 잔재 0 건, 4 종 산출물에 `10/365`·`1/300000` 리터럴 0 건.
+- `tokenToUsd` 안의 `peg × btcUsd` 분기를 제거하고 그 자리는 `return null`. **TTL 과 외부 상장자산을 잇는 곱셈 경로가 코드에서 사라졌다.**
+- TTL 잔액 옆은 이제 환산값이 아니라 정의다 — `노동자 {v} 일 품삯`(`tokens.value_labor_days`). 1 TTL = 노동자 1 일 품삯이므로 `v = TTL 잔액` 그 자체, **곱셈·나눗셈 0 회**.
+- 외부 상장자산(BTC·ETH·SOL·USDT…)은 Binance 트랙 그대로 USD 로 잰다(`tokens.value_usd`). `t{ISO}` 토큰은 `rateByAddress → tokenAmountToTtl` 로 **TTL 로 재어진다**(`tokens.value_ttl`) — 방향이 반대다.
+- **kWR 은 값 표시를 잃었다.** 페그가 유일한 값 출처였다. 산식을 지어내지 않고 빈 자리로 뒀다.
+- i18n 신설: `tokens.value_labor_days` · `tokens.value_usd` · `tokens.t_prefix_note` · `tokens.measured_in_ttl` (ko/en).
+
+### Added — QR 스캔 (읽기)
+- 공용 순수 TS 모듈 `packages/shell-core/src/qr/{decode,parse,address,capture}.ts`. `decodeQrAuto`(BarcodeDetector 있으면 우선, 없으면 jsQR) · `parseScanned`(BIP21 / EIP-681 / 평문) · `isValidAddressFor`(EVM 은 EIP-55 실검사) · `cameraFrameSource` / `fileFrameSource` / `runScanLoop`.
+- **검증 없이 입력란에 넣는 경로가 없다** — 4 종 셸의 스캔 결과는 전부 `parseScanned` 관문을 지나고, 실패하면 주소를 채우지 않는다. 돈 보내는 자리다.
+- 실시간 카메라: 안드로이드 · 웹 · 데스크톱(카메라 있을 때만). 이미지 파일: 4 종 전부. 확장 popup 은 이미지 전용(권한 프롬프트가 popup 을 닫는다).
+- 설정 변경은 안드로이드 매니페스트 2 줄뿐 — `CAMERA` 권한 + `uses-feature required=false`. CSP 는 어느 셸도 바꾸지 않았다(MediaStream 을 `srcObject` 로만 붙이고 `blob:` URL 을 만들지 않는다).
+- 의존성 추가: `jsqr@^1.4.0` (shell-core 한 곳, 네이티브 의존 0).
+
+---
+
 ## [v0.5.16] btc-history: BIP157 실피어 시험 + 결함 9건 수정 · 릴리스 파일명에 버전 포함 — 2026-08-01
 
 커밋: `15dd271`(BTC 이력 3중 트랙) → `1c78b20`(실피어 통합 시험) → `aa25ecc`(결함 9건 수정). 안드로이드 `versionCode 17 / versionName 0.5.16`.
@@ -166,7 +225,7 @@ publisher  0x52B5dE96dC298f98a0cDf9E694De1Cc55c28f533   (ChainID 7777)
 - **실측(2026-07-28): 2·3순위는 무키 상태에서 각각 429/400 을 돌려준다. 지금은 실질 이중화가 아니다.** 목록만 보고 이중화됐다고 착각하지 않도록 코드 주석에 적어뒀다.
 
 ### Known limitations (이번 라운드에서 해결되지 않음)
-- **"BTC 페깅 해제" 가 코드에 반영되지 않았다.** `apps/extension/entrypoints/popup/App.tsx` · `apps/android/src/App.tsx` 의 `TTL_PEG_BTC = 1000/365/100` 상수가 그대로 남아 있고, 잔액 화면의 TTL 가치는 이 비율 × Binance 실시간 BTC 시세로 계산된다. 배포된 0.5.4 에서 TTL 표시 가치는 지금도 BTC 를 따라 움직인다.
+- ~~**"BTC 페깅 해제" 가 코드에 반영되지 않았다.**~~ **→ 2026-08-02 해소.** 당시 `apps/extension/entrypoints/popup/App.tsx` · `apps/android/src/App.tsx` 의 `TTL_PEG_BTC = 1000/365/100` 상수가 남아 잔액 화면의 TTL 가치가 이 비율 × Binance 실시간 BTC 시세로 계산됐다(배포된 0.5.4 기준 사실). 이후 라운드에서 `TTL_PEG_BTC`·`KWR_PEG_BTC`·`PRICE_PEG_TO_BTC`·`TTL_ANCHOR_BTC` 와 `nativeToTtl`·`usdToTtl`·`nativeToBtcRatio`·`nativeToBtc` 를 두 파일에서 제거하고 `tokenToUsd` 의 `peg × btcUsd` 분기를 `return null` 로 바꿨다 — 아래 "TTL 이 기준 단위" 항목 참고.
 - **환율 스냅샷 이후 변동을 만드는 동력이 없다.** 66 종 값은 2026-07-29 에 한 번 계산되고 고정됐고, 갱신 주체·주기·트리거 어느 것도 정해져 있지 않다.
 - **재현 빌드는 여전히 보장되지 않는다.** 앵커를 발행해도 소스↔바이너리 대응은 증명되지 않는다.
 - **publisher 가 단일 키다.** `0x52B5dE96…f533` 하나뿐이고 k-of-n 은 방향만 문서에 있고 구현이 없다.

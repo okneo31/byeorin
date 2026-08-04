@@ -9,7 +9,9 @@ import {
 } from '@byeorin/wallet-sdk';
 import { AddressDisplay, Button, Card, Input } from '@byeorin/design-system';
 import { useT } from '@byeorin/i18n/react';
+import type { ScanResult } from '@byeorin/shell-core';
 import { walletStore } from '../wallet-store.js';
+import { QrScanner } from '../components/QrScanner.js';
 
 interface Props {
   unlocked: boolean;
@@ -28,6 +30,12 @@ const TTL_DECIMALS = 18;
 
 export function Send({ unlocked, onGoWallet }: Props) {
   const t = useT();
+  // 카탈로그에 스캔 키가 아직 없을 때 키 문자열이 화면에 노출되지 않게 한다.
+  const tx = (key: string, fallback: string, vars?: Record<string, string>) => {
+    const s = t(key, vars);
+    if (s !== key) return s;
+    return vars ? fallback.replace(/\{(\w+)\}/g, (_m, k: string) => vars[k] ?? '') : fallback;
+  };
   const [account, setAccount] = useState<WalletAccount | null>(null);
   const [to, setTo] = useState('');
   const [amount, setAmount] = useState('');
@@ -38,6 +46,8 @@ export function Send({ unlocked, onGoWallet }: Props) {
   const [sending, setSending] = useState(false);
   const [tokens, setTokens] = useState<DiscoveredBalance[]>([]);
   const [asset, setAsset] = useState<AssetKey>('native');
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanNote, setScanNote] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,6 +93,46 @@ export function Send({ unlocked, onGoWallet }: Props) {
 
   const decimals = selectedToken?.token.decimals ?? TTL_DECIMALS;
   const symbol = selectedToken?.token.symbol ?? 'TTL';
+
+  // 스캔값은 검증을 통과한 것만 들어온다(parseScanned 가 주소 형식까지 본다).
+  // 남은 위험은 "형식은 맞지만 다른 체인·다른 토큰" 이므로 채우되 알린다.
+  const applyScan = (r: ScanResult) => {
+    // 정규식·EIP-55 까지만 본 값이다 — 눈으로 대조하라는 말을 항상 남긴다.
+    const notes: string[] = [
+      tx('scan.address_unchecked', '형식만 확인했습니다 — 주소를 눈으로 대조하세요.'),
+      ...r.warnings,
+    ];
+    setTo(r.address);
+    setToError(null);
+    if (r.chainHint && r.chainHint !== 'evm:ttl') {
+      notes.push(tx('scan.chain_hint_mismatch', '이 QR 은 {chain} 을(를) 가리킵니다. 지금 선택된 체인은 {current} 입니다.', { chain: r.chainHint, current: 'TTL' }));
+    }
+    if (r.tokenAddress) {
+      const hit = tokens.find(
+        (tok) => tok.token.address.toLowerCase() === r.tokenAddress?.toLowerCase(),
+      );
+      if (hit) setAsset(hit.token.address);
+      else
+        notes.push(
+          tx('scan.token_unknown', '목록에 없는 토큰이라 자산을 바꾸지 않았습니다: {token}', {
+            token: r.tokenAddress,
+          }),
+        );
+    }
+    if (r.amount) {
+      setAmount(r.amount);
+      setAmountError(null);
+    } else if (r.tokenAmountRaw) {
+      // decimals 를 모르는 raw uint256 은 추측 환산하지 않는다.
+      notes.push(
+        tx('scan.token_raw_amount', '토큰 수량({v})은 자릿수를 알 수 없어 채우지 않았습니다.', {
+          v: r.tokenAmountRaw,
+        }),
+      );
+    }
+    setScanNote(notes.length ? notes.join(' · ') : null);
+    setScanOpen(false);
+  };
 
   const submit = async () => {
     setError(null);
@@ -178,6 +228,18 @@ export function Send({ unlocked, onGoWallet }: Props) {
           error={toError ?? undefined}
         />
 
+        <div style={{ marginTop: 8 }}>
+          <Button variant="secondary" onClick={() => setScanOpen((v) => !v)} disabled={sending}>
+            {scanOpen ? tx('scan.cancel', '취소') : tx('scan.button', 'QR 스캔')}
+          </Button>
+        </div>
+
+        {scanNote && (
+          <div className="nd-lead" style={{ marginTop: 8 }}>
+            {scanNote}
+          </div>
+        )}
+
         <div style={{ height: 16 }} />
 
         <Input
@@ -212,6 +274,10 @@ export function Send({ unlocked, onGoWallet }: Props) {
           </Button>
         </div>
       </Card>
+
+      {scanOpen && (
+        <QrScanner chain="evm:ttl" onResult={applyScan} onClose={() => setScanOpen(false)} />
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityLog,
+  TokenRegistry,
   TTL_CHAIN,
   type Activity as ActivityT,
   type WalletAccount,
@@ -36,6 +37,25 @@ function fmtTime(unix: number): string {
 function shortAddr(a: string): string {
   if (!a || a.length < 12) return a;
   return `${a.slice(0, 8)}…${a.slice(-6)}`;
+}
+
+// 네이티브 심볼을 체인 정의에서 가져온다 — 화면에 'TTL' 을 박아두면 체인이 바뀔 때 틀린다.
+const NATIVE_SYMBOL = TTL_CHAIN.nativeCurrency.symbol;
+const NATIVE_DECIMALS = TTL_CHAIN.nativeCurrency.decimals;
+
+// 내장 토큰 목록. 데스크톱 셸에는 발견된 토큰 상태가 없어 이 레지스트리가 유일한 조회처다.
+const tokenRegistry = new TokenRegistry();
+
+// 자릿수를 모르는 토큰은 소수로 환산하지 않는다 — 추측한 자릿수는 금액을 틀리게 만든다.
+function withCommas(v: bigint): string {
+  return v.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+// 활동 항목의 컨트랙트 주소로 심볼·자릿수를 찾는다. 못 찾으면 null — 추측 금지.
+function resolveTokenMeta(token: string | undefined): { symbol: string; decimals: number } | null {
+  if (!token) return { symbol: NATIVE_SYMBOL, decimals: NATIVE_DECIMALS };
+  const info = tokenRegistry.getToken(TTL_CHAIN.id, token as `0x${string}`);
+  return info ? { symbol: info.symbol, decimals: info.decimals } : null;
 }
 
 export function Activity({ unlocked, onGoWallet }: Props) {
@@ -156,7 +176,11 @@ export function Activity({ unlocked, onGoWallet }: Props) {
                   account.address.toLowerCase() === it.from.toLowerCase();
                 const counterparty = isOutgoing ? it.to : it.from;
                 const sign = isOutgoing ? '-' : '+';
-                const tokenLabel = it.token ? t('activity.label.token') : t('activity.label.native');
+                const meta = resolveTokenMeta(it.token);
+                // 심볼 자리에 고정 문구 "토큰" 을 쓰지 않는다 — 모르면 주소를 그대로 보여준다.
+                const tokenLabel = meta
+                  ? meta.symbol
+                  : `${t('activity.label.unknown_token')} · ${shortAddr(it.token as string)}`;
                 return (
                   <tr key={`${it.hash}-${it.blockNumber}`}>
                     <td>{fmtTime(it.timestamp)}</td>
@@ -166,13 +190,21 @@ export function Activity({ unlocked, onGoWallet }: Props) {
                     <td className="nd-mono">{shortAddr(counterparty)}</td>
                     <td className="nd-mono" style={{ textAlign: 'right' }}>
                       {sign}
-                      <AmountDisplay
-                        value={it.value}
-                        decimals={18}
-                        symbol={it.token ? 'TOK' : 'TTL'}
-                        maxDecimals={4}
-                        size="sm"
-                      />
+                      {meta ? (
+                        <AmountDisplay
+                          value={it.value}
+                          decimals={meta.decimals}
+                          symbol={meta.symbol}
+                          maxDecimals={4}
+                          size="sm"
+                        />
+                      ) : (
+                        // 자릿수 미상 — 최소 단위임을 금액 옆에 붙여 소수로 오독되지 않게 한다.
+                        <span title={t('activity.label.raw_units')}>
+                          {withCommas(it.value)} {shortAddr(it.token as string)}{' '}
+                          <span className="nd-muted">({t('activity.label.raw_units')})</span>
+                        </span>
+                      )}
                     </td>
                     <td>
                       <a

@@ -1,6 +1,6 @@
 {
   "name": "@byeorin/extension",
-  "version": "0.0.1",
+  "version": "0.5.18",
   "private": true,
   "type": "module",
   "description": "벼린 — 브라우저 확장 (MV3, EIP-1193)",

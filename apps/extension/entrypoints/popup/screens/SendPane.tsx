@@ -16,7 +16,7 @@
 
 import { useMemo, useState } from 'react';
 import type { ChainAdapter, TransferIntent } from '@byeorin/wallet-sdk/core';
-import { ShellError, type Addressbook } from '@byeorin/shell-core';
+import { ShellError, type Addressbook, type ScanResult } from '@byeorin/shell-core';
 import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../../../src/lib/wallet-service.js';
 import { useAddressbookSuggestions } from './AddressbookPane.js';
@@ -29,6 +29,7 @@ import {
   type SelectedAsset,
 } from '../lib/token-send.js';
 import type { PortableTokenBalance } from '../lib/token-visibility.js';
+import { QrScanField } from './QrScanField.js';
 
 export interface SendPaneProps {
   onBack: () => void;
@@ -84,6 +85,9 @@ export function SendPane({
   // "최대" 로 채웠고 아직 사용자가 수정하지 않았다는 표시 — native 는 가스를
   // 뺀 값이라 왜 잔액보다 작은지 화면이 설명해야 한다.
   const [maxNote, setMaxNote] = useState(false);
+  // 스캔이 주소 말고 무엇을 더 채웠는지 사용자에게 밝히는 줄. 돈 보내는 자리라
+  // "어디서 온 값인가" 를 화면이 말하지 않으면 안 된다.
+  const [scanNote, setScanNote] = useState<string | null>(null);
 
   // 주소록 자동완성 후보 — 활성 체인 엔트리만. book 이 null 이면 빈 배열.
   const suggestions = useAddressbookSuggestions(book, chainKey);
@@ -160,6 +164,48 @@ export function SendPane({
     } catch {
       // 수수료를 모르면 조용히 둔다 — 사용자는 손으로 입력할 수 있다.
     }
+  }
+
+  /**
+   * 검증을 통과한 스캔 결과를 입력란에 옮긴다.
+   *
+   * 주소는 shell-core 가 이미 이 체인의 형식으로 확인한 값이므로 그대로 넣는다.
+   * 금액은 **native 자산이 선택돼 있을 때만** 옮긴다 — BIP21 의 BTC 수량을 토큰
+   * 칸에 넣으면 단위가 다른 숫자가 된다. EIP-681 의 토큰 수량(uint256)은 decimals
+   * 를 QR 이 담지 않으므로 아예 채우지 않고 사용자가 직접 적게 둔다.
+   */
+  function applyScan(r: ScanResult): void {
+    setTo(r.address);
+    setMaxNote(false);
+    const notes: string[] = [];
+
+    if (r.tokenAddress !== undefined) {
+      const wanted = r.tokenAddress;
+      const hit = tokenOptions.find((tok) => tok.id.toLowerCase() === wanted.toLowerCase());
+      if (hit) {
+        setAssetKey(hit.id);
+        notes.push(`${t('send.asset_label')}: ${hit.symbol}`);
+      } else {
+        // 목록에 없는 토큰이면 자산을 바꾸지 않는다 — 정체 모르는 자산으로
+        // 보내는 상태를 만들지 않기 위해 컨트랙트 주소만 보여 준다.
+        notes.push(`${t('scan.result_raw')}: ${wanted}`);
+      }
+      if (r.tokenAmountRaw !== undefined)
+        notes.push(t('scan.token_raw_amount', { v: r.tokenAmountRaw }));
+    } else if (r.amount !== undefined) {
+      if (assetKey === 'native') {
+        setAmount(r.amount);
+        notes.push(t('scan.amount_filled', { amount: r.amount, symbol: asset.symbol }));
+      } else {
+        notes.push(t('scan.amount_ignored'));
+      }
+    }
+
+    if (r.label !== undefined && r.label.length > 0) notes.push(r.label);
+    if (r.message !== undefined && r.message.length > 0) notes.push(r.message);
+    for (const w of r.warnings) notes.push(w);
+    notes.push(t('scan.address_unchecked'));
+    setScanNote(notes.length > 0 ? notes.join(' · ') : null);
   }
 
   function amountErrorText(reason: 'format' | 'decimals' | 'insufficient'): string {
@@ -361,6 +407,8 @@ export function SendPane({
       {trimmedTo.length > 0 && !validAddress && (
         <p className="error small">{t('send.to_invalid')}</p>
       )}
+      <QrScanField chainKey={chainKey} onScan={applyScan} disabled={locked} />
+      {scanNote !== null && <p className="muted small">{scanNote}</p>}
 
       <label className="label" htmlFor="send-amount">
         {t('send.amount_label', { symbol: asset.symbol })}

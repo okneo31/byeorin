@@ -19,12 +19,19 @@
 // 가져온 값을 props 로 받는다 — 같은 화면에서 같은 RPC 를 두 번 때리지 않기
 // 위해서다.
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ChainAdapter, TransferIntent } from '@byeorin/wallet-sdk/core';
-import { ShellError, type Addressbook } from '@byeorin/shell-core';
+import type { ChainKey } from '@byeorin/wallet-sdk/multichain';
+import {
+  ShellError,
+  baseUnitsToDecimalString,
+  parseScanned,
+  type Addressbook,
+} from '@byeorin/shell-core';
 import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../wallet-service.js';
 import { useAddressbookSuggestions } from './AddressbookPane.js';
+import { QrScanner } from './QrScanner.js';
 import {
   buildTransferIntent,
   assetAmountToInputString,
@@ -102,6 +109,56 @@ export function SendPane({
   // 토큰 셀렉터의 유일한 조건: 받은 목록이 비어 있지 않은가. 체인은 묻지 않는다.
   const tokenOptions: readonly PortableTokenBalance[] = tokens ?? [];
   const showAssetPicker = tokenOptions.length > 0;
+
+  // QR 스캔 — 읽은 값은 곧바로 입력란에 들어가지 않는다. 돈 보내는 자리라
+  // parseScanned 가 형식·주소 검증까지 끝낸 것만 받아들이고, 아니면 사유를 알린다.
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState<string | null>(null);
+  // Cosmos 는 bech32 HRP 까지 봐야 다른 코스모스 체인 주소를 걸러낼 수 있다.
+  // 접두는 어댑터가 이미 갖고 있으므로 구조적으로 꺼내 쓴다.
+  const bech32Prefix = (adapter as Partial<{ bech32Prefix: string }>).bech32Prefix;
+
+  const handleScanned = useCallback(
+    (text: string) => {
+      const res = parseScanned(text, chainKey as ChainKey, { bech32Prefix });
+      if (!res.ok) {
+        // 코드는 케밥('bad-address'), i18n 키는 스네이크 — 안 바꾸면 번역이
+        // 통째로 빗나가 사용자 화면에 키 문자열이 그대로 뜬다.
+        setScanNote(t(`scan.error.${res.code.replace(/-/g, '_')}`));
+        return;
+      }
+      setScanning(false);
+      setTo(res.address);
+      const notes: string[] = [];
+      if (res.chainHint !== undefined && res.chainHint !== chainKey) {
+        notes.push(t('scan.chain_hint_mismatch', { chain: res.chainHint }));
+      }
+      if (res.tokenAddress !== undefined) {
+        // 토큰 컨트랙트가 붙어 온 QR — 상위가 발견한 목록에 있어야 decimals 를
+        // 알고, 그래야 최소 단위 수량을 표시 수량으로 바꿀 수 있다. 없으면
+        // 추측하지 않고 자산 선택을 사용자에게 남긴다.
+        const hit = (tokens ?? []).find(
+          (tok) => tok.id.toLowerCase() === res.tokenAddress?.toLowerCase(),
+        );
+        if (hit) {
+          setAssetKey(hit.id);
+          if (res.tokenAmountRaw !== undefined) {
+            setAmount(baseUnitsToDecimalString(res.tokenAmountRaw, hit.decimals));
+            setMaxNote(false);
+          }
+        } else {
+          notes.push(t('scan.token_unknown', { token: res.tokenAddress }));
+        }
+      } else if (res.amount !== undefined) {
+        setAssetKey('native');
+        setAmount(res.amount);
+        setMaxNote(false);
+      }
+      setScanNote(notes.length > 0 ? notes.join(' ') : null);
+    },
+    [bech32Prefix, chainKey, t, tokens],
+  );
+
 
   // 선택 자산 — 심볼/decimals/잔액이 여기서 하나로 확정된다. native 18 과 토큰
   // decimals 를 섞지 않기 위해 아래 파싱·표시는 전부 이 값만 본다.
@@ -370,6 +427,27 @@ export function SendPane({
           ))}
         </datalist>
       )}
+      <button
+        type="button"
+        className="btn-ghost"
+        onClick={() => {
+          setScanNote(null);
+          setScanning((v) => !v);
+        }}
+        disabled={locked}
+      >
+        {scanning ? t('common.cancel') : t('scan.button')}
+      </button>
+      {scanning && (
+        <QrScanner
+          onText={handleScanned}
+          onClose={() => {
+            setScanning(false);
+            setScanNote(null);
+          }}
+        />
+      )}
+      {scanNote !== null && <p className="error small">{scanNote}</p>}
       {trimmedTo.length > 0 && !validAddress && (
         <p className="error small">{t('send.to_invalid')}</p>
       )}

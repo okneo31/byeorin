@@ -266,40 +266,16 @@ function withManualTokens(
   return [...discovered, ...manual.filter((x) => !seen.has(x.id.toLowerCase()))];
 }
 
-// 가치 표시 — 잔액을 BTC 단위로 보여주고, 클릭하면 USD 토글.
+// 가치 표시 — 두 눈금을 코드 수준에서 갈라 둔다.
 //
-// 시세 출처: Binance `api/v3/ticker/price` 전체 ticker 1회 fetch + 메모리 캐시.
-// 각 코인의 BTC pair (예: ETHBTC, SOLBTC) 와 BTCUSDT 만 사용한다.
+// TTL 은 기준이라 무엇으로도 바꿔 적지 않는다. TTL 옆에는 환산값이 아니라
+// TTL 자신의 정의(노동자 하루 품삯)가 온다.
 //
-// 미상장 토큰의 페그 — Binance 에 없는 토큰은 BTC 페그로 내재 가치를 둔다.
+// 상장자산(BTC·ETH·SOL…)만 Binance `api/v3/ticker/price` 전체 ticker 1회 fetch +
+// 메모리 캐시로 재고, 그 눈금은 USD 다.
 //
-// TTL 은 **노동가치 기준** 으로 잡는다 (2026-07-25 결정).
-//
-// 단위의 뜻: **1 TTL = 일반 노동자의 하루 품삯** — 마태복음 20장 포도원 일꾼의
-// "데나리온" 과 같은 단위다. 하루 일한 사람은 하루치를 받는다.
-//
-// 그 하루치의 BTC 환산은 설계자 한 사람의 몫을 나누는 데서 나온다:
-//   설계자 기준 연봉 1000 BTC ÷ 365 일 = 설계자의 하루
-//   설계자의 하루 = 100 TTL (= 노동자 100 명의 하루 품삯)
-//   → 1 TTL = 1000 / 365 / 100 = 10/365 ≈ 0.02739726 BTC
-//
-// 최종 비율 하나로 적지 않고 상수 셋으로 쪼갠 이유: 나중에 바뀌는 값은 "기준
-// 연봉" 이나 "설계자 하루당 TTL" 이지 비율이 아니다. 근거가 코드에 남아 있어야
-// 다음에 조정할 때 무엇을 건드려야 하는지 바로 보인다.
-const PEG_ANNUAL_BTC = 1000; // 설계자 기준 연봉 (BTC)
-const PEG_DAYS_PER_YEAR = 365; // 연봉을 나누는 일수
-const PEG_TTL_PER_DAY = 100; // 설계자의 하루를 나눈 몫 = 노동자 100 명의 하루 품삯
-const TTL_PEG_BTC = PEG_ANNUAL_BTC / PEG_DAYS_PER_YEAR / PEG_TTL_PER_DAY;
-
-// kWR(ZION) 은 **TTL 을 따라가지 않는다.** 예전에 1/300,000 으로 같이 뒀던 건
-// "미상장이니 일단 TTL 과 동일하게" 라는 임시 가정이었고, 위 노동가치 근거는
-// TTL 전용이다. ZION 쪽 별도 결정이 나올 때까지 옛 값을 유지한다.
-const KWR_PEG_BTC = 1 / 300_000;
-
-const PRICE_PEG_TO_BTC: Record<string, number> = {
-  TTL: TTL_PEG_BTC,
-  kWR: KWR_PEG_BTC,
-};
+// 두 눈금은 만나지 않는다 — 미상장 자산에 페그를 두면 BTC 가 움직일 때 TTL
+// 표시 가치가 따라 움직인다. 그래서 페그 상수를 두지 않는다.
 
 /** shell-core 도메인 에러를 i18n 키로 변환. 그 외 Error 는 메시지 그대로. */
 function localizeShellError(t: (k: string) => string, e: unknown, fallback: string): string {
@@ -325,7 +301,6 @@ export function App() {
   // Binance 시세 캐시 (popup mount 시 1회 fetch). symbol → price (USDT 또는 BTC pair).
   // 예: prices['BTCUSDT']=61234, prices['ETHBTC']=0.0521, ...
   const [prices, setPrices] = useState<Record<string, number> | null>(null);
-  // BTC ↔ USD 토글 — 모든 활성 계정 카드가 공유 (사용자가 한 번 USD 켜면 체인 바꿔도 유지).
   // 송금 화면이 쓸 자산 정보 — ActiveAccountCard 가 이미 조회한 값을 끌어올린다.
   // 카드는 mode==='home' 에서만 마운트되므로 App 이 들고 있어야 send 화면에서 산다.
   const [sendTokens, setSendTokens] = useState<PortableTokenBalance[] | null>(null);
@@ -558,6 +533,13 @@ export function App() {
     }
   }
 
+  // 계정 이름 변경 — 만들 때만 주던 이름을 나중에도 바꾼다.
+  // 실패는 카드 안에서 보여야 하므로 여기서 삼키지 않고 그대로 던진다.
+  async function handleRenameAccount(idx: number, label: string | null): Promise<void> {
+    await walletStore.setAccountLabel(idx, label);
+    refreshAccounts();
+  }
+
   async function handleLogout(): Promise<void> {
     await walletStore.lock();
     refreshAccounts();
@@ -640,6 +622,7 @@ export function App() {
             accounts={accounts}
             onSelect={handleSelectAccount}
             onRemove={handleRemoveAccount}
+            onRenameLabel={handleRenameAccount}
             onAddClick={() => setMode('add-menu')}
             onShowKey={() => setMode('export')}
             onSend={() => setMode('send')}
@@ -735,6 +718,7 @@ export function App() {
           chainKey={activeChainKey}
           nativeSymbol={effectiveSymbol}
           nativeDecimals={effectiveDecimals}
+          tokens={sendTokens}
         />
       )}
 
@@ -870,6 +854,7 @@ function AccountListCard({
   accounts,
   onSelect,
   onRemove,
+  onRenameLabel,
   onAddClick,
   onShowKey,
   onSend,
@@ -894,6 +879,8 @@ function AccountListCard({
   accounts: AccountInfo[];
   onSelect: (idx: number) => void;
   onRemove: (idx: number) => void;
+  /** 실패를 카드 안에서 보여야 하므로 reject 를 그대로 위임받는다. */
+  onRenameLabel: (idx: number, label: string | null) => Promise<void>;
   onAddClick: () => void;
   onShowKey: () => void;
   onSend: () => void;
@@ -929,6 +916,8 @@ function AccountListCard({
         <ActiveAccountCard
           account={active}
           label={labelOf(active)}
+          rawLabel={active.label}
+          onRenameLabel={onRenameLabel}
           onShowKey={onShowKey}
           onSend={onSend}
           onSwap={onSwap}
@@ -1010,6 +999,8 @@ function AccountListCard({
 function ActiveAccountCard({
   account,
   label,
+  rawLabel,
+  onRenameLabel,
   onShowKey,
   onSend,
   onSwap,
@@ -1032,6 +1023,9 @@ function ActiveAccountCard({
 }: {
   account: AccountInfo;
   label: string;
+  /** 폴백('계정 N')이 아닌 원본 라벨 — 편집 입력의 초기값이 자동 이름으로 굳으면 안 된다. */
+  rawLabel: string | null;
+  onRenameLabel: (idx: number, label: string | null) => Promise<void>;
   onShowKey: () => void;
   onSend: () => void;
   onSwap: () => void;
@@ -1063,6 +1057,11 @@ function ActiveAccountCard({
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [showQr, setShowQr] = useState(false);
   const [copied, setCopied] = useState(false);
+  // 이름 편집 — null 이면 보기 모드, 문자열이면 편집 중(현재 입력값).
+  // 주소록의 pendingRemove 와 같은 인라인 방식이다. popup 이 좁아 모달을 쓰지 않는다.
+  const [editingLabel, setEditingLabel] = useState<string | null>(null);
+  const [renameErr, setRenameErr] = useState<string | null>(null);
+  const [renameBusy, setRenameBusy] = useState(false);
   // ZION 활성 시 4종 자산(utrg/ubtc/uusdt/ueth) 잔액 맵. denom → base-unit bigint.
   // 다른 체인일 때는 null 로 두고 활성 카드의 ZION 자산 list 자체를 안 그린다.
   const [zionBalances, setZionBalances] = useState<Record<string, bigint> | null>(null);
@@ -1136,12 +1135,19 @@ function ActiveAccountCard({
     onNativeBalanceChange(balance);
   }, [balance, onNativeBalanceChange]);
 
-  // native asset → BTC 비율. 미상장(TTL/kWR) 은 PRICE_PEG_TO_BTC 페그, 그 외는
-  // Binance ticker 의 {SYM}BTC pair. BTC 자체는 1:1.
-  const btcPerNative = nativeToBtcRatio(nativeSymbol, prices);
-  // TTL 기준 환산. TTL 자신은 null 이라 보조 줄이 아예 그려지지 않는다.
-  const nativeTtl =
-    balance === null ? null : nativeToTtl(balance, nativeDecimals, nativeSymbol, prices);
+  // 1 TTL = 노동자 하루 품삯이므로 일수는 잔액 그 자체다 — 환산 계수가 없다.
+  const nativeLaborDays =
+    nativeSymbol === 'TTL' && balance !== null
+      ? baseUnitToNumber(balance, nativeDecimals)
+      : null;
+  // 상장자산만 Binance 눈금으로 잰다. TTL 은 여기 오지 않는다.
+  const nativeUsd =
+    balance === null || nativeSymbol === 'TTL'
+      ? null
+      : (() => {
+          const p = tokenToUsd(nativeSymbol, prices);
+          return p === null ? null : baseUnitToNumber(balance, nativeDecimals) * p;
+        })();
 
   // 활성 계정 × 활성 체인 → 주소. getAccountAt 은 sync.
   useEffect(() => {
@@ -1351,6 +1357,22 @@ function ActiveAccountCard({
     };
   }, [chainAddress]);
 
+  // 저장 — 빈 문자열은 null 로 넘긴다. 라벨이 null 이어야 자동 이름('계정 N')이 다시 산다.
+  async function submitRename(): Promise<void> {
+    if (editingLabel === null) return;
+    const next = editingLabel.trim();
+    setRenameBusy(true);
+    setRenameErr(null);
+    try {
+      await onRenameLabel(account.idx, next === '' ? null : next);
+      setEditingLabel(null);
+    } catch (e) {
+      setRenameErr(localizeShellError(t, e, t('errors.unknown')));
+    } finally {
+      setRenameBusy(false);
+    }
+  }
+
   async function copyAddress(): Promise<void> {
     if (!chainAddress) return;
     try {
@@ -1397,8 +1419,61 @@ function ActiveAccountCard({
       <p className="account-kind-badge">
         {t(`accounts.kind.${account.kind === 'mnemonic' ? 'mnemonic' : 'private_key'}`)}
         {' · '}
-        {label}
+        {editingLabel === null ? (
+          <>
+            {label}{' '}
+            <button
+              className="btn-ghost btn-sm"
+              onClick={() => {
+                setRenameErr(null);
+                // 폴백 이름이 아니라 원본 라벨로 연다 — 빈 값이면 빈 입력.
+                setEditingLabel(rawLabel ?? '');
+              }}
+            >
+              {t('accounts.rename_button')}
+            </button>
+          </>
+        ) : (
+          <>
+            <input
+              className="input"
+              type="text"
+              maxLength={32}
+              autoFocus
+              aria-label={t('accounts.rename_aria')}
+              placeholder={t('accounts.rename_placeholder')}
+              value={editingLabel}
+              disabled={renameBusy}
+              onChange={(e) => setEditingLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void submitRename();
+                else if (e.key === 'Escape') {
+                  setEditingLabel(null);
+                  setRenameErr(null);
+                }
+              }}
+            />
+            <button className="btn-ghost btn-sm" disabled={renameBusy} onClick={() => void submitRename()}>
+              {t('accounts.rename_save')}
+            </button>
+            <button
+              className="btn-ghost btn-sm"
+              disabled={renameBusy}
+              onClick={() => {
+                setEditingLabel(null);
+                setRenameErr(null);
+              }}
+            >
+              {t('common.cancel')}
+            </button>
+          </>
+        )}
       </p>
+      {renameErr && (
+        <p className="error small" role="alert">
+          {t('accounts.rename_failed', { reason: renameErr })}
+        </p>
+      )}
 
       {addrUnsupported ? (
         <p className="warn small" role="alert">
@@ -1406,7 +1481,7 @@ function ActiveAccountCard({
         </p>
       ) : (
         <>
-          {/* 잔액 히어로 — 위: native 잔액(메인), 아래: BTC/USD 환산(보조, 토글) */}
+          {/* 잔액 히어로 — 위: native 잔액(메인), 아래: TTL 이면 그 정의, 상장자산이면 USD */}
           <div className="balance-hero">
             {balanceLoading ? (
               <span className="muted small">{t('account.balance_loading')}</span>
@@ -1420,12 +1495,18 @@ function ActiveAccountCard({
                   {formatAmount(balance, nativeDecimals)}
                   <span className="balance-hero__symbol">{nativeSymbol}</span>
                 </p>
-                {/* TTL 은 기준이라 보조 표시가 없다. 나머지 자산만 TTL 로 환산해
-                    보여준다 — 이 지갑의 모든 가치는 TTL 로 읽힌다. */}
-                {nativeTtl !== null && (
+                {/* TTL 은 바꿔 적지 않고 제 정의를 적는다. 상장자산만 USD 로 잰다.
+                    둘 다 아닌 자산(kWR 등)은 값을 모르므로 비운다. */}
+                {nativeLaborDays !== null ? (
                   <p className="balance-hero__toggle" style={{ cursor: 'default' }}>
-                    {t('tokens.value_ttl', { v: formatTtl(nativeTtl) })}
+                    {t('tokens.value_labor_days', { v: formatTtl(nativeLaborDays) })}
                   </p>
+                ) : (
+                  nativeUsd !== null && (
+                    <p className="balance-hero__toggle" style={{ cursor: 'default' }}>
+                      {t('tokens.value_usd', { v: formatUsd(nativeUsd) })}
+                    </p>
+                  )
                 )}
               </>
             )}
@@ -1444,16 +1525,14 @@ function ActiveAccountCard({
                   usd !== null && amount > 0n
                     ? baseUnitToNumber(amount, a.decimals) * usd
                     : null;
-                // 이 지갑의 모든 가치는 TTL 로 읽힌다.
-                const zionTtl = usdValue === null ? null : usdToTtl(usdValue, prices);
                 return (
                   <li key={a.denom} className="zion-assets__row">
                     <span className="zion-assets__symbol">{a.symbol}</span>
                     <span className="zion-assets__amount">
                       {formatAmount(amount, a.decimals)}
-                      {zionTtl !== null && (
+                      {usdValue !== null && (
                         <span className="zion-assets__usd">
-                          {t('tokens.value_ttl', { v: formatTtl(zionTtl) })}
+                          {t('tokens.value_usd', { v: formatUsd(usdValue) })}
                         </span>
                       )}
                     </span>
@@ -1504,12 +1583,9 @@ function ActiveAccountCard({
                               {t('tokens.value_ttl', { v: formatTtl(ttl) })}
                             </span>
                           ) : (
-                            usdValue !== null &&
-                            usdToTtl(usdValue, prices) !== null && (
+                            usdValue !== null && (
                               <span className="zion-assets__usd">
-                                {t('tokens.value_ttl', {
-                                  v: formatTtl(usdToTtl(usdValue, prices)!),
-                                })}
+                                {t('tokens.value_usd', { v: formatUsd(usdValue) })}
                               </span>
                             )
                           )}
@@ -2026,66 +2102,14 @@ function formatAmount(base: bigint | null, decimals: number): string {
   return `${withCommas(whole.toString())}.${fracStr}`;
 }
 
-// ────────── TTL 기준 환산 ──────────
+// ────────── 두 개의 눈금 ──────────
 //
-// **TTL 은 기준(numeraire)이다. 환산해 보여줄 대상이 아니다.**
+// TTL 은 기준이다. 다른 것으로 바꿔 적지 않는다 — TTL 옆에 오는 것은 환산값이
+// 아니라 TTL 자신의 정의(노동자 하루 품삯)다.
 //
-// 2026-07-29 00:00 KST 의 BTC 63,412.45 로 TTL 의 절대 눈금을 한 번 정하고
-// BTC 페깅을 해제했다. 그 전에는 "TTL 이 BTC 로 얼마냐" 를 매번 물었고, 그래서
-// BTC 가 움직이면 TTL 표시 가치가 따라 움직였다 — 그게 페깅이다.
-//
-// 이제 방향이 반대다. 앵커를 고정값으로 박아두고 **"X 가 TTL 로 얼마냐" 만**
-// 묻는다. BTC 시세가 움직여도 TTL 은 안 움직이고, 움직이는 것은 BTC 의 TTL
-// 가격이다.
-//
-// 1 TTL ≡ 10/365/100 BTC = 0.02739726 BTC  →  1 BTC = 36.5 TTL (고정)
-const TTL_ANCHOR_BTC = PEG_ANNUAL_BTC / PEG_DAYS_PER_YEAR / PEG_TTL_PER_DAY;
-
-/**
- * native 자산 잔액 → TTL. 환산할 수 없으면 null (0 이 아니다 — 0 은 "가치 없음"
- * 으로 오해된다).
- *
- * TTL 자신은 환산하지 않는다. 기준을 기준으로 나누면 늘 1 이고, 화면에
- * "1 TTL ≈ 1 TTL" 을 적을 이유가 없다.
- */
-function nativeToTtl(
-  balance: bigint,
-  decimals: number,
-  symbol: string,
-  prices: Record<string, number> | null,
-): number | null {
-  if (symbol === 'TTL') return null;
-  const btcPer = nativeToBtcRatio(symbol, prices);
-  if (btcPer === null || !(TTL_ANCHOR_BTC > 0)) return null;
-  return nativeToBtc(balance, decimals, btcPer) / TTL_ANCHOR_BTC;
-}
-
-/**
- * USD 환산값 → TTL. 앵커가 고정이므로 TTL 자신은 재평가되지 않는다.
- *
- * 벼린 환율에 없는 자산(일반 ERC-20, ZION 4종 등)을 TTL 로 보여주기 위한 경로다.
- * 시세로 USD 를 구한 뒤 BTC 를 거쳐 앵커로 나눈다. 시세가 움직이면 그 자산의
- * TTL 가격이 움직일 뿐, TTL 의 가치는 고정이다.
- */
-function usdToTtl(usd: number, prices: Record<string, number> | null): number | null {
-  const btcUsd = prices?.['BTCUSDT'];
-  if (btcUsd === undefined || !(btcUsd > 0) || !(TTL_ANCHOR_BTC > 0)) return null;
-  return usd / btcUsd / TTL_ANCHOR_BTC;
-}
-
-// native 심볼 → 1 unit native = X BTC. 미상장(TTL/kWR) 은 PRICE_PEG_TO_BTC,
-// 그 외는 Binance {SYM}BTC pair. BTC 는 1:1. 시세 없으면 null (UI 에서 "—" 표시).
-function nativeToBtcRatio(
-  symbol: string,
-  prices: Record<string, number> | null,
-): number | null {
-  const peg = PRICE_PEG_TO_BTC[symbol];
-  if (peg !== undefined) return peg;
-  if (symbol === 'BTC') return 1;
-  if (!prices) return null;
-  const pair = `${symbol.toUpperCase()}BTC`;
-  return prices[pair] ?? null;
-}
+// 방향은 반대로만 흐른다: t{ISO} 통화토큰이 TTL 로 재어진다(rate-snapshot 경로).
+// BTC·ETH 같은 외부 상장자산은 Binance 눈금(USD)으로만 잰다.
+// 두 눈금은 만나지 않는다 — 잇는 상수를 두면 TTL 이 다시 시세를 따라간다.
 
 // 임의 ERC-20/ZION 토큰 심볼 → 1 unit = X USD. Binance ticker 의 {SYM}USDT pair
 // 를 우선 시도, 없으면 {SYM}BTC × BTCUSDT 우회. 스테이블코인 (USDC/USDT/DAI)
@@ -2117,11 +2141,8 @@ function tokenToUsd(
   if (sym.startsWith('W') && sym.length > 1) {
     return tokenToUsd(sym.slice(1), prices);
   }
-  // ZION 미상장 — kWR 은 PEG 으로 매핑
-  const peg = PRICE_PEG_TO_BTC[sym];
-  if (peg !== undefined && btcUsd !== undefined && btcUsd > 0) {
-    return peg * btcUsd;
-  }
+  // 미상장 자산은 Binance 눈금 위에 없다. 값을 모르므로 null — 지어낸 환산을
+  // 끼워 넣으면 TTL 눈금과 시세 눈금이 다시 이어진다.
   return null;
 }
 
@@ -2134,14 +2155,15 @@ function baseUnitToNumber(amount: bigint, decimals: number): number {
   return Number(whole) + Number(frac) / Number(factor);
 }
 
-// 잔액(bigint base-unit) + 체인 decimals + (1 native = X BTC) → BTC 수량.
-// BigInt 정확도를 number 로 좁히는 지점은 마지막 곱셈 한 번만.
-function nativeToBtc(balance: bigint, decimals: number, btcPerNative: number): number {
-  const factor = 10n ** BigInt(decimals);
-  const whole = balance / factor;
-  const frac = balance % factor;
-  const nativeAsNum = Number(whole) + Number(frac) / Number(factor);
-  return nativeAsNum * btcPerNative;
+// 상장자산 USD 표시용. 소수 둘째 자리 아래는 화면에서 의미가 없고, 0 으로
+// 적으면 "가치 없음" 으로 읽히므로 아주 작은 값은 '<0.01' 로 구분해 적는다.
+function formatUsd(v: number): string {
+  if (!Number.isFinite(v)) return '—';
+  if (v === 0) return '0';
+  if (Math.abs(v) < 0.01) return '<0.01';
+  const fixed = Math.abs(v).toFixed(2);
+  const [whole, frac] = fixed.split('.') as [string, string];
+  return `${v < 0 ? '-' : ''}${withCommas(whole)}.${frac}`;
 }
 
 // ────────── 계정 추가 메뉴 ──────────

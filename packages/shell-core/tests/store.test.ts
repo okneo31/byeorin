@@ -519,3 +519,85 @@ describe('WalletStore — session serialization v2', () => {
     expect(store2.listAccounts()[0]!.kind).toBe('mnemonic');
   });
 });
+
+// 계정 라벨 편집 — 생성 후에도 이름을 바꿀 수 있어야 한다.
+describe('WalletStore — setAccountLabel', () => {
+  it('sets a label on an account that had none', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    await store.setAccountLabel(0, '내 월급통장');
+    expect(store.listAccounts()[0]!.label).toBe('내 월급통장');
+  });
+
+  it('overwrites an existing label', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    const idx = await store.addMnemonicAccount(SECOND_MNEMONIC, 'secondary');
+    await store.setAccountLabel(idx, 'renamed');
+    expect(store.listAccounts()[idx]!.label).toBe('renamed');
+  });
+
+  it('empty string and whitespace-only collapse to null (auto name returns)', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    const idx = await store.addMnemonicAccount(SECOND_MNEMONIC, 'secondary');
+    await store.setAccountLabel(idx, '');
+    expect(store.listAccounts()[idx]!.label).toBeNull();
+    await store.setAccountLabel(idx, 'x');
+    await store.setAccountLabel(idx, '   ');
+    expect(store.listAccounts()[idx]!.label).toBeNull();
+  });
+
+  it('explicit null clears the label', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    const idx = await store.addMnemonicAccount(SECOND_MNEMONIC, 'secondary');
+    await store.setAccountLabel(idx, null);
+    expect(store.listAccounts()[idx]!.label).toBeNull();
+  });
+
+  it('strips control characters and collapses inner whitespace', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    await store.setAccountLabel(0, '내\n\n통장  A');
+    expect(store.listAccounts()[0]!.label).toBe('내 통장 A');
+  });
+
+  it('truncates labels longer than 32 chars', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    await store.setAccountLabel(0, 'a'.repeat(40));
+    expect(store.listAccounts()[0]!.label).toBe('a'.repeat(32));
+  });
+
+  it('throws account.not_found for an out-of-range index', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    await expect(store.setAccountLabel(5, 'x')).rejects.toBeInstanceOf(ShellError);
+  });
+
+  it('persists the label into the v2 blob and survives tryAutoRestore', async () => {
+    const session = new AutoRestoreMemorySession();
+    const { store } = makeStore({ session });
+    await store.unlock(MNEMONIC);
+    const idx = await store.addMnemonicAccount(SECOND_MNEMONIC);
+    await store.setAccountLabel(idx, '비상금');
+
+    const raw = await session.read();
+    const parsed = JSON.parse(raw!) as { accounts: Array<{ label: string | null }> };
+    expect(parsed.accounts[idx]!.label).toBe('비상금');
+
+    const { store: revived } = makeStore({ session });
+    expect(await revived.tryAutoRestore()).toBe(true);
+    expect(revived.listAccounts()[idx]!.label).toBe('비상금');
+  });
+
+  it('does not change the derived account or address', async () => {
+    const { store } = makeStore();
+    await store.unlock(MNEMONIC);
+    const before = (await store.getAccount()).address;
+    await store.setAccountLabel(0, 'renamed');
+    expect((await store.getAccount()).address).toBe(before);
+    expect(store.listAccounts()[0]!.address).toBe(before);
+  });
+});

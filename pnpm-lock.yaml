@@ -127,14 +127,14 @@ importers:
         specifier: ^18.3.1
         version: 18.3.7(@types/react@18.3.28)
       '@vitejs/plugin-react':
-        specifier: ^4.3.3
-        version: 4.7.0(vite@5.4.21(@types/node@22.19.17)(lightningcss@1.33.0)(terser@5.47.1))
+        specifier: ^6.0.4
+        version: 6.0.4(vite@8.1.5(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(yaml@2.9.0))
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
       vite:
-        specifier: ^5.4.10
-        version: 5.4.21(@types/node@22.19.17)(lightningcss@1.33.0)(terser@5.47.1)
+        specifier: ^8.1.5
+        version: 8.1.5(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(yaml@2.9.0)
 
   apps/extension:
     dependencies:
@@ -283,14 +283,14 @@ importers:
         specifier: ^18.3.1
         version: 18.3.7(@types/react@18.3.28)
       '@vitejs/plugin-react':
-        specifier: ^4.3.3
-        version: 4.7.0(vite@5.4.21(@types/node@22.19.17)(lightningcss@1.33.0)(terser@5.47.1))
+        specifier: ^6.0.4
+        version: 6.0.4(vite@8.1.5(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(yaml@2.9.0))
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
       vite:
-        specifier: ^5.4.10
-        version: 5.4.21(@types/node@22.19.17)(lightningcss@1.33.0)(terser@5.47.1)
+        specifier: ^8.1.5
+        version: 8.1.5(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(yaml@2.9.0)
 
   packages/design-system:
     devDependencies:
@@ -342,7 +342,16 @@ importers:
       '@noble/hashes':
         specifier: ^1.5.0
         version: 1.8.0
+      jsqr:
+        specifier: ^1.4.0
+        version: 1.4.0
     devDependencies:
+      '@types/qrcode':
+        specifier: ^1.5.5
+        version: 1.5.6
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
       rimraf:
         specifier: ^6.0.1
         version: 6.1.3
@@ -5017,6 +5026,9 @@ packages:
 
   jsonfile@6.2.1:
     resolution: {integrity: sha512-zwOTdL3rFQ/lRdBnntKVOX6k5cKJwEc1HdilT71BWEu7J41gXIB2MRp+vxduPSwZJPWBxEzv4yH1wYLJGUHX4Q==}
+
+  jsqr@1.4.0:
+    resolution: {integrity: sha512-dxLob7q65Xg2DvstYkRpkYtmKm2sPJ9oFhrhmudT1dZvNFFTlroai3AWSpLey/w5vMcLBXRgOJsbXpdN9HzU/A==}
 
   jssha@3.2.0:
     resolution: {integrity: sha512-QuruyBENDWdN4tZwJbQq7/eAK85FqrI4oDbXjy5IBhYD+2pTJyBUWZe8ctWaCkrV0gy6AaelgOZZBMeswEa/6Q==}
@@ -12503,6 +12515,8 @@ snapshots:
       universalify: 2.0.1
     optionalDependencies:
       graceful-fs: 4.2.11
+
+  jsqr@1.4.0: {}
 
   jssha@3.2.0: {}
 

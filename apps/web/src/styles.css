@@ -746,3 +746,33 @@ a {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── QR 스캔 ─────────────────────────────────────── */
+/* 카메라 미리보기는 정사각에 가깝게 잡아 준다 — 사용자가 QR 을 가운데 두게 된다. */
+.web-scan__stage {
+  margin: 0.75rem 0;
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--web-surface);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.web-scan__video {
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+}
+.web-send__scan-row {
+  margin-top: 0.5rem;
+  display: flex;
+  justify-content: flex-end;
+}
+.web-scan__hint {
+  margin: 0;
+  padding: 0 0.75rem;
+  text-align: center;
+  font-size: 13px;
+  color: var(--web-muted);
+}

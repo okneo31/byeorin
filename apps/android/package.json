@@ -1,6 +1,6 @@
 {
   "name": "@byeorin/android",
-  "version": "0.0.1",
+  "version": "0.5.18",
   "private": true,
   "type": "module",
   "description": "벼린 — 안드로이드 셸 (Capacitor + Vite WebView). 9 체인 전부 동작.",

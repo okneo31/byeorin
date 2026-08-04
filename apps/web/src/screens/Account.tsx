@@ -42,6 +42,21 @@ export function Account({ onSend, onLock, onActivity }: Props) {
   const [ttlPrice, setTtlPrice] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
+  // WalletAccount 에는 label 이 없다 → 활성 계정 라벨은 listAccounts() 에서 따로 읽는다.
+  // idx 는 setAccountLabel 의 유일한 식별자라 함께 들고 있는다.
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
+  const [activeLabel, setActiveLabel] = useState<string | null>(null);
+  // null = 보기 모드, 문자열 = 편집 중 입력값 (AddressbookPane 의 pendingRemove 와 같은 모양).
+  const [editingLabel, setEditingLabel] = useState<string | null>(null);
+  const [renameError, setRenameError] = useState<string | null>(null);
+
+  // 잠금 화면에서 부르면 빈 배열이므로 undefined 경로를 방어한다.
+  const loadActiveLabel = useCallback(() => {
+    const active = walletStore.listAccounts().find((a) => a.active);
+    setActiveIdx(active ? active.idx : null);
+    setActiveLabel(active ? active.label : null);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     if (!walletStore.isUnlocked()) {
@@ -56,6 +71,7 @@ export function Account({ onSend, onLock, onActivity }: Props) {
         const acc = await walletStore.getAccount();
         if (cancelled) return;
         setAccount(acc);
+        loadActiveLabel();
         const bal = await walletStore.getDefaultAdapter().getBalance(acc.address);
         if (!cancelled) setBalance(bal);
 
@@ -81,7 +97,23 @@ export function Account({ onSend, onLock, onActivity }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [onLock, t]);
+  }, [onLock, t, loadActiveLabel]);
+
+  // 라벨 저장. 빈 문자열은 null 로 넘겨 자동 이름(`계정 N`)으로 되돌린다.
+  const saveLabel = useCallback(async () => {
+    if (activeIdx == null || editingLabel == null) return;
+    const next = editingLabel.trim();
+    setRenameError(null);
+    try {
+      await walletStore.setAccountLabel(activeIdx, next === '' ? null : next);
+      loadActiveLabel();
+      setEditingLabel(null);
+    } catch (e) {
+      setRenameError(
+        t('accounts.rename_failed', { reason: e instanceof Error ? e.message : String(e) }),
+      );
+    }
+  }, [activeIdx, editingLabel, loadActiveLabel, t]);
 
   const refreshTokens = useCallback(async (acc: WalletAccount) => {
     setTokensLoading(true);
@@ -130,6 +162,48 @@ export function Account({ onSend, onLock, onActivity }: Props) {
     <div>
       <h1 className="nd-h1">{t('account.title')}</h1>
       <p className="nd-lead">{t('account.subtitle_ttl')}</p>
+
+      {/*
+        계정 이름 줄. web 에는 계정 목록이 없어 라벨 표시 자체가 여기서 처음 생긴다.
+        편집은 모달이 아닌 인라인 — 저장소에 이미 있는 편집 문체(AddressbookPane)와 같게.
+      */}
+      {activeIdx != null && (
+        <div className="nd-row" style={{ alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          {editingLabel == null ? (
+            <>
+              <p style={{ margin: 0, fontWeight: 700 }}>
+                {activeLabel ?? t('accounts.no_label', { idx: activeIdx + 1 })}
+              </p>
+              <Button variant="ghost" size="sm" onClick={() => { setRenameError(null); setEditingLabel(activeLabel ?? ''); }}>
+                {t('accounts.rename_button')}
+              </Button>
+            </>
+          ) : (
+            <>
+              <input
+                className="nd-input"
+                value={editingLabel}
+                maxLength={32}
+                autoFocus
+                aria-label={t('accounts.rename_aria')}
+                placeholder={t('accounts.rename_placeholder')}
+                onChange={(e) => setEditingLabel(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void saveLabel();
+                  if (e.key === 'Escape') setEditingLabel(null);
+                }}
+              />
+              <Button variant="secondary" size="sm" onClick={() => void saveLabel()}>
+                {t('accounts.rename_save')}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setEditingLabel(null)}>
+                {t('common.cancel')}
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+      {renameError && <div className="nd-error" role="alert">{renameError}</div>}
 
       {/* ── 잔액 히어로 카드 ─────────────────────────── */}
       <Card>
