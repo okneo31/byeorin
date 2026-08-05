@@ -32,6 +32,13 @@ jobs:
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
+      # packages/* 끼리는 package.json exports 의 dist(.js/.d.ts) 로 서로를 참조한다
+      # (shell-core → @byeorin/wallet-sdk/core, /multichain). clean checkout 에는 dist 가
+      # 없으므로 라이브러리 빌드가 typecheck·test 보다 먼저 돌아야 한다. pnpm 은 의존
+      # 순서대로 돌기 때문에 wallet-sdk 가 shell-core 보다 먼저 빌드된다.
+      - name: Build (library packages)
+        run: pnpm --filter "./packages/*" build
+
       - name: Typecheck (all workspaces)
         run: pnpm -r typecheck
 

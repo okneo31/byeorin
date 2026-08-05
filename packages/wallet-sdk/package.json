@@ -60,7 +60,7 @@
     "@ton/crypto": "^3.3.0",
     "@ton/ton": "^15.1.0",
     "tronweb": "^6.0.0",
-    "viem": "^2.21.40",
+    "viem": "^2.55.10",
     "xrpl": "^4.0.0"
   },
   "optionalDependencies": {

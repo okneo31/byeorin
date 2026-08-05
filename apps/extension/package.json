@@ -1,6 +1,6 @@
 {
   "name": "@byeorin/extension",
-  "version": "0.5.18",
+  "version": "0.5.23",
   "private": true,
   "type": "module",
   "description": "벼린 — 브라우저 확장 (MV3, EIP-1193)",
@@ -22,7 +22,7 @@
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "viem": "^2.21.40"
+    "viem": "^2.55.10"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
