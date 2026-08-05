@@ -1,0 +1,118 @@
+# 벼린 APK 빌드 — GitHub Actions
+# 저장 위치: .github/workflows/build-apk.yml
+#
+# 실행: 저장소 → Actions 탭 → "벼린 APK 빌드" → Run workflow
+
+name: 벼린 APK 빌드
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_release:
+        description: '서명된 release APK 도 만들기 (Secrets 4개 등록 필요)'
+        type: boolean
+        default: true
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 22 설치
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # pnpm 은 corepack 으로 켠다 — 저장소가 지정한 버전을 그대로 따른다
+      - name: pnpm 활성화
+        run: corepack enable
+
+      - name: JDK 21 설치
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Android SDK 설치
+        uses: android-actions/setup-android@v3
+
+      - name: 패키지 설치
+        run: pnpm install --frozen-lockfile
+
+      - name: 워크스페이스 빌드
+        run: pnpm -r build
+
+      # 서명키 복원
+      # build.gradle 은 rootProject 의 keystore.properties 를 읽는다.
+      # gradle 루트는 apps/android/android 이므로 그 폴더에 만든다.
+      # 파일이 없으면 build.gradle 이 서명 설정 자체를 안 만들고,
+      # debug APK 는 그대로 나온다.
+      - name: 서명키 복원
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::warning::서명키 없음 → debug APK 만 나옵니다."
+            exit 0
+          fi
+          cd apps/android/android
+          echo "$KEYSTORE_B64" | base64 -d > release.keystore
+          cat > keystore.properties <<EOF
+          storeFile=release.keystore
+          storePassword=$STORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+          echo "서명키 복원 완료"
+
+      # 웹 자산 빌드 + Capacitor 동기화
+      # (package.json 의 sync 스크립트 — 순수 node 라 리눅스에서 그대로 돈다)
+      - name: 웹 빌드 + Capacitor 동기화
+        working-directory: apps/android
+        run: pnpm sync
+
+      # gradlew 를 직접 부른다.
+      # scripts/gradle.mjs 를 안 쓰는 이유: README 결과 경로가 D:\ 로 적혀
+      # 있어 윈도우 전용일 가능성이 있고, 그 파일은 확인하지 못했다.
+      # gradlew 직접 호출은 그 불확실성을 통째로 우회한다.
+      - name: gradlew 실행 권한
+        working-directory: apps/android/android
+        run: chmod +x gradlew
+
+      - name: debug APK 빌드
+        working-directory: apps/android/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: release APK 빌드
+        if: ${{ github.event_name == 'push' || inputs.build_release }}
+        working-directory: apps/android/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      # 결과물에 버전명 붙이기 (벼린0.5.18-release.apk 형식)
+      - name: APK 이름 정리
+        run: |
+          mkdir -p out
+          VER=$(grep -oP 'versionName\s+"\K[^"]+' apps/android/android/app/build.gradle)
+          echo "버전: $VER"
+          for f in $(find apps/android/android/app/build/outputs/apk -name '*.apk'); do
+            TYPE=$(basename "$f" .apk | grep -o 'debug\|release')
+            cp "$f" "out/벼린${VER}-${TYPE}.apk"
+          done
+          ls -la out
+
+      - name: APK 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: byeorin-apk
+          path: out/*.apk
+          if-no-files-found: error
+          retention-days: 30
