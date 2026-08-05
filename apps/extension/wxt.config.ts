@@ -7,6 +7,15 @@ export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   srcDir: '.',
   outDir: '.output',
+  // esbuild 0.27+ 는 target 에 safari14 가 있으면 생성자 인자 구조분해를 다운레벨
+  // 하지 못하고 거부한다 (viem 의 ccip 에러 클래스 등이 그 패턴을 쓴다). safari14
+  // 는 vite 의 기본 타깃에 들어 있을 뿐 이 확장이 노린 대상이 아니다 — 산출물은
+  // chrome-mv3 하나뿐이다. safari14.1 로만 올려 그 거부를 푼다.
+  vite: () => ({
+    build: {
+      target: ['chrome87', 'edge88', 'es2020', 'firefox78', 'safari14.1'],
+    },
+  }),
   manifest: {
     name: '벼린',
     description: 'TTL 생태계 멀티체인 월릿 (EIP-1193 호환)',

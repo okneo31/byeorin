@@ -34,7 +34,10 @@
       "require": "./dist/multichain.cjs"
     }
   },
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -64,17 +67,17 @@
     "xrpl": "^4.0.0"
   },
   "optionalDependencies": {
-    "@reown/walletkit": "^1.5.5",
     "@ledgerhq/hw-app-cosmos": "^6.30.0",
     "@ledgerhq/hw-app-solana": "^7.2.0",
     "@ledgerhq/hw-transport": "^6.31.0",
-    "@ledgerhq/hw-transport-webhid": "^6.30.0"
+    "@ledgerhq/hw-transport-webhid": "^6.30.0",
+    "@reown/walletkit": "^1.5.5"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
     "rimraf": "^6.0.1",
     "tsup": "^8.3.5",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.5"
+    "vitest": "^3.2.6"
   }
 }
