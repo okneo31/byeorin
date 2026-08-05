@@ -227,21 +227,31 @@ export class EvmAdapter
       value = 0n;
     }
 
+    // "무엇을 어디로" 는 위에서 이미 정해졌다(target/value/dataField). 그 결정을
+    // 수수료 분기마다 다시 쓰면 한쪽만 틀리는 일이 생긴다 — 실제로 legacy 쪽이
+    // target 대신 to 를 써서, asset 을 넣으면 수신자 EOA 로 value 0 + transfer
+    // calldata 가 나갔다. 체인은 성공으로 처리하고 토큰은 움직이지 않는다
+    // (수수료만 나간다). 결정은 한 곳에서 한 번만 내리고, 아래는 그 결과를 쓰기만
+    // 한다. 갈라지는 것은 수수료 필드뿐이다.
+    const gas = await this.client.estimateGas({
+      account: sender,
+      to: target,
+      value,
+      ...(dataField ? { data: dataField } : {}),
+    });
+    const common = {
+      chainId: this.chain.id,
+      nonce,
+      to: target,
+      value,
+      gas,
+    };
+
     if (useEip1559) {
       const fees = await this.client.estimateFeesPerGas();
-      const gas = await this.client.estimateGas({
-        account: sender,
-        to: target,
-        value,
-        ...(dataField ? { data: dataField } : {}),
-      });
       const base: TransactionSerializableEIP1559 & { type: 'eip1559' } = {
         type: 'eip1559',
-        chainId: this.chain.id,
-        nonce,
-        to: target,
-        value,
-        gas,
+        ...common,
         maxFeePerGas: fees.maxFeePerGas,
         maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
       };
@@ -250,19 +260,9 @@ export class EvmAdapter
     }
 
     const gasPrice = await this.client.getGasPrice();
-    const gas = await this.client.estimateGas({
-      account: sender,
-      to,
-      value,
-      ...(dataField ? { data: dataField } : {}),
-    });
     const base: TransactionSerializableLegacy & { type: 'legacy' } = {
       type: 'legacy',
-      chainId: this.chain.id,
-      nonce,
-      to,
-      value,
-      gas,
+      ...common,
       gasPrice,
     };
     if (dataField) base.data = dataField;
@@ -298,7 +298,13 @@ export class EvmAdapter
     if (signature.length !== 65) {
       throw new Error(`evm: signature must be 65 bytes, got ${signature.length}`);
     }
-    const sig = parseSignature(bytesToHex(signature)) as Signature;
+    // 서명자가 raw recovery(0|1)를 주면 viem 은 {r,s,yParity} 만 채우고 v 를
+    // 비운다. legacy 직렬화는 EIP-155 v 를 35n + chainId*2 + (v - 27n) 으로
+    // 계산하므로 v 가 undefined 면 "Cannot mix BigInt and other types" 로 죽는다.
+    // eip1559 는 yParity 만 보므로 안 죽는다 — 그래서 legacy 에서만 터졌다.
+    const sig = parseSignature(
+      bytesToHex(normalizeEvmSigV(signature, 'evm')),
+    ) as Signature;
     const raw = serializeTransaction(tx, sig);
     return { raw, hash: keccak256(raw) };
   }
@@ -535,6 +541,29 @@ function cleanLabel(v: unknown): string | null {
  * Cross-checked against MetaMask's personal_sign output and the on-chain
  * `ecrecover` behaviour used by EIP-1271-style verifiers.
  */
+/**
+ * 65바이트 서명의 마지막 바이트를 v ∈ {27,28} 로 맞춘 **새 배열**을 돌려준다.
+ *
+ * SoftSigner 는 raw recovery {0,1} 을 넣고(signers/soft.ts), 일부 HW 서명자는
+ * 27 을 미리 더해서 준다. 어느 쪽이 오든 같은 결과가 나오게 한 곳에서 정규화한다.
+ * 호출자의 버퍼를 건드리지 않도록 제자리 수정은 하지 않는다.
+ */
+function normalizeEvmSigV(sig: Uint8Array, ctx: string): Uint8Array {
+  const recovery = sig[64] as number;
+  let v: number;
+  if (recovery === 0 || recovery === 1) {
+    v = recovery + 27;
+  } else if (recovery === 27 || recovery === 28) {
+    v = recovery;
+  } else {
+    throw new Error(`${ctx}: recovery byte must be 0|1|27|28, got ${recovery}`);
+  }
+  const out = new Uint8Array(65);
+  out.set(sig.subarray(0, 64), 0);
+  out[64] = v;
+  return out;
+}
+
 export async function signEvmMessage(
   signer: Signer,
   address: Address,
@@ -553,22 +582,6 @@ export async function signEvmMessage(
   if (sig.length !== 65) {
     throw new Error(`signEvmMessage: signature must be 65 bytes, got ${sig.length}`);
   }
-  const recovery = sig[64] as number;
-  // SoftSigner emits raw recovery {0,1}. Accept pre-encoded v ∈ {27, 28} too
-  // (some HW signers add 27 internally).
-  let v: number;
-  if (recovery === 0 || recovery === 1) {
-    v = recovery + 27;
-  } else if (recovery === 27 || recovery === 28) {
-    v = recovery;
-  } else {
-    throw new Error(
-      `signEvmMessage: recovery byte must be 0|1|27|28, got ${recovery}`,
-    );
-  }
-  const out = new Uint8Array(65);
-  out.set(sig.subarray(0, 64), 0);
-  out[64] = v;
-  return bytesToHex(out);
+  return bytesToHex(normalizeEvmSigV(sig, 'signEvmMessage'));
 }
 

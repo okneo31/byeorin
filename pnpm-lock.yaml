@@ -5,6 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  '@cosmjs/crypto': ^0.34.1
   protobufjs: ^7.5.8
   axios@>=1.0.0 <1.15.2: ^1.15.2
   fast-xml-parser@<5.7.0: ^5.7.0
@@ -1553,18 +1554,23 @@ packages:
   '@cosmjs/amino@0.32.4':
     resolution: {integrity: sha512-zKYOt6hPy8obIFtLie/xtygCkH9ZROiQ12UHfKsOkWaZfPQUvVbtgmu6R4Kn1tFLI/SRkw7eqhaogmW/3NYu/Q==}
 
-  '@cosmjs/crypto@0.32.4':
-    resolution: {integrity: sha512-zicjGU051LF1V9v7bp8p7ovq+VyC91xlaHdsFOTo2oVry3KQikp8L/81RkXmUIT8FxMwdx1T7DmFwVQikcSDIw==}
-    deprecated: This uses elliptic for cryptographic operations, which contains several security-relevant bugs. To what degree this affects your application is something you need to carefully investigate. See https://github.com/cosmos/cosmjs/issues/1708 for further pointers. Starting with version 0.34.0 the cryptographic library has been replaced. However, private keys might still be at risk.
+  '@cosmjs/crypto@0.34.1':
+    resolution: {integrity: sha512-fouXCXB4vNKLi9hyhdLL1elJ12reZH1UxJK4JPEkMOSaLAPClIHEu8NZ8cXYNlu2yTi86NX+I0TE4cEPsvSpWA==}
 
   '@cosmjs/encoding@0.32.4':
     resolution: {integrity: sha512-tjvaEy6ZGxJchiizzTn7HVRiyTg1i4CObRRaTRPknm5EalE13SV+TCHq38gIDfyUeden4fCuaBVEdBR5+ti7Hw==}
+
+  '@cosmjs/encoding@0.34.1':
+    resolution: {integrity: sha512-5+Ta7v05UxAqicKgk16c4rg0vsHPbzJOp5rfOxbiiJOfu3fVJkmmQgz5VuTrsvl5AZf9pulen7b8SK/rQYzKDg==}
 
   '@cosmjs/json-rpc@0.32.4':
     resolution: {integrity: sha512-/jt4mBl7nYzfJ2J/VJ+r19c92mUKF0Lt0JxM3MXEJl7wlwW5haHAWtzRujHkyYMXOwIR+gBqT2S0vntXVBRyhQ==}
 
   '@cosmjs/math@0.32.4':
     resolution: {integrity: sha512-++dqq2TJkoB8zsPVYCvrt88oJWsy1vMOuSOKcdlnXuOA/ASheTJuYy4+oZlTQ3Fr8eALDLGGPhJI02W2HyAQaw==}
+
+  '@cosmjs/math@0.34.1':
+    resolution: {integrity: sha512-QRFMcxCZ5JMQr6ANU7+5mrPdx3XTT0/6jGHY1wP4q4T3IfgHJItu5HqOi22VbSNb/IWpDWwTS46eqvbXyRMeqg==}
 
   '@cosmjs/proto-signing@0.32.4':
     resolution: {integrity: sha512-QdyQDbezvdRI4xxSlyM1rSVBO2st5sqtbEIl3IX03uJ7YiZIQHyv6vaHVf1V4mapusCqguiHJzm4N4gsFdLBbQ==}
@@ -1583,6 +1589,9 @@ packages:
 
   '@cosmjs/utils@0.32.4':
     resolution: {integrity: sha512-D1Yc+Zy8oL/hkUkFUL/bwxvuDBzRGpc4cF7/SkdhxX4iHpSLgdOuTt1mhCh9+kl6NQREy9t7SYZ6xeW5gFe60w==}
+
+  '@cosmjs/utils@0.34.1':
+    resolution: {integrity: sha512-OjevgFwbVN7t8afmFF8A3rj80jQnOXqwdGEzfv7jbYxTvhUGPa8SvpeaulhWQYQ49K3zlIuB9a2PJWdf1H9Udw==}
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -8527,22 +8536,28 @@ snapshots:
 
   '@cosmjs/amino@0.32.4':
     dependencies:
-      '@cosmjs/crypto': 0.32.4
+      '@cosmjs/crypto': 0.34.1
       '@cosmjs/encoding': 0.32.4
       '@cosmjs/math': 0.32.4
       '@cosmjs/utils': 0.32.4
 
-  '@cosmjs/crypto@0.32.4':
+  '@cosmjs/crypto@0.34.1':
     dependencies:
-      '@cosmjs/encoding': 0.32.4
-      '@cosmjs/math': 0.32.4
-      '@cosmjs/utils': 0.32.4
+      '@cosmjs/encoding': 0.34.1
+      '@cosmjs/math': 0.34.1
+      '@cosmjs/utils': 0.34.1
+      '@noble/curves': 1.9.7
       '@noble/hashes': 1.8.0
       bn.js: 5.2.3
-      elliptic: 6.6.1
       libsodium-wrappers-sumo: 0.7.16
 
   '@cosmjs/encoding@0.32.4':
+    dependencies:
+      base64-js: 1.5.1
+      bech32: 1.1.4
+      readonly-date: 1.0.0
+
+  '@cosmjs/encoding@0.34.1':
     dependencies:
       base64-js: 1.5.1
       bech32: 1.1.4
@@ -8557,10 +8572,14 @@ snapshots:
     dependencies:
       bn.js: 5.2.3
 
+  '@cosmjs/math@0.34.1':
+    dependencies:
+      bn.js: 5.2.3
+
   '@cosmjs/proto-signing@0.32.4':
     dependencies:
       '@cosmjs/amino': 0.32.4
-      '@cosmjs/crypto': 0.32.4
+      '@cosmjs/crypto': 0.34.1
       '@cosmjs/encoding': 0.32.4
       '@cosmjs/math': 0.32.4
       '@cosmjs/utils': 0.32.4
@@ -8600,7 +8619,7 @@ snapshots:
 
   '@cosmjs/tendermint-rpc@0.32.4(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
-      '@cosmjs/crypto': 0.32.4
+      '@cosmjs/crypto': 0.34.1
       '@cosmjs/encoding': 0.32.4
       '@cosmjs/json-rpc': 0.32.4
       '@cosmjs/math': 0.32.4
@@ -8617,6 +8636,8 @@ snapshots:
       - utf-8-validate
 
   '@cosmjs/utils@0.32.4': {}
+
+  '@cosmjs/utils@0.34.1': {}
 
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
