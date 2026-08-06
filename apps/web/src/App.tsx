@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Logo } from '@byeorin/design-system';
 import { LocaleSwitch, useT } from '@byeorin/i18n/react';
 import { Home } from './screens/Home.js';
 import { Account } from './screens/Account.js';
@@ -35,7 +34,11 @@ export function App() {
       <header className="nd-header">
         <div className="nd-header__brand">
           {/* 홈에서는 히어로 안에 큰 로고가 따로 있으므로 헤더는 작은 마크만. */}
-          <Logo size={28} variant="mark-with-text" />
+          {/* 앱 아이콘과 동일한 PNG 마스터를 쓴다 — design-system 의 Logo SVG 는
+              옛 디자인이라 실제 아이콘과 시각이 어긋난다. android·확장 셸이
+              먼저 이 방식으로 옮겼고 web·desktop 만 남아 있었다. */}
+          <img src="/icon/48.png" width={28} height={28} alt="" />
+          <span className="nd-header__wordmark">{t('brand.name')}</span>
         </div>
         <div className="nd-header__actions">
           <LocaleSwitch />

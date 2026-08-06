@@ -218,6 +218,19 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 12px;
+}
+/* 워드마크 — 예전 Logo SVG 의 mark-with-text 가 그리던 글자를 대신한다.
+   마크는 이제 앱 아이콘 PNG 라 글자는 여기서 따로 그린다. */
+.web-hero__wordmark {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--nd-text, inherit);
+}
+.nd-header__wordmark {
+  /* 크기·굵기는 부모(.nd-header__brand)에서 상속받는다. */
+  white-space: nowrap;
 }
 .web-hero__tagline {
   font-size: 1.5rem;
