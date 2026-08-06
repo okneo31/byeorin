@@ -15,6 +15,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useState,
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
@@ -159,10 +160,24 @@ export function I18nProvider({
   persistence,
   fallback = 'ko',
 }: I18nProviderProps): JSX.Element {
-  // 1) 부팅 시 카탈로그 + 초기 로케일 등록.
-  //    persistence 에 저장된 값이 있으면 그쪽이 우선. async 일 수 있으므로 useEffect 로.
-  useEffect(() => {
+  // 1) 카탈로그 등록은 **첫 렌더 전에, 동기로** 끝낸다.
+  //
+  //    useEffect 로 미루면 첫 페인트에는 카탈로그가 비어 t() 가 키 문자열을
+  //    그대로 돌려준다. 그 뒤 저장된 로케일이 없으면 로케일 변경 이벤트도 없어
+  //    re-render 가 걸리지 않고, 화면이 'home.web_tagline' 같은 키를 단 채로
+  //    굳는다. 부팅 직후 상태가 자주 바뀌는 화면(android/extension)에서는 뒤따르는
+  //    re-render 가 우연히 이걸 덮어 가렸지만, 정적인 첫 화면(web/desktop)에서는
+  //    그대로 드러났다.
+  //
+  //    useState 초기화 함수는 마운트당 한 번만 돌아 effect 와 실행 횟수가 같다.
+  useState(() => {
     configureI18n({ catalogs, initialLocale, fallback });
+    return true;
+  });
+
+  // 2) 저장된 로케일 복원은 그대로 effect 에서. persistence.read() 가 async 일 수
+  //    있고, 값이 있으면 setLocale 이 구독자를 깨워 re-render 가 걸린다.
+  useEffect(() => {
     if (!persistence) return;
     const r = persistence.read();
     const apply = (loc: Locale | null): void => {
@@ -177,7 +192,7 @@ export function I18nProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 2) 외부 store 의 현재 로케일을 useSyncExternalStore 로 구독해 re-render.
+  // 3) 외부 store 의 현재 로케일을 useSyncExternalStore 로 구독해 re-render.
   const locale = useSyncExternalStore(subscribe, getLocale, getLocale);
 
   const setLocale = useCallback(
