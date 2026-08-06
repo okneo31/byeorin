@@ -25,5 +25,13 @@
     "integrity": "이 해시와 일치하는 파일은 우리가 배포한 그 파일이다.",
     "authenticity": "이 인증서 지문으로 서명된 APK 만 벼린이 만든 것이다.",
     "notClaimed": "재현 빌드는 아직 보장하지 않는다 — 같은 커밋으로 빌드해도 바이트가 다를 수 있다."
+  },
+  "anchor": {
+    "chainId": 7777,
+    "txHash": "0x63e9db65e15c3350c0a992fb0d4f7073f14e91672f876bdf9f82c78b56c358e9",
+    "publisher": "0x86fB509042CF06ebCb9965283a6a753455f8d971",
+    "blockNumber": 1240376,
+    "payload": "byeorin:release:1|sha256=87d2c9425f06bb5a95fe1b534fd3d2e4495659734d478220e473187cbb8f9637|v=0.5.18+19|commit=b2477303b9f68b7c1a12565dd05b9baebd5a05b5",
+    "note": "이 앵커는 \"publisher 가 이 해시를 공표했다\" 만 증명한다. 소스↔바이너리 대응은 재현 빌드가 필요하다."
   }
 }

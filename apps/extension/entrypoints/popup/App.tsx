@@ -36,9 +36,24 @@ import {
   supportsTokens,
   type PortableTokenBalance,
 } from '@byeorin/wallet-sdk/core';
-// 벼린 환율 — TTL 통화토큰의 가치는 Binance 시세가 아니라 이 스냅샷에서 온다.
-// 주소로 찾는다: 심볼로 찾으면 tUSD 가 대문자화되어 TrueUSD(TUSD)와 충돌한다.
-import { rateByAddress, rateByIso, tokenAmountToTtl } from '@byeorin/wallet-sdk/evm';
+// TTL 이 기준이다. 모든 자산을 TTL 로 잰다 — 상장자산도 예외가 아니다.
+//
+// **환산 산식은 셸에 없다.** 신원 판정(주소로만)·액면·시세 게이트·자릿수를
+// `assetValueInTtl` 하나가 한 번에 낸다. 예전에 이 파일은 `stableDenomOf` +
+// `stableToTtl` + `tokenAmountToTtl` + 로컬 `tokenIdentity` 로 신원 계층을 한 벌
+// 더 갖고 있었고, 그래서 android 판과 표면이 2 벌로 갈렸다. 갈린 표면은 반드시
+// 서로 다른 값을 낸다(v0.5.21).
+//
+// 환율 숫자는 이 파일 어디에도 없다. perTtl 은 스냅샷 재생성으로 전 종목이
+// 바뀌므로 상수로 박으면 그 순간부터 거짓이 된다 — 런타임에 스냅샷에서 읽고,
+// 어느 앵커의 값인지(`RATE_SNAPSHOT.anchoredAt`)를 화면에 밝힌다.
+import {
+  RATE_SNAPSHOT,
+  assetValueInTtl,
+  sumTtl,
+  type AssetValue,
+  type PriceTable,
+} from '@byeorin/wallet-sdk/evm';
 // TTL 환산값 표기는 토큰 목록 화면과 같은 함수를 쓴다 — 두 화면이 같은 잔액에
 // 다른 자릿수를 내면 안 된다.
 import { formatTtl } from './lib/token-visibility.js';
@@ -233,6 +248,80 @@ function evmChainIdOf(adapter: unknown): number | null {
   const id = a.chain?.id;
   return typeof id === 'number' ? id : null;
 }
+
+/**
+ * 값 한 줄. `assetValueInTtl` 의 결과를 **그대로** 그린다.
+ *
+ * 신원 판정도, 액면 조회도, 시세 곱셈도 이 파일에 없다 — 전부 SDK 한 곳이다.
+ * 셸이 갈래를 다시 세우면 같은 잔액이 화면마다 다른 값으로 찍힌다(v0.5.21).
+ *
+ * 고정 액면(스테이블·t{ISO})과 시세 기준(상장자산)을 **반드시** 구분해 적는다.
+ * 구분이 없으면 출렁이는 TTL 값이 "TTL 이 BTC 를 따라간다" 로 읽히고, 그건 방금
+ * 지운 옛 페그와 화면상 구별이 안 된다. 구분자는 색이 아니라 **텍스트 배지 +
+ * 마커 문자**다 — popup 은 360px 이라 hover 툴팁·아이콘에 기댈 수 없다.
+ *
+ * 값을 모르면 자리를 **비우지 않고** 사유를 적는다. 빈칸은 "0" 으로 읽힌다.
+ */
+function ValueLine({
+  value,
+  className,
+}: {
+  value: AssetValue;
+  className: string;
+}) {
+  const t = useT();
+  if (value.ttl === null) {
+    // 사유를 뭉뚱그리지 않는다: 신원을 모르는 것, 시세가 없는 것, 액면 통화가
+    // 환율표에 없는 것, 자릿수가 이상한 것은 서로 다른 사실이다.
+    const reason = value.reason ?? 'unlisted';
+    const label =
+      reason === 'unverified'
+        ? t('tokens.value_unverified')
+        : reason === 'no-face-rate'
+          ? t('tokens.value_no_face_rate')
+          : reason === 'bad-decimals'
+            ? t('tokens.value_bad_decimals')
+            : t('tokens.value_unlisted');
+    return (
+      <span
+        className={`${className} ${className}--unknown`}
+        title={reason === 'unverified' ? t('tokens.value_unverified_hint') : undefined}
+      >
+        {label}
+      </span>
+    );
+  }
+  const market = value.volatile;
+  return (
+    <span className={market ? `${className} ${className}--market` : className}>
+      {market
+        ? t('tokens.value_ttl_market', { v: formatTtl(value.ttl) })
+        : t('tokens.value_ttl', { v: formatTtl(value.ttl) })}
+      <span
+        className={`value-badge value-badge--${market ? 'market' : 'fixed'}`}
+        title={market ? t('tokens.basis_market_hint') : t('tokens.basis_fixed_hint')}
+      >
+        {market ? t('tokens.basis_market') : t('tokens.basis_fixed')}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * 앵커 고지 — 화면의 TTL 값이 **어느 시점 환율**의 것인지 밝힌다.
+ *
+ * 값은 스냅샷에서 읽는다. 날짜를 셸에 적으면 재앵커되는 순간 화면이 거짓이 된다.
+ * 한 화면에 한 번만 붙인다 — 줄마다 붙이면 목록이 날짜로 뒤덮인다.
+ */
+function AnchorLine() {
+  const t = useT();
+  return (
+    <p className="anchor-line muted small">
+      {t('tokens.anchor_line', { date: RATE_SNAPSHOT.anchoredAt })}
+    </p>
+  );
+}
+
 
 /** 세션 안에서만 기억하는 수동 추가 토큰. chainKey → 토큰 목록. */
 type ManualTokenMap = Readonly<Record<string, readonly PortableTokenBalance[]>>;
@@ -687,11 +776,15 @@ export function App() {
         />
       )}
 
-      {/* 토큰 목록 — 66 종 검색 · 보기/가리기 · 벼린 환율 가치 */}
+      {/* 토큰 목록 — 66 종 검색 · 보기/가리기 · 벼린 환율 가치.
+          prices 를 명시적으로 넘긴다: 안 넘기면 상장자산 값이 통째로 빈다.
+          인자를 만들고 호출부를 배선하지 않는 것이 v0.5.22 실사고였다. */}
       {unlocked && mode === 'tokens' && (
         <TokenListPane
           tokens={sendTokens}
           chainKey={activeChainKey}
+          prices={prices}
+          chainId={evmChainIdOf(effectiveAdapter)}
           supported={supportsTokens(effectiveAdapter)}
           onBack={() => setMode('home')}
         />
@@ -1135,19 +1228,78 @@ function ActiveAccountCard({
     onNativeBalanceChange(balance);
   }, [balance, onNativeBalanceChange]);
 
-  // 1 TTL = 노동자 하루 품삯이므로 일수는 잔액 그 자체다 — 환산 계수가 없다.
-  const nativeLaborDays =
-    nativeSymbol === 'TTL' && balance !== null
-      ? baseUnitToNumber(balance, nativeDecimals)
-      : null;
-  // 상장자산만 Binance 눈금으로 잰다. TTL 은 여기 오지 않는다.
-  const nativeUsd =
-    balance === null || nativeSymbol === 'TTL'
+  // native 잔액의 값. TTL 이면 kind:'ttl' 로 넘어가 환산이 **일어나지 않는다** —
+  // 그 갈래에는 symbol 필드가 없어 시세표에 넘길 것이 타입 수준에서 없다.
+  // 그 외 체인 코인(BTC·ETH·SOL·TRX·TON·APT·SUI·XRP…)은 시세 → TTL 로 재어진다.
+  const nativeValue: AssetValue | null =
+    balance === null
       ? null
-      : (() => {
-          const p = tokenToUsd(nativeSymbol, prices);
-          return p === null ? null : baseUnitToNumber(balance, nativeDecimals) * p;
-        })();
+      : assetValueInTtl(
+          nativeSymbol === 'TTL'
+            ? { kind: 'ttl', balance, decimals: nativeDecimals }
+            : {
+                kind: 'coin',
+                symbol: nativeSymbol,
+                balance,
+                decimals: nativeDecimals,
+              },
+          { prices },
+        );
+
+  // ZION 4종 자산의 값. 심볼로 시세를 묻지만 판정이 아니다 — 체인 native 자산
+  // 목록은 앱 안 상수(ZION_ASSETS)라 발행자가 심볼을 지어낼 여지가 없다.
+  const zionValues = useMemo(
+    () =>
+      zionBalances === null
+        ? null
+        : ZION_ASSETS.map((a) =>
+            assetValueInTtl(
+              {
+                kind: 'coin',
+                symbol: a.symbol,
+                balance: zionBalances[a.denom] ?? 0n,
+                decimals: a.decimals,
+              },
+              { prices },
+            ),
+          ),
+    [zionBalances, prices],
+  );
+
+  // 토큰 목록의 값. 목록 렌더와 합계가 **같은** 배열을 본다 — 두 번 계산하면
+  // 화면에 보이는 것과 합계가 어긋난다.
+  const tokenValues = useMemo(
+    () =>
+      visibleTokens.map((row) =>
+        assetValueInTtl(
+          {
+            kind: 'token',
+            id: row.id,
+            family: activeChainKey.split(':')[0] ?? '',
+            chainId: evmChainIdOf(adapter),
+            symbol: row.symbol,
+            balance: row.balance,
+            decimals: row.decimals,
+          },
+          { prices },
+        ),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visibleTokens, activeChainKey, adapter, prices],
+  );
+
+  // 포트폴리오 합계 — 값 미상 자산은 **더하지 않고 센다.** `?? 0` 으로 때우면
+  // 빠진 것을 숨긴 합계가 되고, 그건 거짓이다.
+  //
+  // ZION 에서는 native(kWR)를 넣지 않는다: 바로 아래 4종 패널이 같은 잔액을 다시
+  // 세므로 넣으면 두 번 더해진다.
+  const portfolio = useMemo(() => {
+    const parts: AssetValue[] = [];
+    if (nativeValue !== null && activeChainKey !== 'cosmos:zion') parts.push(nativeValue);
+    if (zionValues !== null) parts.push(...zionValues);
+    parts.push(...tokenValues);
+    return sumTtl(parts);
+  }, [nativeValue, zionValues, tokenValues, activeChainKey]);
 
   // 활성 계정 × 활성 체인 → 주소. getAccountAt 은 sync.
   useEffect(() => {
@@ -1481,7 +1633,8 @@ function ActiveAccountCard({
         </p>
       ) : (
         <>
-          {/* 잔액 히어로 — 위: native 잔액(메인), 아래: TTL 이면 그 정의, 상장자산이면 USD */}
+          {/* 잔액 히어로 — 위: native 잔액(메인), 아래: TTL 이면 그 정의, 그 외
+              자산이면 TTL 로 잰 값. USD 줄은 없다. TTL 이 기준이다. */}
           <div className="balance-hero">
             {balanceLoading ? (
               <span className="muted small">{t('account.balance_loading')}</span>
@@ -1495,45 +1648,65 @@ function ActiveAccountCard({
                   {formatAmount(balance, nativeDecimals)}
                   <span className="balance-hero__symbol">{nativeSymbol}</span>
                 </p>
-                {/* TTL 은 바꿔 적지 않고 제 정의를 적는다. 상장자산만 USD 로 잰다.
-                    둘 다 아닌 자산(kWR 등)은 값을 모르므로 비운다. */}
-                {nativeLaborDays !== null ? (
-                  <p className="balance-hero__toggle" style={{ cursor: 'default' }}>
-                    {t('tokens.value_labor_days', { v: formatTtl(nativeLaborDays) })}
-                  </p>
-                ) : (
-                  nativeUsd !== null && (
+                {/* TTL 은 바꿔 적지 않고 제 정의(노동자 N 일 품삯)를 적는다 —
+                    곱셈 0 회다. 그 외 자산은 TTL 로 재어 적고, 시세 기준이면
+                    배지로 그 사실을 밝힌다. */}
+                {nativeValue !== null &&
+                  (nativeValue.basis === 'self' ? (
                     <p className="balance-hero__toggle" style={{ cursor: 'default' }}>
-                      {t('tokens.value_usd', { v: formatUsd(nativeUsd) })}
+                      {nativeValue.ttl !== null
+                        ? t('tokens.value_labor_days', { v: formatTtl(nativeValue.ttl) })
+                        : t('tokens.value_bad_decimals')}
                     </p>
-                  )
-                )}
+                  ) : (
+                    <p className="balance-hero__toggle" style={{ cursor: 'default' }}>
+                      <ValueLine value={nativeValue} className="balance-hero__ttl" />
+                    </p>
+                  ))}
               </>
             )}
+            {/* 포트폴리오 합계 — 모든 자산이 같은 자로 재어지므로 이제 성립한다.
+                값 미상이 섞이면 그 수를 드러낸다. 숨긴 합계는 거짓이다. */}
+            {portfolio.ttl > 0 || portfolio.missing > 0 ? (
+              <p className="balance-hero__total small">
+                {t('portfolio.total_ttl', { v: formatTtl(portfolio.ttl) })}
+                {portfolio.volatile && (
+                  <span className="value-badge value-badge--market">
+                    {t('tokens.basis_market')}
+                  </span>
+                )}
+                {portfolio.missing > 0 && (
+                  <span
+                    className="muted"
+                    title={t('portfolio.total_excluded_hint')}
+                  >
+                    {t('portfolio.total_excluded', { n: portfolio.missing })}
+                  </span>
+                )}
+              </p>
+            ) : null}
+            {/* 이 카드의 TTL 값이 어느 앵커의 환율로 재어졌는지. 한 화면에 한 번. */}
+            <AnchorLine />
           </div>
 
           {/* ZION 4종 자산 — kWR(native 히어로 위) 외에도 BTC/USDT/ETH 표시.
               잔액 0 인 자산도 노출해 사용자가 어떤 자산을 받을 수 있는지 가시화.
               kWR 줄이 위 히어로와 중복되지만, "4종을 함께" 본다는 ZION 자산
               매트릭스의 메시지를 보존한다. */}
-          {activeChainKey === 'cosmos:zion' && zionBalances !== null && (
+          {activeChainKey === 'cosmos:zion' && zionBalances !== null && zionValues !== null && (
             <ul className="zion-assets">
-              {ZION_ASSETS.map((a) => {
+              {ZION_ASSETS.map((a, i) => {
                 const amount = zionBalances[a.denom] ?? 0n;
-                const usd = tokenToUsd(a.symbol, prices);
-                const usdValue =
-                  usd !== null && amount > 0n
-                    ? baseUnitToNumber(amount, a.decimals) * usd
-                    : null;
+                const value = zionValues[i]!;
                 return (
                   <li key={a.denom} className="zion-assets__row">
                     <span className="zion-assets__symbol">{a.symbol}</span>
                     <span className="zion-assets__amount">
                       {formatAmount(amount, a.decimals)}
-                      {usdValue !== null && (
-                        <span className="zion-assets__usd">
-                          {t('tokens.value_usd', { v: formatUsd(usdValue) })}
-                        </span>
+                      {/* 잔액 0 인 줄에는 값을 적지 않는다 — 0 TTL 은 정보가
+                          아니고, "시세 없음" 도 이 줄에서는 사실이 아니다. */}
+                      {amount > 0n && (
+                        <ValueLine value={value} className="zion-assets__ttl" />
                       )}
                     </span>
                   </li>
@@ -1553,41 +1726,26 @@ function ActiveAccountCard({
             <>
               {visibleTokens.length > 0 && (
                 <ul className="zion-assets">
-                  {visibleTokens.map((row) => {
-                    // 갈림길 하나: 주소가 벼린 환율에 있으면 TTL 환산, 없으면
-                    // 기존 Binance/USD 경로. 심볼은 판단에 쓰지 않는다.
-                    const rate = rateByAddress(row.id);
-                    const ttl = tokenAmountToTtl(row.balance, row.decimals, rate);
-                    // 벼린 토큰 심볼을 달았지만 주소가 스냅샷에 없는 토큰 —
-                    // 대문자화하면 스테이블 목록에 걸려 "1 달러" 로 보인다
-                    // (tUSD → TUSD → TrueUSD). 값을 모르는 것이므로 비워 둔다.
-                    const lookalike =
-                      rate === null &&
-                      /^t[A-Z]{3}$/.test(row.symbol) &&
-                      rateByIso(row.symbol.slice(1)) !== null;
-                    const usd =
-                      rate !== null || lookalike ? null : tokenToUsd(row.symbol, prices);
-                    const usdValue =
-                      usd !== null && row.balance > 0n
-                        ? baseUnitToNumber(row.balance, row.decimals) * usd
-                        : null;
+                  {visibleTokens.map((row, i) => {
+                    // 값은 SDK 한 곳에서 온다 — 신원 판정(주소로만)·액면·시세
+                    // 게이트·자릿수가 한 번에 나온다. 셸에 심볼 판정이 없다:
+                    // 심볼은 발행자가 정하는 문자열이라 누구나 symbol() 을
+                    // "USDT" 로 지어 배포할 수 있고, 그러면 그 토큰이 개당
+                    // 1 달러로 찍힌다(v0.5.20 에서 막은 구멍).
+                    const value = tokenValues[i]!;
+                    // 수량 표기와 TTL 환산이 **같은** 자릿수를 쓴다. 갈라지면
+                    // 한 줄 안에서 두 숫자가 서로를 부정한다.
                     return (
                       <li key={row.id} className="zion-assets__row">
                         <span className="zion-assets__symbol" title={row.name}>
                           {row.symbol}
                         </span>
                         <span className="zion-assets__amount">
-                          {formatAmount(row.balance, row.decimals)}
-                          {ttl !== null && row.balance > 0n ? (
-                            <span className="zion-assets__usd">
-                              {t('tokens.value_ttl', { v: formatTtl(ttl) })}
-                            </span>
-                          ) : (
-                            usdValue !== null && (
-                              <span className="zion-assets__usd">
-                                {t('tokens.value_usd', { v: formatUsd(usdValue) })}
-                              </span>
-                            )
+                          {formatAmount(row.balance, value.decimals)}
+                          {/* 값을 모르면 자리를 비우지 않고 사유를 적는다 —
+                              빈칸은 "0" 으로 읽힌다. 잔액 0 인 줄만 예외다. */}
+                          {row.balance > 0n && (
+                            <ValueLine value={value} className="zion-assets__ttl" />
                           )}
                         </span>
                       </li>
@@ -2102,69 +2260,20 @@ function formatAmount(base: bigint | null, decimals: number): string {
   return `${withCommas(whole.toString())}.${fracStr}`;
 }
 
-// ────────── 두 개의 눈금 ──────────
+// ────────── 눈금은 하나다 ──────────
 //
-// TTL 은 기준이다. 다른 것으로 바꿔 적지 않는다 — TTL 옆에 오는 것은 환산값이
-// 아니라 TTL 자신의 정의(노동자 하루 품삯)다.
+// TTL 이 기준이다. 모든 자산을 TTL 로 잰다 — 상장자산도 예외가 아니다.
+// TTL 자신만 환산하지 않는다. TTL 옆에 오는 것은 환산값이 아니라 TTL 자신의
+// 정의(노동자 하루 품삯)이고, 그 줄에는 곱셈이 0 회다.
 //
-// 방향은 반대로만 흐른다: t{ISO} 통화토큰이 TTL 로 재어진다(rate-snapshot 경로).
-// BTC·ETH 같은 외부 상장자산은 Binance 눈금(USD)으로만 잰다.
-// 두 눈금은 만나지 않는다 — 잇는 상수를 두면 TTL 이 다시 시세를 따라간다.
-
-// 임의 ERC-20/ZION 토큰 심볼 → 1 unit = X USD. Binance ticker 의 {SYM}USDT pair
-// 를 우선 시도, 없으면 {SYM}BTC × BTCUSDT 우회. 스테이블코인 (USDC/USDT/DAI)
-// 은 ticker 없거나 = 1 로 봐도 무방한 케이스 — 명시적으로 1 로 매핑한다.
-const STABLE_USD: Readonly<Record<string, number>> = {
-  USDT: 1,
-  USDC: 1,
-  DAI: 1,
-  BUSD: 1,
-  TUSD: 1,
-};
-function tokenToUsd(
-  symbol: string,
-  prices: Record<string, number> | null,
-): number | null {
-  const sym = symbol.toUpperCase();
-  if (STABLE_USD[sym] !== undefined) return STABLE_USD[sym]!;
-  if (!prices) return null;
-  // 직접 USDT 페어가 있으면 최단 경로
-  const direct = prices[`${sym}USDT`];
-  if (direct !== undefined && direct > 0) return direct;
-  // BTC 페어 + BTCUSDT 우회 — ETHBTC, WETHBTC 같은 wrapped 자산 커버
-  const btc = prices[`${sym}BTC`];
-  const btcUsd = prices['BTCUSDT'];
-  if (btc !== undefined && btc > 0 && btcUsd !== undefined && btcUsd > 0) {
-    return btc * btcUsd;
-  }
-  // WETH/WBTC 같은 wrapped 는 원본 심볼로 한 번 더 시도
-  if (sym.startsWith('W') && sym.length > 1) {
-    return tokenToUsd(sym.slice(1), prices);
-  }
-  // 미상장 자산은 Binance 눈금 위에 없다. 값을 모르므로 null — 지어낸 환산을
-  // 끼워 넣으면 TTL 눈금과 시세 눈금이 다시 이어진다.
-  return null;
-}
-
-// base-unit bigint 잔액 × decimals × 1 unit → number (USD 또는 BTC).
-// BigInt 정확도를 number 로 좁히는 지점은 마지막 곱셈 한 번만.
-function baseUnitToNumber(amount: bigint, decimals: number): number {
-  const factor = 10n ** BigInt(decimals);
-  const whole = amount / factor;
-  const frac = amount % factor;
-  return Number(whole) + Number(frac) / Number(factor);
-}
-
-// 상장자산 USD 표시용. 소수 둘째 자리 아래는 화면에서 의미가 없고, 0 으로
-// 적으면 "가치 없음" 으로 읽히므로 아주 작은 값은 '<0.01' 로 구분해 적는다.
-function formatUsd(v: number): string {
-  if (!Number.isFinite(v)) return '—';
-  if (v === 0) return '0';
-  if (Math.abs(v) < 0.01) return '<0.01';
-  const fixed = Math.abs(v).toFixed(2);
-  const [whole, frac] = fixed.split('.') as [string, string];
-  return `${v < 0 ? '-' : ''}${withCommas(whole)}.${frac}`;
-}
+// 시장 시세는 **재어지는 자산의 성질**이지 자(尺)의 성질이 아니다. BTC 를 TTL
+// 로 재도 TTL 의 눈금은 변하지 않는다 — perTtl 은 GDP÷인구÷365 에서만 오고
+// 시장을 보지 않는다. 금지된 것은 뒤집힌 방향(TTL 자신의 값이 시세를 따라가는
+// 것, 옛 페그 TTL = 10/365 BTC)이다.
+//
+// 그래서 이 파일에는 USD 표기 함수도, 심볼→USD 조회도, 환율 상수도 없다.
+// 심볼→USD 는 SDK `rates/market.ts` 한 곳(assetValueInTtl 안)에서만 하고,
+// USD 는 화면에서 값의 단위가 아니라 근거 패널의 재료로만 남는다.
 
 // ────────── 계정 추가 메뉴 ──────────
 function AddAccountMenu({

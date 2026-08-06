@@ -13,16 +13,21 @@
 // 토큰이 발행됐을 때 목록에 영영 안 나타난다. 지갑이 자동 감지하는 값이므로
 // "기본은 보임, 사용자가 끈 것만 기억" 이 맞다.
 //
-// 환율은 재구현하지 않는다 — wallet-sdk 의 `rateByAddress` / `tokenAmountToTtl`
-// 을 그대로 쓴다. 다만 테스트에서 스냅샷 실제 주소에 묶이지 않도록 조회 함수를
-// 주입 가능하게 열어 뒀다. 벼린 환율은 TTL 체인의 통화토큰 66 종에만 있으므로
-// 그 밖의 토큰은 가치 자리를 **비운다** — 0 이나 추정치를 넣지 않는다.
+// 값 산식은 재구현하지 않는다 — wallet-sdk 의 `assetValueInTtl` **하나만** 부른다.
+// 예전에는 이 파일이 `stableDenomOf` + `stableToTtl` + `tokenAmountToTtl` 을 직접
+// 조합해 신원 계층을 셸에 한 벌 더 갖고 있었고, 그래서 android 의 `tokenValueOf`
+// 경로와 표면이 2 벌로 갈렸다. 갈린 표면은 반드시 서로 다른 값을 낸다.
+//
+// 값을 모르면 **비운다** — 0 이나 추정치를 넣지 않는다. 사유(신원 미확인 /
+// 시세 없음 / 액면 환율 없음)는 SDK 가 구분해 주므로 화면이 그대로 옮긴다.
 
 import {
   rateByAddress,
-  tokenAmountToTtl,
   authoritativeDecimals,
   unresolvedRates,
+  assetValueInTtl,
+  type AssetValue,
+  type PriceTable,
   type TokenRate,
 } from '@byeorin/wallet-sdk/evm';
 
@@ -220,8 +225,16 @@ export interface TokenRow {
   readonly balance: bigint;
   readonly hidden: boolean;
   readonly meta: TokenMeta;
-  /** 잔액의 TTL 환산. 환율이 없으면 null. */
+  /** 잔액의 TTL 값. 낼 수 없으면 null — 0 이 아니다. `value.ttl` 과 같은 값이다. */
   readonly ttl: number | null;
+  /**
+   * SDK 가 낸 값 전부 — 근거(basis)·사유(reason)·시세 기반 여부(volatile).
+   *
+   * 화면이 basis 를 다시 판정하지 않게 통째로 들려 준다. 고정 액면과 시세 기반을
+   * 화면이 구분하지 못하면 출렁이는 TTL 값이 "TTL 이 BTC 를 따라간다" 로 읽히고,
+   * 그건 지운 옛 페그와 화면상 구별이 안 된다.
+   */
+  readonly value: AssetValue;
   /**
    * 이 잔액을 누가 말해줬는가. 체인에서 직접 읽었으면 null, 인덱서/외부 API 가
    * 준 값이면 그 이름. 신뢰도가 다르므로 화면이 근거 패널에 그대로 노출한다.
@@ -278,6 +291,27 @@ export function defaultMetaResolver(id: string, symbol: string): TokenMeta {
 }
 
 /**
+ * `buildTokenRows` 가 바깥에서 받아야 하는 사실.
+ *
+ * **prices 는 옵셔널이 아니다.** 옵셔널로 두면 호출부가 배선을 빠뜨려도 타입이
+ * 통과하고 화면만 빈다 — v0.5.22 에서 실제로 그렇게 났다(EVM 스테이블 22 종
+ * 빈칸). 시세 표가 아직 없으면 `null` 을 **명시적으로** 넘긴다. 그러면 상장자산은
+ * 사유 `unlisted`(시세 없음)로 찍힌다 — 빈칸이 아니라 문장이다.
+ */
+export interface BuildTokenRowsOptions {
+  /** Binance ticker 표. 아직 못 받았으면 null 을 명시적으로 넘긴다. */
+  readonly prices: PriceTable | null;
+  /**
+   * EVM chainId. 스테이블 액면은 chainId 스코프로만 판정된다 — 주소가 체인 간
+   * 재사용되기 때문이다. 모르면 null 이고, 그러면 EVM 스테이블은 액면을 얻지
+   * 못해 값이 빈다(틀린 값보다 낫다).
+   */
+  readonly chainId?: number | null;
+  /** 테스트에서 스냅샷 조회를 갈아끼우는 자리. 화면은 기본값을 쓴다. */
+  readonly resolveMeta?: MetaResolver;
+}
+
+/**
  * PortableTokenBalance[] → TokenRow[].
  *
  * 정렬·필터는 여기서 하지 않는다(별도 함수). 이 단계는 "사실 붙이기" 만 한다.
@@ -287,10 +321,32 @@ export function buildTokenRows(
   tokens: readonly PortableTokenBalance[],
   hidden: HiddenMap,
   chainKey: string,
-  resolveMeta: MetaResolver = defaultMetaResolver,
+  opts: BuildTokenRowsOptions,
 ): TokenRow[] {
+  const family = chainKey.split(':')[0] ?? '';
+  const { prices, chainId = null, resolveMeta = defaultMetaResolver } = opts;
   return tokens.map((tok) => {
     const meta = resolveMeta(tok.id, tok.symbol);
+    // 익스플로러/인덱서가 준 decimals 보다 스냅샷 값이 이긴다. 출처가 장악되면
+    // 표시 수량이 임의 배율로 부푼다.
+    const declared = authoritativeDecimals(tok.id, tok.decimals);
+    // 신원 판정·액면·시세 환산을 **한 번에** SDK 가 한다. 셸에서 갈래를 다시
+    // 세우면 같은 잔액이 화면마다 다른 값으로 찍힌다(v0.5.21).
+    const value = assetValueInTtl(
+      {
+        kind: 'token',
+        id: tok.id,
+        family,
+        chainId,
+        symbol: tok.symbol,
+        balance: tok.balance,
+        decimals: declared,
+      },
+      { prices },
+    );
+    // 표시 수량과 TTL 값이 **같은** 자릿수를 쓴다. 갈라지면 한 줄 안에서 두
+    // 숫자가 서로를 부정한다("100 USDT ≈ 0.0000004 TTL").
+    const decimals = value.decimals;
     return {
       id: tok.id,
       key: tok.id.toLowerCase(),
@@ -300,11 +356,12 @@ export function buildTokenRows(
       // 있는 토큰은 스냅샷 값이 이긴다 — 안 그러면 출처가 장악됐을 때 보여지는
       // 수량이 임의 배율로 부푼다. 스냅샷에 없으면(대부분의 비-TTL 토큰) 받은
       // 값을 그대로 쓴다.
-      decimals: authoritativeDecimals(tok.id, tok.decimals),
+      decimals,
       balance: tok.balance,
       hidden: isHidden(hidden, chainKey, tok.id),
       meta,
-      ttl: tokenAmountToTtl(tok.balance, tok.decimals, meta.rate),
+      ttl: value.ttl,
+      value,
       source: tok.source ?? null,
     };
   });

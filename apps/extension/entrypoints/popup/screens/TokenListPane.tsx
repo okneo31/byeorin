@@ -18,8 +18,9 @@
 // 판단(필터·정렬·검색·가리기 상태)은 전부 `lib/token-visibility.ts` 에 있다.
 // 이 파일은 그 결과를 그리기만 한다 — 그래야 규칙을 jsdom 없이 테스트할 수 있다.
 //
-// 환율은 재구현하지 않는다. wallet-sdk 의 벼린 환율(`rateByAddress` /
-// `tokenAmountToTtl`)이 유일한 출처다.
+// 값 산식은 재구현하지 않는다. wallet-sdk 의 `assetValueInTtl` 하나가 신원 판정
+// (주소로만)·액면·시세·자릿수를 한 번에 내고, 이 화면은 그 결과(`row.value`)를
+// 옮기기만 한다. 환율 숫자는 이 파일 어디에도 없다 — 스냅샷에서 읽는다.
 //
 // 용어 주의: 1 TTL = 노동자 1일 품삯이고, perTtl 은 "1 TTL 이 그 통화로 얼마인가"
 // 다. 시장환율이 아니다. tUSD 는 실제 달러가 아니다. 화면 문구에서 이 둘을
@@ -27,6 +28,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ChromeLocalBackend } from '@byeorin/shell-core';
+// 앵커 고지용. 날짜를 셸에 적지 않는다 — 재앵커되는 순간 화면이 거짓이 된다.
+import { RATE_SNAPSHOT } from '@byeorin/wallet-sdk/evm';
 import { useT } from '@byeorin/i18n/react';
 import { formatAssetAmount } from '../lib/token-send.js';
 import {
@@ -53,6 +56,21 @@ export interface TokenListPaneProps {
   /** 활성 체인 키. 가리기 상태를 체인별로 저장하는 데 쓴다. */
   chainKey: string;
   /**
+   * Binance ticker 표. 상장자산을 TTL 로 재는 데 쓴다.
+   *
+   * **옵셔널이 아니다.** 옵셔널로 두면 호출부가 배선을 빠뜨려도 타입이 통과하고
+   * 화면만 빈다 — v0.5.22 에서 실제로 그렇게 났다(EVM 스테이블 22 종 빈칸).
+   * 아직 못 받았으면 `null` 을 **명시적으로** 넘긴다. 그러면 그 자산은
+   * "시세 없음" 으로 사유가 찍힌다.
+   */
+  prices: Record<string, number> | null;
+  /**
+   * EVM chainId. 스테이블 액면은 chainId 스코프로만 판정된다 — 주소가 체인 간
+   * 재사용되기 때문이다. 안 넘기면 EVM 스테이블은 액면을 얻지 못하고 값이 빈다
+   * (틀린 값보다 낫다).
+   */
+  chainId?: number | null;
+  /**
    * 이 체인의 어댑터가 토큰을 다룰 수 있는가 — 상위가 wallet-sdk 의
    * `supportsTokens(adapter)` 를 그대로 넘긴다.
    *
@@ -71,6 +89,8 @@ export interface TokenListPaneProps {
 export function TokenListPane({
   tokens,
   chainKey,
+  prices,
+  chainId = null,
   supported = true,
   error = null,
   onRefresh,
@@ -99,8 +119,8 @@ export function TokenListPane({
   }, [backend]);
 
   const rows = useMemo<TokenRow[]>(
-    () => (tokens ? buildTokenRows(tokens, hidden, chainKey) : []),
-    [tokens, hidden, chainKey],
+    () => (tokens ? buildTokenRows(tokens, hidden, chainKey, { prices, chainId }) : []),
+    [tokens, hidden, chainKey, chainId, prices],
   );
 
   const view = useMemo(
@@ -216,6 +236,12 @@ export function TokenListPane({
           <p className="muted small">{t('tokens.hidden_note')}</p>
           {/* 통화토큰과 실제 통화를 섞지 않게 하는 고지. 지워서는 안 된다. */}
           <p className="muted small">{t('tokens.disclaimer')}</p>
+          {/* 이 화면의 TTL 값이 어느 앵커의 환율로 재어졌는지. 한 화면에 한 번 —
+              줄마다 붙이면 66 줄이 날짜로 뒤덮인다. 행 단위 근거는 확장 패널이
+              담당한다. 날짜는 스냅샷에서 읽는다. */}
+          <p className="anchor-line muted small">
+            {t('tokens.anchor_line', { date: RATE_SNAPSHOT.anchoredAt })}
+          </p>
         </>
       )}
 
@@ -266,15 +292,49 @@ function TokenRowItem({
           >
             {formatAssetAmount(row.balance, row.decimals)}
           </span>
-          {/* 환율이 없으면 가치 자리를 **비운다**. 0 이나 추정치를 넣으면
-              "값이 없는 토큰" 과 "값을 모르는 토큰" 이 구분되지 않는다. */}
-          {row.ttl !== null ? (
-            <span className="token-row__ttl">
-              {t('tokens.value_ttl', { v: formatTtl(row.ttl) })}
+          {/* 값을 모르면 자리를 비우지 않고 **사유**를 적는다. 빈칸은 "0" 으로
+              읽혀 "값이 없는 토큰" 과 "값을 모르는 토큰" 이 구분되지 않는다.
+              사유는 SDK 가 갈라 주므로 화면은 그대로 옮기기만 한다.
+
+              고정 액면(스테이블·t{ISO})과 시세 기준(상장자산)은 배지로 가른다.
+              구분이 없으면 출렁이는 TTL 값이 "TTL 이 BTC 를 따라간다" 로 읽히고,
+              그건 지운 옛 페그와 화면상 구별이 안 된다. */}
+          {row.value.ttl !== null ? (
+            <span
+              className={
+                row.value.volatile ? 'token-row__ttl token-row__ttl--market' : 'token-row__ttl'
+              }
+            >
+              {row.value.volatile
+                ? t('tokens.value_ttl_market', { v: formatTtl(row.value.ttl) })
+                : t('tokens.value_ttl', { v: formatTtl(row.value.ttl) })}
+              <span
+                className={`value-badge value-badge--${row.value.volatile ? 'market' : 'fixed'}`}
+                title={
+                  row.value.volatile
+                    ? t('tokens.basis_market_hint')
+                    : t('tokens.basis_fixed_hint')
+                }
+              >
+                {row.value.volatile ? t('tokens.basis_market') : t('tokens.basis_fixed')}
+              </span>
             </span>
           ) : (
-            <span className="token-row__ttl token-row__ttl--none">
-              {t('tokens.no_rate')}
+            <span
+              className="token-row__ttl token-row__ttl--none"
+              title={
+                row.value.reason === 'unverified'
+                  ? t('tokens.value_unverified_hint')
+                  : undefined
+              }
+            >
+              {row.value.reason === 'unverified'
+                ? t('tokens.value_unverified')
+                : row.value.reason === 'bad-decimals'
+                  ? t('tokens.value_bad_decimals')
+                  : row.value.reason === 'unlisted'
+                    ? t('tokens.value_unlisted')
+                    : t('tokens.no_rate')}
             </span>
           )}
         </span>
@@ -339,6 +399,29 @@ function TokenRowItem({
               })}
             </p>
           )}
+          {/* 시세 기준으로 재어진 자산은 그 시세 자체가 근거의 절반이다. 어느
+              페어로 얻었는지까지 적는다 — 값만 있고 경로가 없으면 믿으라는 말이다.
+              USD 가 화면에 남는 유일한 자리가 여기다. 값의 단위가 아니라 재료다. */}
+          {row.value.market && (
+            <div className="token-basis__row">
+              <dt>{t('tokens.basis_market')}</dt>
+              <dd>
+                {t('tokens.basis_market_unit', {
+                  // 반올림하지 않는다. 1 달러 미만 자산은 formatBigNumber 로
+                  // 적으면 "0" 이 되어 가치 없음으로 읽힌다.
+                  usd: formatPerTtl(row.value.market.unitUsd),
+                  via: row.value.market.via,
+                })}
+              </dd>
+            </div>
+          )}
+          {/* 이 값이 **어느 시점 환율**의 것인지. 스냅샷을 다시 만들면 전 종목이
+              바뀌므로, 앵커 없는 숫자는 근거가 아니다. 날짜는 스냅샷에서 읽는다 —
+              셸에 적으면 재앵커되는 순간 화면이 거짓이 된다. */}
+          <div className="token-basis__row">
+            <dt>{t('tokens.basis_anchored_at')}</dt>
+            <dd>{RATE_SNAPSHOT.anchoredAt}</dd>
+          </div>
           {/* 잔액의 출처. 체인에서 직접 읽은 값과 인덱서가 말해준 값은 신뢰도가
               다르므로 숫자 옆이 아니라 근거 자리에 사실대로 적는다.
               (문구가 하드코딩인 이유: i18n 카탈로그는 이 작업의 소유 범위 밖이라

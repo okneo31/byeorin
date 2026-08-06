@@ -196,6 +196,36 @@ a {
   box-shadow: var(--nd-focus-ring);
 }
 
+/* 메모 입력칸 — 2048바이트(한글 682자)까지 들어가지만 화면을 다 먹지 않게
+   기본 높이를 낮춘다. 세로 리사이즈는 .nd-textarea 가 이미 허용한다. */
+.nd-textarea--memo {
+  min-height: 72px;
+}
+
+/* 바이트 카운터 줄 — 왼쪽 카운터, 오른쪽 진행 문구. */
+.nd-memo-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+/* 확인(review) 단계가 없는 셸이라, 서명 직전에 보낼 메모 원문을 그대로 보여준다. */
+.nd-memo-review {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--nd-border);
+  border-radius: 8px;
+  background: var(--nd-paper);
+}
+
+.nd-memo-review__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
 .nd-row {
   display: flex;
   gap: 10px;
@@ -389,6 +419,63 @@ a {
   white-space: nowrap;
 }
 
+/* 값 열 — 수량 위, TTL 값 아래. TTL 이 보조 중 최상단이다. */
+.nd-tokens__value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+/* TTL 값 줄. USD 보조줄이 있던 자리를 TTL 이 대체했으므로 그보다 크게 잡는다. */
+.nd-ttl-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--nd-fg);
+}
+
+/* 시세 기준 값은 출렁인다 — 고정 액면과 같은 무게로 보이면 안 된다. */
+.nd-ttl-value--market {
+  color: var(--nd-fg-muted);
+}
+
+/* 값을 모른다는 문장은 금액과 같은 무게로 보이면 안 된다. 숫자 자리에 있어서
+   스타일이 같으면 사용자가 값으로 읽는다. */
+.nd-ttl-value--unknown {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--nd-fg-muted);
+  opacity: 0.72;
+}
+
+/* 근거 배지는 아이콘·색이 아니라 글자다 — 고대비 모드에서도 남는다. */
+.value-badge {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--nd-border);
+  color: var(--nd-fg-muted);
+}
+
+.value-badge--market::before {
+  content: '~ ';
+}
+
+.value-badge--fixed::before {
+  content: '= ';
+}
+
+/* 어느 앵커의 값인지 — 화면당 한 줄. */
+.nd-anchor-line {
+  margin-top: 4px;
+  font-size: 11.5px;
+}
+
 /* ===== 활동 테이블 ===== */
 .nd-activity-table {
   width: 100%;
@@ -414,6 +501,23 @@ a {
 
 .nd-mono {
   font-family: var(--nd-font-mono);
+}
+
+/* 활동 표의 메모 행 — 위 행에 붙은 부속이라 위쪽 경계선을 지운다. */
+.nd-activity-table__memo-row td {
+  padding-top: 0;
+  font-size: 13px;
+}
+
+.nd-activity-memo {
+  /* 메모의 \t \n 은 허용 문자다 — 보존한다. */
+  white-space: pre-wrap;
+  /* 공백 없는 2048바이트가 표를 가로로 밀어내지 않게. */
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* ===== 토큰 추가 모달 ===== */

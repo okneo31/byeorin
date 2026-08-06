@@ -1,6 +1,6 @@
 [package]
 name = "byeorin-desktop"
-version = "0.5.18"
+version = "0.5.23"
 description = "벼린 — 데스크톱 (Tauri 2.x)"
 edition = "2021"
 rust-version = "1.77"

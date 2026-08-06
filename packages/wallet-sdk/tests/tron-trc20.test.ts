@@ -11,6 +11,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as TronWebNs from 'tronweb';
 import { TronAdapter } from '../src/chains/tron.js';
 import type { TronTokenNotice } from '../src/chains/tron.js';
+import {
+  KNOWN_TRC20,
+  lookupKnownTrc20,
+  reconcileKnownDecimals,
+} from '../src/chains/trc20-known.js';
 import type { TxContext } from '../src/chains/chain.js';
 import type { Signer } from '../src/types.js';
 
@@ -30,6 +35,8 @@ const TOKEN_A = base58From('aa'.repeat(20));
 const TOKEN_B = base58From('bb'.repeat(20));
 const TOKEN_C = base58From('cc'.repeat(20));
 const RECIPIENT = base58From('dd'.repeat(20));
+/** 내장 목록에 있는 실제 TRC-20 USDT 컨트랙트. */
+const USDT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 
 // --- ABI 인코딩 헬퍼 (계약 반환값 흉내) ---
 function encodeUint(n: number | bigint): string {
@@ -145,7 +152,7 @@ describe('TronAdapter.discoverTokens (offline)', () => {
   // 회복도 안 되는데, 토큰마다 symbol/name 까지 부르면 예산이 3 배로 나가
   // 대부분이 decimals 조차 못 읽고 사라진다(실측: 880 개 중 0 개).
   // 이름표는 fetchLabels 로만 켠다.
-  it('라벨 조회를 켜면 토큰당 계약 호출 3회로 조회한다', async () => {
+  it('라벨 조회를 켜면 decimals 를 전부 끝낸 뒤 symbol 만 더 부른다', async () => {
     const f = gridFetch([{ [TOKEN_A]: '1500000' }, { [TOKEN_B]: '42' }]);
     const adapter = makeAdapter(f, { fetchLabels: true });
     const calls = stubConstantCalls(adapter, {
@@ -167,7 +174,8 @@ describe('TronAdapter.discoverTokens (offline)', () => {
     expect(out[0]).toMatchObject({
       id: TOKEN_A,
       symbol: 'USDT',
-      name: 'Tether USD',
+      // name() 은 부르지 않는다 — 이름 칸은 symbol 로 채운다.
+      name: 'USDT',
       decimals: 6,
       balance: 1500000n,
     });
@@ -180,15 +188,20 @@ describe('TronAdapter.discoverTokens (offline)', () => {
       balance: 42n,
     });
 
-    // 왕복 수: 계정 API 1회 + 토큰 2개 × 3회.
+    // 왕복 수: 계정 API 1회 + decimals 2회 + symbol 2회 = 4. (옛 3배안은 6회)
     expect(f).toHaveBeenCalledTimes(1);
-    expect(calls).toHaveBeenCalledTimes(6);
+    expect(calls).toHaveBeenCalledTimes(4);
     // 컨트랙트를 하나씩 balanceOf 로 묻지 않았다.
     const selectors = calls.mock.calls.map((c) => c[1] as string);
     expect(selectors.some((s) => s.startsWith('balanceOf'))).toBe(false);
-    expect(new Set(selectors)).toEqual(
-      new Set(['decimals()', 'symbol()', 'name()']),
-    );
+    expect(new Set(selectors)).toEqual(new Set(['decimals()', 'symbol()']));
+    // **순서가 곧 우선순위다.** decimals 가 전부 끝난 뒤에 symbol 이 나간다.
+    expect(selectors).toEqual([
+      'decimals()',
+      'decimals()',
+      'symbol()',
+      'symbol()',
+    ]);
   });
 
   it('잔액과 목록이 TronGrid 출처임을 source 에 적는다', async () => {
@@ -360,6 +373,167 @@ describe('TronAdapter.discoverTokens (offline)', () => {
     const out = await adapter.discoverTokens(OWNER);
     expect(out).toHaveLength(1);
     expect(out[0]!.id).toBe(TOKEN_A);
+  });
+});
+
+// 사용자 신고(2026-08-04): "USDT 토큰이 컨트랙트 주소로 표시된다".
+// 원인은 예산 절충이었고, 주소가 고정된 토큰은 그 절충에 걸릴 이유가 없다.
+describe('TronAdapter — 내장 TRC-20 이름표 (RPC 0회)', () => {
+  it('USDT 는 라벨 조회 없이 이름이 나온다 (계약 호출은 decimals 1회뿐)', async () => {
+    const adapter = makeAdapter(gridFetch([{ [USDT]: '1500000' }]));
+    const calls = stubConstantCalls(adapter, {
+      // symbol/name 은 일부러 주지 않는다 — 안 불러야 정상이다.
+      [USDT]: { decimals: encodeUint(6) },
+    });
+
+    const out = await adapter.discoverTokens(OWNER);
+
+    expect(out[0]).toMatchObject({
+      id: USDT,
+      symbol: 'USDT',
+      name: 'Tether USD',
+      decimals: 6,
+      balance: 1500000n,
+    });
+    expect(calls).toHaveBeenCalledTimes(1);
+    expect(calls.mock.calls[0]![1]).toBe('decimals()');
+    // 이름표의 출처를 숨기지 않는다.
+    expect(out[0]!.source).toContain('내장목록');
+  });
+
+  it('내장 토큰이라도 decimals 는 체인에서 읽는다 — 못 읽으면 버린다', async () => {
+    const adapter = makeAdapter(gridFetch([{ [USDT]: '1500000' }]));
+    stubConstantCalls(adapter, {}); // decimals 실패
+
+    expect(await adapter.discoverTokens(OWNER)).toEqual([]);
+    expect(notices).toContainEqual({
+      kind: 'dropped',
+      contract: USDT,
+      reason: 'decimals-unreadable',
+    });
+  });
+
+  it('체인 decimals 가 6 이 아니어도 체인값을 따른다 (내장값이 이기지 않는다)', async () => {
+    const adapter = makeAdapter(gridFetch([{ [USDT]: '100' }]));
+    stubConstantCalls(adapter, { [USDT]: { decimals: encodeUint(2) } });
+
+    const out = await adapter.discoverTokens(OWNER);
+    expect(out[0]!.decimals).toBe(2);
+  });
+
+  it('내장 토큰에는 라벨 조회 예산을 쓰지 않는다', async () => {
+    const adapter = makeAdapter(
+      gridFetch([{ [USDT]: '5000000' }, { [TOKEN_A]: '1000000' }]),
+      { fetchLabels: true },
+    );
+    const calls = stubConstantCalls(adapter, {
+      [USDT]: { decimals: encodeUint(6), symbol: encodeString('WRONG') },
+      [TOKEN_A]: { decimals: encodeUint(6), symbol: encodeString('AAA') },
+    });
+
+    const out = await adapter.discoverTokens(OWNER);
+    expect(out.find((t) => t.id === USDT)!.symbol).toBe('USDT');
+    expect(out.find((t) => t.id === TOKEN_A)!.symbol).toBe('AAA');
+    // decimals 2회 + symbol 1회(내장 토큰 제외). USDT 에는 안 나갔다.
+    expect(calls).toHaveBeenCalledTimes(3);
+    const symbolTargets = calls.mock.calls
+      .filter((c) => (c[1] as string) === 'symbol()')
+      .map((c) => c[0] as string);
+    expect(symbolTargets).toEqual([TOKEN_A]);
+  });
+
+  it('미등록 토큰은 예전처럼 주소 축약으로 안전하게 떨어진다', async () => {
+    const adapter = makeAdapter(gridFetch([{ [TOKEN_A]: '7' }]));
+    stubConstantCalls(adapter, { [TOKEN_A]: { decimals: encodeUint(2) } });
+
+    const out = await adapter.discoverTokens(OWNER);
+    expect(out[0]!.symbol).toBe(`${TOKEN_A.slice(0, 6)}…${TOKEN_A.slice(-4)}`);
+    expect(out[0]!.source).toContain('symbol=주소축약');
+    expect(out[0]!.source).not.toContain('내장목록');
+  });
+
+  it('라벨 예산은 잔액 큰 순으로 쓰고 상한을 넘지 않는다', async () => {
+    const adapter = makeAdapter(
+      gridFetch([
+        { [TOKEN_A]: '1' }, // decimals 0 → 1
+        { [TOKEN_B]: '900' }, // decimals 0 → 900
+        { [TOKEN_C]: '50' }, // decimals 0 → 50
+      ]),
+      { fetchLabels: true, maxLabelLookups: 1 },
+    );
+    const calls = stubConstantCalls(adapter, {
+      [TOKEN_A]: { decimals: encodeUint(0), symbol: encodeString('A') },
+      [TOKEN_B]: { decimals: encodeUint(0), symbol: encodeString('B') },
+      [TOKEN_C]: { decimals: encodeUint(0), symbol: encodeString('C') },
+    });
+
+    const out = await adapter.discoverTokens(OWNER);
+    expect(out.find((t) => t.id === TOKEN_B)!.symbol).toBe('B');
+    expect(calls).toHaveBeenCalledTimes(4); // decimals 3 + symbol 1
+    const symbolTargets = calls.mock.calls
+      .filter((c) => (c[1] as string) === 'symbol()')
+      .map((c) => c[0] as string);
+    expect(symbolTargets).toEqual([TOKEN_B]);
+  });
+
+  it('라벨 조회가 실패해도 1단계 결과는 그대로 남는다', async () => {
+    const adapter = makeAdapter(gridFetch([{ [TOKEN_A]: '9' }]), {
+      fetchLabels: true,
+    });
+    const calls = vi.fn(async (_c: string, selector: string) => {
+      if (selector.startsWith('decimals')) return ok(encodeUint(6));
+      throw new Error('quota exceeded');
+    });
+    (adapter as unknown as Internals).tron.transactionBuilder
+      .triggerConstantContract = calls as unknown as ReturnType<typeof vi.fn>;
+
+    const out = await adapter.discoverTokens(OWNER);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.decimals).toBe(6);
+    expect(out[0]!.symbol).toContain('…');
+  });
+
+  it('수동 추가에서도 symbol 을 못 읽으면 내장 이름표로 대체한다', async () => {
+    const adapter = makeAdapter(gridFetch([]));
+    stubConstantCalls(adapter, { [USDT]: { decimals: encodeUint(6) } });
+
+    const out = await adapter.readToken(USDT, OWNER);
+    expect(out).toMatchObject({ symbol: 'USDT', name: 'Tether USD', decimals: 6 });
+    expect(out!.source).toContain('symbol=내장목록');
+  });
+});
+
+describe('trc20-known 목록 자체', () => {
+  it('주소를 정규화하지 않는다 — 소문자 입력은 아는 토큰이 아니다', () => {
+    expect(lookupKnownTrc20(USDT)).toBeDefined();
+    expect(lookupKnownTrc20(USDT.toLowerCase())).toBeUndefined();
+    expect(lookupKnownTrc20(USDT.toUpperCase())).toBeUndefined();
+  });
+
+  it('모든 엔트리가 유효한 base58check 주소이고 근거를 갖는다', () => {
+    for (const t of KNOWN_TRC20) {
+      expect(t.address).toMatch(/^T[1-9A-HJ-NP-Za-km-z]{33}$/);
+      // 진짜 체크섬 검증 — 오타 주소는 여기서 걸린다.
+      expect(tronUtils.crypto.isAddressValid(t.address)).toBe(true);
+      // hex 왕복이 같은 주소로 돌아온다.
+      expect(tronUtils.address.fromHex(tronUtils.address.toHex(t.address))).toBe(
+        t.address,
+      );
+      expect(t.evidence.length).toBeGreaterThan(0);
+      expect(t.symbol.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('decimals 대조는 체인값을 채택하고 불일치를 기록한다', () => {
+    const known = { address: 'T', symbol: 'X', name: 'X', decimals: 6, evidence: 'e' };
+    expect(reconcileKnownDecimals(known, 8)).toMatchObject({ decimals: 8 });
+    expect(reconcileKnownDecimals(known, 8).note).toContain('불일치');
+    expect(reconcileKnownDecimals(known, 6).note).toBeUndefined();
+    // 체인을 못 읽었을 때만 내장 폴백, 그리고 미검증임을 적는다.
+    expect(reconcileKnownDecimals(known, null).decimals).toBe(6);
+    expect(reconcileKnownDecimals(known, null).note).toContain('미검증');
+    // 내장 decimals 가 없으면 폴백도 없다 — 추측하지 않는다.
+    expect(reconcileKnownDecimals(undefined, null).decimals).toBeNull();
   });
 });
 

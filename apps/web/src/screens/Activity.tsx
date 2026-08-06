@@ -14,6 +14,7 @@ import {
   ActivityLog,
   TokenRegistry,
   TTL_CHAIN,
+  validateMemo,
   type Activity as ActivityT,
   type WalletAccount,
 } from '@byeorin/wallet-sdk';
@@ -64,6 +65,18 @@ export function rawAmount(v: bigint): string {
   const neg = s.startsWith('-');
   const digits = neg ? s.slice(1) : s;
   return (neg ? '-' : '') + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+// 활동 항목의 메모. TTL(chainId 7777) 인덱서 경로에서만 채워지므로 이 셸에서는
+// 체인 분기를 두지 않는다 — 값이 있으면 그린다.
+//
+// 인덱서가 준 문자열을 그대로 믿지 않고 송신 때와 같은 규칙(SDK validateMemo)으로
+// 한 번 더 거른다. 제어문자·깨진 글자가 화면에 오르지 않는다.
+// 필드는 optional 로 확장되는 중이라(SDK activity/log.ts) 좁혀서 읽는다.
+function memoOf(it: ActivityT): string | null {
+  const raw = (it as { memo?: unknown }).memo;
+  if (typeof raw !== 'string') return null;
+  return validateMemo(raw).ok ? raw : null;
 }
 
 // 상태 → 칩 prop. ActivityLog 의 status 가 'failed' | 'confirmed' | 'pending' 추정.
@@ -164,6 +177,7 @@ export function Activity({ onBack }: Props) {
               const rowKey = `${it.hash}-${it.blockNumber}`;
               const isOpen = expanded === rowKey;
               const pk = pillKindOf(it.status);
+              const memo = memoOf(it);
               return (
                 <li key={rowKey} className="web-activity__item">
                   <button
@@ -181,6 +195,17 @@ export function Activity({ onBack }: Props) {
                       <div className="web-activity__counterparty">
                         {shortAddr(counterparty)}
                       </div>
+                      {memo !== null && (
+                        // 메모는 체인에서 온 임의 문자열이다. React 텍스트 노드로만
+                        // 렌더한다 — dangerouslySetInnerHTML 금지, 링크 변환도 하지
+                        // 않는다(행이 button 이라 <a> 를 넣을 수도 없다).
+                        <div className="web-activity__memo">
+                          <span className="web-activity__memo-label">
+                            {t('activity.memo_label')}
+                          </span>{' '}
+                          <span className="web-activity__memo-text">{memo}</span>
+                        </div>
+                      )}
                     </div>
                     <div className="web-activity__amount">
                       <span>

@@ -28,6 +28,7 @@ import { discoverTokens as discoverRegistryTokens } from '../tokens/discovery.js
 // 같은 호출을 두 벌 만들면 둘이 어긋난다.
 import { Erc20 } from '../tokens/erc20.js';
 import { TokenRegistry, defaultTokenRegistry } from '../tokens/registry.js';
+import { encodeMemo } from '../memo.js';
 import type { PortableTokenBalance, TokenCapableAdapter } from '../tokens/portable.js';
 import type { Signer, Address, TransferIntent, TxHash } from '../types.js';
 import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
@@ -208,6 +209,29 @@ export class EvmAdapter
     // 실제로 서명될 대상. asset(ERC-20) 이면 to 는 컨트랙트, value 는 0 이 된다.
     let target = to;
     let value = intent.amount;
+
+    // 메모: EVM 에는 메모 필드가 없다. 체인이 원래 가진 tx.data 에 UTF-8 바이트를
+    // 그대로 싣는 것이 TTL 인덱서의 판정 규칙이다(memo.ts). 판정을 통과 못 하는
+    // 메모는 여기서 던진다 — 보내고 나면 체인에는 남지만 화면에는 영영 안 뜬다.
+    //
+    // asset 분기보다 **먼저** 검사한다. 뒤에 두면 asset 이 dataField 를 채운 뒤라
+    // 메모가 조용히 사라진다. 조용히 버리지 않는다 — 사용자는 메모가 실렸다고
+    // 믿고 있다.
+    if (typeof intent.memo === 'string' && intent.memo.length > 0) {
+      if (dataField) {
+        throw new Error(
+          'evm: memo 와 data 는 함께 쓸 수 없다 — 둘 다 tx.data 한 칸을 쓴다. 계약 호출에는 메모를 붙일 수 없다',
+        );
+      }
+      if (typeof intent.asset === 'string' && intent.asset.length > 0) {
+        throw new Error(
+          'evm: ERC-20 전송에는 메모를 붙일 수 없다 — data 가 transfer calldata 로 이미 차 있다. 메모는 native 송금에만 붙는다',
+        );
+      }
+      // 수신자가 컨트랙트면 메모 바이트가 함수 호출로 해석된다. 여기서 막는다.
+      await this.assertEoaRecipient(to);
+      dataField = encodeMemo(intent.memo);
+    }
 
     // 공통 토큰 규약: intent.asset 에 토큰 식별자(EVM 은 컨트랙트 주소)를 넣으면
     // 그 토큰을 보낸다. 이 분기가 없으면 asset 을 넣어도 **native 코인이 그대로
@@ -452,6 +476,31 @@ export class EvmAdapter
         balanceRead: balance !== null,
       }),
     };
+  }
+
+  /**
+   * 수신자가 EOA 인지 확인한다. 컨트랙트면 던진다.
+   *
+   * **메모가 있을 때만** 부른다 — 메모 없는 송금·계약 호출에 RPC 왕복을 늘리지
+   * 않는다. 실패(RPC 오류)도 던진다: 확인 못 한 채로 보내면 메모 바이트가 우연히
+   * 어떤 selector 와 겹쳐 의도치 않은 함수가 불린다. 모르면 멈추는 쪽이 맞다.
+   *
+   * viem 의 getCode 는 `eth_getCode` 가 '0x' 를 주면 undefined 를 돌려준다.
+   */
+  private async assertEoaRecipient(to: ViemAddress): Promise<void> {
+    let code: Hex | undefined;
+    try {
+      code = await this.client.getCode({ address: to });
+    } catch (e) {
+      throw new Error(
+        `evm: 수신자가 컨트랙트인지 확인하지 못했다 — 메모가 붙은 전송을 중단한다 (${String(e)})`,
+      );
+    }
+    if (code !== undefined && code !== '0x') {
+      throw new Error(
+        'evm: 수신자가 컨트랙트다 — 메모 바이트가 함수 호출로 해석된다. 메모를 빼고 보내라',
+      );
+    }
   }
 
   private async shouldUseEip1559(): Promise<boolean> {

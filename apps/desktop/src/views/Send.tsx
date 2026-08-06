@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Erc20,
+  MEMO_MAX_BYTES,
+  MEMO_MIN_BYTES,
+  TTL_CHAIN,
   TokenRegistry,
   discoverTokens,
+  validateMemo,
   type DiscoveredBalance,
+  type MemoCheck,
   type TransferIntent,
   type WalletAccount,
 } from '@byeorin/wallet-sdk';
@@ -28,6 +33,47 @@ type AssetKey = 'native' | string;
 
 const TTL_DECIMALS = 18;
 
+// ── 메모 수신자 검사 ────────────────────────────────────────────────────
+//
+// 메모는 송금 tx 의 data 에 UTF-8 바이트로 실린다. 받는 쪽이 컨트랙트면 그
+// 바이트가 함수 호출로 해석되므로 EOA 에만 붙인다(eth_getCode 가 '0x' 면 EOA).
+// 어댑터(evm.ts assertEoaRecipient)가 최종적으로 막지만, 서명 버튼을 누르기
+// 전에 화면이 먼저 알려주는 편이 낫다.
+//
+// 읽기 전용 RPC 다 — tx 를 보내지 않는다. tauri.conf.json 의 CSP connect-src 에
+// rpc.ttl1.top 이 이미 있으므로 CSP 수정이 필요 없다.
+const TTL_RPC_URL = TTL_CHAIN.rpcUrls.default.http[0] ?? 'https://rpc.ttl1.top';
+
+type RecipientKind = 'eoa' | 'contract';
+
+// 주소별 결과 캐시 — 같은 주소를 다시 확인하려고 RPC 를 또 부르지 않는다.
+const recipientKindCache = new Map<string, RecipientKind>();
+
+async function fetchRecipientKind(address: string): Promise<RecipientKind> {
+  const key = address.toLowerCase();
+  const cached = recipientKindCache.get(key);
+  if (cached) return cached;
+  const res = await fetch(TTL_RPC_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'eth_getCode',
+      params: [address, 'latest'],
+    }),
+  });
+  if (!res.ok) throw new Error(`eth_getCode HTTP ${res.status}`);
+  const json = (await res.json()) as { result?: unknown; error?: { message?: string } };
+  if (json.error) throw new Error(json.error.message ?? 'eth_getCode 오류');
+  const code = typeof json.result === 'string' ? json.result : '0x';
+  const kind: RecipientKind = code === '0x' || code === '' ? 'eoa' : 'contract';
+  recipientKindCache.set(key, kind);
+  return kind;
+}
+
+const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+
 export function Send({ unlocked, onGoWallet }: Props) {
   const t = useT();
   // 카탈로그에 스캔 키가 아직 없을 때 키 문자열이 화면에 노출되지 않게 한다.
@@ -36,6 +82,14 @@ export function Send({ unlocked, onGoWallet }: Props) {
     if (s !== key) return s;
     return vars ? fallback.replace(/\{(\w+)\}/g, (_m, k: string) => vars[k] ?? '') : fallback;
   };
+  // 거부 사유는 SDK 가 준 코드(MemoRejectReason)를 i18n 키 꼬리에 그대로 붙인다.
+  // 문자열 비교를 하지 않으므로 규칙이 늘어도 이 셸이 어긋나지 않는다.
+  const memoReasonText = (check: MemoCheck): string =>
+    tx(`send.memo_reason.${check.reason ?? 'empty'}`, '메모를 이대로 보낼 수 없습니다.', {
+      n: String(check.byteLength),
+      min: String(MEMO_MIN_BYTES),
+      max: String(MEMO_MAX_BYTES),
+    });
   const [account, setAccount] = useState<WalletAccount | null>(null);
   const [to, setTo] = useState('');
   const [amount, setAmount] = useState('');
@@ -48,6 +102,11 @@ export function Send({ unlocked, onGoWallet }: Props) {
   const [asset, setAsset] = useState<AssetKey>('native');
   const [scanOpen, setScanOpen] = useState(false);
   const [scanNote, setScanNote] = useState<string | null>(null);
+  const [memo, setMemo] = useState('');
+  // 'idle' = 확인할 이유가 없음(메모 없음/주소 미완성), 'error' = RPC 실패.
+  const [recipientKind, setRecipientKind] = useState<'idle' | 'checking' | 'error' | RecipientKind>(
+    'idle',
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +133,48 @@ export function Send({ unlocked, onGoWallet }: Props) {
     if (asset === 'native') return null;
     return tokens.find((t) => t.token.address === asset) ?? null;
   }, [asset, tokens]);
+
+  // 이 셸은 TTL 체인만 다룬다(walletStore.getDefaultAdapter() = EvmAdapter/TTL_CHAIN).
+  // 그래서 체인 게이트가 없다 — 남는 조건은 "native 자산" 하나뿐이다.
+  // 토큰 송금은 tx.data 가 이미 ERC-20 transfer calldata 로 차 있어 메모가 들어갈
+  // 자리가 없다(어댑터가 던진다).
+  const memoCapable = selectedToken === null;
+  const trimmedTo = to.trim();
+  const toLooksValid = ADDRESS_RE.test(trimmedTo);
+  // 어댑터에 넘길 실제 메모 문자열. 앞뒤 공백은 떼고 보낸다.
+  const memoText = memo.trim();
+  const memoCheck: MemoCheck = validateMemo(memoText);
+  const memoWanted = memoCapable && memoText.length > 0;
+
+  // 수신자 EOA 확인. **메모를 실제로 적었을 때만** 부른다 — 메모 없는 송금에
+  // RPC 왕복을 늘리지 않는다. 또 타자마다 부르지 않는다: 600ms 멈춘 뒤 한 번.
+  useEffect(() => {
+    if (!memoWanted || !toLooksValid) {
+      setRecipientKind('idle');
+      return;
+    }
+    const cached = recipientKindCache.get(trimmedTo.toLowerCase());
+    if (cached) {
+      setRecipientKind(cached);
+      return;
+    }
+    let cancelled = false;
+    setRecipientKind('checking');
+    const timer = setTimeout(() => {
+      fetchRecipientKind(trimmedTo)
+        .then((kind) => {
+          if (!cancelled) setRecipientKind(kind);
+        })
+        .catch(() => {
+          // 확인 못 했으면 모른다고 말한다 — 조용히 EOA 로 넘기지 않는다.
+          if (!cancelled) setRecipientKind('error');
+        });
+    }, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [memoWanted, toLooksValid, trimmedTo]);
 
   if (!unlocked || !account) {
     return (
@@ -165,6 +266,37 @@ export function Send({ unlocked, onGoWallet }: Props) {
       intent = erc20.transfer(selectedToken.token.address, to.trim(), value);
     } else {
       intent = { to: to.trim(), amount: value };
+      // 메모칸이 비면 memo 필드 자체를 넣지 않는다 — 빈 문자열·'0x' 를 넣으면
+      // 메모 없는 송금이 기존과 다르게 동작한다.
+      if (memoText.length > 0) {
+        if (!memoCheck.ok) {
+          setError(memoReasonText(memoCheck));
+          return;
+        }
+        // 디바운스 중이거나 아직 못 본 주소일 수 있으니 여기서 한 번 더 확정한다.
+        // 캐시에 있으면 RPC 왕복은 없다.
+        let kind: RecipientKind;
+        try {
+          kind = await fetchRecipientKind(trimmedTo);
+        } catch {
+          setRecipientKind('error');
+          setError(
+            tx(
+              'send.memo_recipient_check_failed',
+              '받는 주소가 컨트랙트인지 확인하지 못했습니다. 메모 없이 보내거나 잠시 후 다시 시도하세요.',
+            ),
+          );
+          return;
+        }
+        setRecipientKind(kind);
+        if (kind === 'contract') {
+          setError(
+            tx('send.memo_contract_recipient', '받는 주소가 컨트랙트라 메모를 붙일 수 없습니다.'),
+          );
+          return;
+        }
+        intent.memo = memoText;
+      }
     }
 
     setSending(true);
@@ -172,6 +304,7 @@ export function Send({ unlocked, onGoWallet }: Props) {
       const finalHash = await walletStore.transfer(intent);
       setTxHash(finalHash);
       setAmount('');
+      setMemo('');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -253,6 +386,82 @@ export function Send({ unlocked, onGoWallet }: Props) {
           error={amountError ?? undefined}
         />
 
+        <div style={{ height: 16 }} />
+
+        {/* 메모 — TTL 은 송금 tx 의 data 에 UTF-8 바이트로 싣는다. 규칙 검사는
+            SDK 의 validateMemo 하나로 한다(셸에 규칙을 복제하지 않는다). */}
+        {memoCapable ? (
+          <>
+            <label className="nd-label" htmlFor="nd-memo-d">
+              {tx('send.memo_label', '메모 (선택)')}
+            </label>
+            <textarea
+              id="nd-memo-d"
+              className="nd-textarea nd-textarea--memo"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              placeholder={tx('send.memo_placeholder', '이 체인은 메모를 기록에 남깁니다')}
+              spellCheck={false}
+              disabled={sending}
+            />
+            <div className="nd-memo-meta">
+              <span className="nd-muted">
+                {tx('send.memo_bytes', '{n} / {max} 바이트', {
+                  n: String(memoCheck.byteLength),
+                  max: String(MEMO_MAX_BYTES),
+                })}
+              </span>
+              {memoWanted && recipientKind === 'checking' && (
+                <span className="nd-muted">
+                  {tx('send.memo_checking_recipient', '받는 주소를 확인하는 중…')}
+                </span>
+              )}
+            </div>
+
+            {memoWanted && !memoCheck.ok && (
+              <div className="nd-error">{memoReasonText(memoCheck)}</div>
+            )}
+            {memoWanted && recipientKind === 'contract' && (
+              <div className="nd-error">
+                {tx('send.memo_contract_recipient', '받는 주소가 컨트랙트라 메모를 붙일 수 없습니다.')}
+              </div>
+            )}
+            {memoWanted && recipientKind === 'error' && (
+              <div className="nd-error">
+                {tx(
+                  'send.memo_recipient_check_failed',
+                  '받는 주소가 컨트랙트인지 확인하지 못했습니다. 메모 없이 보내거나 잠시 후 다시 시도하세요.',
+                )}
+              </div>
+            )}
+
+            {memoWanted && memoCheck.ok && (
+              <>
+                <p className="nd-muted" style={{ marginTop: 8 }}>
+                  {tx(
+                    'send.memo_public_note',
+                    '메모는 체인에 그대로 남고 누구나 볼 수 있습니다. 개인정보를 적지 마세요.',
+                  )}
+                </p>
+                <p className="nd-muted" style={{ marginTop: 4 }}>
+                  {tx('send.memo_gas_note', '메모를 붙이면 수수료가 늘어납니다. 메모가 길수록 더 늘어납니다.')}
+                </p>
+                {/* 이 셸에는 별도 확인(review) 단계가 없다. 서명 버튼 바로 위에
+                    보낼 메모 원문을 그대로 보여줘, 오타가 체인에 영구히 남기 전에
+                    눈으로 대조하게 한다. */}
+                <div className="nd-memo-review">
+                  <div className="nd-label">{tx('send.review_memo_label', '메모')}</div>
+                  <div className="nd-memo-review__text">{memoText}</div>
+                </div>
+              </>
+            )}
+          </>
+        ) : (
+          <p className="nd-muted">
+            {tx('send.memo_token_unsupported', '토큰 송금에는 메모를 붙일 수 없습니다.')}
+          </p>
+        )}
+
         {error && <div className="nd-error">{error}</div>}
         {txHash && (
           <div className="nd-success">
@@ -268,7 +477,9 @@ export function Send({ unlocked, onGoWallet }: Props) {
             className="nd-button--block"
             onClick={submit}
             loading={sending}
-            disabled={sending}
+            // 메모가 규칙을 어기거나 받는 쪽이 컨트랙트면 서명 자체를 막는다.
+            // (어댑터도 던지지만, 눌러 보고 실패하는 것보다 못 누르는 편이 낫다.)
+            disabled={sending || (memoWanted && (!memoCheck.ok || recipientKind === 'contract'))}
           >
             {sending ? t('send.sending_short') : t('send.sign_and_send')}
           </Button>

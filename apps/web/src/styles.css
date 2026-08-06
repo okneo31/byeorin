@@ -388,6 +388,73 @@ a {
   margin: 0;
 }
 
+/* 포트폴리오 합계 — 히어로 값 바로 아래. desktop 과 같은 자리다. */
+.web-balance-hero__total {
+  color: var(--web-ink);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin: 4px 0 0;
+}
+
+/* 어느 앵커의 값인지 — 화면당 한 줄. */
+.web-anchor-line {
+  color: var(--web-muted);
+  font-size: 11.5px;
+  margin: 4px 0 0;
+}
+
+/* 값 열 — 수량 위, TTL 값 아래. TTL 이 보조 중 최상단이다. */
+.nd-tokens__value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+/* TTL 값 줄. USD 보조줄이 있던 자리를 TTL 이 대체했으므로 그보다 크게 잡는다. */
+.nd-ttl-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--web-ink);
+}
+
+/* 시세 기준 값은 출렁인다 — 고정 액면과 같은 무게로 보이면 안 된다. */
+.nd-ttl-value--market {
+  color: var(--web-muted);
+}
+
+/* 값을 모른다는 문장은 금액과 같은 무게로 보이면 안 된다. 숫자 자리에 있어서
+   스타일이 같으면 사용자가 값으로 읽는다. */
+.nd-ttl-value--unknown {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--web-muted);
+  opacity: 0.72;
+}
+
+/* 근거 배지는 아이콘·색이 아니라 글자다 — 고대비 모드에서도 남는다. */
+.value-badge {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--web-border-soft);
+  color: var(--web-muted);
+}
+
+.value-badge--market::before {
+  content: '~ ';
+}
+
+.value-badge--fixed::before {
+  content: '= ';
+}
+
 /* ── 계정: 액션 3-버튼 행 ─────────────────────────── */
 .web-action-row {
   display: grid;
@@ -609,6 +676,25 @@ a {
   font-size: 13px;
   color: var(--web-muted);
 }
+/* 활동 행의 메모. 2048 바이트가 목록 하나를 다 먹지 않게 3줄에서 접는다. */
+.web-activity__memo {
+  margin-top: 0.25rem;
+  font-size: 13px;
+  color: var(--web-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.web-activity__memo-label {
+  font-size: 11px;
+  opacity: 0.75;
+}
+.web-activity__memo-text {
+  color: inherit;
+}
 .web-activity__amount {
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -768,6 +854,37 @@ a {
   margin-top: 0.5rem;
   display: flex;
   justify-content: flex-end;
+}
+/* 메모 입력 — nd-input 을 그대로 쓰되 textarea 라서 높이/줄바꿈만 얹는다. */
+.web-send__memo-input {
+  resize: vertical;
+  min-height: 3.5rem;
+  line-height: 1.5;
+}
+.web-send__memo-meta {
+  margin-top: 0.375rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 12px;
+  color: var(--web-muted);
+  font-variant-numeric: tabular-nums;
+}
+.web-send__memo-note {
+  margin: 0.375rem 0 0;
+  font-size: 12px;
+  color: var(--web-muted);
+}
+/* 확인 화면의 메모 원문. 공백 없는 긴 메모가 가로 스크롤을 만들지 않게 한다. */
+.web-send-review__row--memo {
+  align-items: flex-start;
+}
+.web-send-review__memo-text {
+  max-width: 60%;
+  text-align: right;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--web-fg, inherit);
 }
 .web-scan__hint {
   margin: 0;

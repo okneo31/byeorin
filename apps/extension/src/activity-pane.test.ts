@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import type { Activity } from '@byeorin/wallet-sdk';
 import {
   absoluteTime,
+  activityMemo,
   explorerTxUrl,
   formatAmount,
   isEvmChainKey,
@@ -154,5 +155,44 @@ describe('statusKey', () => {
     expect(statusKey('success')).toBe('activity.status_confirmed');
     expect(statusKey('failed')).toBe('activity.status_failed');
     expect(statusKey('pending')).toBe('activity.status_pending');
+  });
+});
+
+describe('activityMemo', () => {
+  // Activity 에 memo 필드가 아직 없어도 컴파일이 깨지지 않는 읽기라, 픽스처도
+  // 같은 방식(unknown 경유)으로 얹는다.
+  function withMemo(memo: unknown): Activity {
+    return { ...act(), ...(({ memo } as unknown) as Partial<Activity>) };
+  }
+
+  it('memo 필드가 없으면 null — 예전 응답과 예전 SDK 를 그대로 견딘다', () => {
+    expect(activityMemo(act())).toBeNull();
+  });
+
+  it('null / 빈 문자열은 메모가 아니다 (인덱서 배포 이전 tx · 일반 송금)', () => {
+    expect(activityMemo(withMemo(null))).toBeNull();
+    expect(activityMemo(withMemo(''))).toBeNull();
+    expect(activityMemo(withMemo(42))).toBeNull();
+  });
+
+  it('정상 메모는 원문 그대로', () => {
+    expect(activityMemo(withMemo('2026년 용역계약서 3차 대금'))).toBe(
+      '2026년 용역계약서 3차 대금',
+    );
+  });
+
+  it('제어문자·깨진 글자는 인덱서가 줬어도 화면에 올리지 않는다', () => {
+    expect(activityMemo(withMemo('a\u0007b'))).toBeNull();
+    expect(activityMemo(withMemo('a\uFFFDb'))).toBeNull();
+    expect(activityMemo(withMemo('   '))).toBeNull();
+  });
+
+  it('탭·개행은 허용 문자다', () => {
+    expect(activityMemo(withMemo('첫 줄\n둘째\t줄'))).toBe('첫 줄\n둘째\t줄');
+  });
+
+  it('2048 바이트를 넘으면 버린다 (서버 판정과 같은 규칙)', () => {
+    expect(activityMemo(withMemo('a'.repeat(2048)))).toBe('a'.repeat(2048));
+    expect(activityMemo(withMemo('a'.repeat(2049)))).toBeNull();
   });
 });

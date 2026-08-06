@@ -52,3 +52,23 @@ export {
   type PortableTokenBalance,
   type TokenCapableAdapter,
 } from './tokens/portable.js';
+
+// 메모 — TTL 체인은 메모를 평범한 송금 tx 의 data 에 UTF-8 로 싣는다. 규칙은
+// 서버 인덱서(wallet-api/memo.js)와 한 글자도 어긋나면 안 되므로 셸 4종이
+// 각자 짜지 못하게 여기 한 곳에만 둔다. 의존성 0 이라 core 에 실어도 안전하다.
+// (./evm 에는 일부러 내지 않는다 — 셸이 core 와 evm 을 함께 import 하므로
+//  양쪽에 같은 이름을 내면 한 파일에서 둘 다 가져올 때 충돌한다.)
+export {
+  encodeMemo,
+  decodeMemo,
+  validateMemo,
+  memoByteLength,
+  splitMemoLinks,
+  MemoError,
+  MEMO_MIN_BYTES,
+  MEMO_MAX_BYTES,
+  MEMO_ALLOWED_CONTROLS,
+  type MemoCheck,
+  type MemoRejectReason,
+  type MemoSegment,
+} from './memo.js';

@@ -4,11 +4,12 @@
 // ActivityLog.list() 의 결과를 표로 렌더. 행 클릭은 native 환경(Tauri) 에서
 // 외부 브라우저로 explorer URL 을 열도록 단순히 <a target="_blank"> 사용.
 
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import {
   ActivityLog,
   TokenRegistry,
   TTL_CHAIN,
+  validateMemo,
   type Activity as ActivityT,
   type WalletAccount,
 } from '@byeorin/wallet-sdk';
@@ -56,6 +57,19 @@ function resolveTokenMeta(token: string | undefined): { symbol: string; decimals
   if (!token) return { symbol: NATIVE_SYMBOL, decimals: NATIVE_DECIMALS };
   const info = tokenRegistry.getToken(TTL_CHAIN.id, token as `0x${string}`);
   return info ? { symbol: info.symbol, decimals: info.decimals } : null;
+}
+
+/**
+ * 활동 항목의 메모를 읽는다. 인덱서(TTL 전용 경로)가 채워 주는 값이고, 그 외
+ * 경로(다른 EVM 체인·RPC fallback)에서는 아예 없다 — 그래서 optional 로 읽는다.
+ *
+ * 인덱서가 이미 판정한 값이지만 지갑에서 한 번 더 거른다. 체인에서 온 임의
+ * 문자열이라 남이 준 판정을 그대로 믿지 않는다. 규칙은 SDK 의 validateMemo 하나뿐.
+ */
+function readMemo(it: ActivityT): string | null {
+  const raw = (it as { memo?: unknown }).memo;
+  if (typeof raw !== 'string') return null;
+  return validateMemo(raw).ok ? raw : null;
 }
 
 export function Activity({ unlocked, onGoWallet }: Props) {
@@ -181,8 +195,10 @@ export function Activity({ unlocked, onGoWallet }: Props) {
                 const tokenLabel = meta
                   ? meta.symbol
                   : `${t('activity.label.unknown_token')} · ${shortAddr(it.token as string)}`;
+                const memo = readMemo(it);
                 return (
-                  <tr key={`${it.hash}-${it.blockNumber}`}>
+                  <Fragment key={`${it.hash}-${it.blockNumber}`}>
+                  <tr>
                     <td>{fmtTime(it.timestamp)}</td>
                     <td>
                       {isOutgoing ? t('activity.outgoing') : t('activity.incoming')} · {tokenLabel}
@@ -216,6 +232,19 @@ export function Activity({ unlocked, onGoWallet }: Props) {
                       </a>
                     </td>
                   </tr>
+                  {/* 메모 — 표를 6열로 늘리지 않고 행 아래 전폭 행으로 붙인다.
+                      React 텍스트 노드로만 렌더한다(dangerouslySetInnerHTML 금지).
+                      링크로 바꾸지 않는다 — 체인에서 온 임의 URL 을 지갑이
+                      클릭 가능하게 만들면 피싱 원클릭 경로가 된다. */}
+                  {memo && (
+                    <tr className="nd-activity-table__memo-row">
+                      <td colSpan={5}>
+                        <span className="nd-muted">{t('activity.memo_label')}</span>{' '}
+                        <span className="nd-activity-memo">{memo}</span>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>

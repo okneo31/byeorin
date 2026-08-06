@@ -136,6 +136,95 @@ describe('ActivityLog — TTL Scan 인덱서 경로', () => {
     (adapter as unknown as Patched).client.request = async () => [];
   }
 
+  // 인덱서가 판정해 준 메모가 Activity 까지 **끝까지** 오는지 고정한다.
+  //
+  // 이 배선이 빠진 채로도 typecheck 는 통과한다 — 셸이 `(it as {memo?: unknown}).memo`
+  // 로 읽기 때문이다. 그 상태에서는 화면의 메모 줄이 영영 렌더되지 않는데
+  // 컴파일러도 기존 테스트도 아무 말을 하지 않는다. 그래서 여기서 못박는다.
+  const memoBody = {
+    address: '0xa0000000000000000000000000000000000000aa',
+    total: 3,
+    page: 1,
+    limit: 20,
+    transactions: [
+      {
+        hash: '0xmemo1',
+        block_number: 1263900,
+        from: '0xa0000000000000000000000000000000000000aa',
+        to: '0xbbb0000000000000000000000000000000000000',
+        value: '1000000000000000000',
+        status: 1,
+        timestamp: 1785246999,
+        contract_address: null,
+        memo: '2026년 용역계약서 3차 대금',
+        input_size: 39,
+        // 74자에서 잘리는 필드. 메모로 읽으면 안 된다.
+        input_data: '0x323032366e',
+      },
+      {
+        // 메모가 아닌 tx — 인덱서가 null 을 준다.
+        hash: '0xmemo2',
+        block_number: 1263800,
+        from: '0xa0000000000000000000000000000000000000aa',
+        to: '0xbbb0000000000000000000000000000000000000',
+        value: '1',
+        status: 1,
+        timestamp: 1785246888,
+        contract_address: null,
+        memo: null,
+        input_size: 0,
+      },
+      {
+        // 인덱서 배포 이전 블록 — 필드 자체가 없다.
+        hash: '0xmemo3',
+        block_number: 1000000,
+        from: '0xa0000000000000000000000000000000000000aa',
+        to: '0xbbb0000000000000000000000000000000000000',
+        value: '2',
+        status: 1,
+        timestamp: 1785246777,
+        contract_address: null,
+      },
+    ],
+  };
+
+  it('인덱서의 memo 를 Activity.memo 로 실어 나른다', async () => {
+    const adapter = makeAdapter();
+    noLogs(adapter);
+    const log = new ActivityLog(adapter, { fetch: mockFetchOk(memoBody) });
+    const out = await log.list('0xa0000000000000000000000000000000000000aa', 20);
+
+    expect(out[0]!.memo).toBe('2026년 용역계약서 3차 대금');
+    expect(out[0]!.memoByteLength).toBe(39);
+  });
+
+  it('메모 아닌 tx 는 memo 가 undefined 다 (빈 문자열로 바꾸지 않는다)', async () => {
+    const adapter = makeAdapter();
+    noLogs(adapter);
+    const log = new ActivityLog(adapter, { fetch: mockFetchOk(memoBody) });
+    const out = await log.list('0xa0000000000000000000000000000000000000aa', 20);
+
+    // null 을 준 행, 필드가 아예 없는 행 둘 다.
+    expect(out[1]!.memo).toBeUndefined();
+    expect(out[2]!.memo).toBeUndefined();
+    // 빈 문자열이면 화면이 "메모 있음" 으로 오해한다.
+    expect(Object.prototype.hasOwnProperty.call(out[1]!, 'memo')).toBe(false);
+  });
+
+  it('input_data 를 메모로 쓰지 않는다 (74자에서 잘리는 필드다)', async () => {
+    const adapter = makeAdapter();
+    noLogs(adapter);
+    const log = new ActivityLog(adapter, { fetch: mockFetchOk(memoBody) });
+    const out = await log.list('0xa0000000000000000000000000000000000000aa', 20);
+
+    expect(out[0]!.memo).not.toContain('0x');
+    // Activity 에 value(bigint)가 있어 JSON.stringify 는 못 쓴다 — 키만 훑는다.
+    for (const it of out) {
+      expect(Object.keys(it)).not.toContain('input_data');
+      expect(Object.keys(it)).not.toContain('input_size');
+    }
+  });
+
   it('인덱서 응답을 Activity[] 로 변환한다 (블록 내림차순, status 반영)', async () => {
     const adapter = makeAdapter();
     noLogs(adapter);

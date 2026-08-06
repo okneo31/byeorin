@@ -148,8 +148,31 @@ export const ko: Catalog = {
   'theme.light': '라이트',
   'theme.dark': '다크',
   'send.max_native_note': '잔액에서 예상 가스를 빼고 채웠습니다.',
+  // 메모. cosmos(tx memo) · ton(코멘트 셀) · TTL(EVM, 송금 tx 의 data 바이트) 공용 문구다 —
+  // 특정 체인 이름을 문구에 넣지 않는다. 아래 두 키는 세 체인 모두에 그대로 맞다.
   'send.memo_label': '메모 (선택)',
   'send.memo_placeholder': '이 체인은 메모를 기록에 남깁니다',
+  // 길이는 문자 수가 아니라 UTF-8 바이트로 센다 — 한글 1자 = 3바이트, 이모지 1자 = 4바이트.
+  'send.memo_bytes': '{n} / {max} 바이트',
+  'send.memo_remaining': '{n} 바이트 남음',
+  // 메모 거부 사유. SDK 의 MemoRejectReason 코드와 키 꼬리가 1:1 로 같다 —
+  // 셸은 t('send.memo_reason.' + check.reason) 으로 바로 찍는다. 문자열 비교 금지.
+  'send.memo_reason.empty': '메모가 비어 있습니다.',
+  'send.memo_reason.blank': '공백만으로는 메모를 남길 수 없습니다.',
+  'send.memo_reason.too-short': '메모는 최소 {min} 바이트 이상이어야 합니다.',
+  'send.memo_reason.too-long': '메모가 너무 깁니다 — {n} 바이트 (최대 {max} 바이트).',
+  'send.memo_reason.control-char': '메모에 넣을 수 없는 문자가 있습니다. 줄바꿈과 탭은 쓸 수 있습니다.',
+  'send.memo_reason.replacement-char': '메모에 깨진 글자가 들어 있습니다. 붙여넣은 내용을 다시 확인하세요.',
+  // 받는 주소가 컨트랙트면 메모 바이트가 함수 호출로 읽힌다 — 붙일 수 없다.
+  'send.memo_checking_recipient': '받는 주소를 확인하는 중…',
+  'send.memo_contract_recipient': '받는 주소가 컨트랙트라 메모를 붙일 수 없습니다.',
+  'send.memo_recipient_check_failed': '받는 주소가 컨트랙트인지 확인하지 못했습니다. 메모 없이 보내거나 잠시 후 다시 시도하세요.',
+  // 토큰 전송은 data 칸을 ERC-20 호출이 이미 쓰고 있다. 칸은 하나뿐이라 방법이 없다.
+  'send.memo_token_unsupported': '토큰 송금에는 메모를 붙일 수 없습니다.',
+  'send.memo_gas_note': '메모를 붙이면 수수료가 늘어납니다. 메모가 길수록 더 늘어납니다.',
+  'send.memo_public_note': '메모는 체인에 그대로 남고 누구나 볼 수 있습니다. 개인정보를 적지 마세요.',
+  // 확인 화면 행 이름. 입력칸 라벨(send.memo_label)의 '(선택)' 은 확인 단계에 맞지 않는다.
+  'send.review_memo_label': '메모',
   'send.amount_invalid': '금액 형식이 올바르지 않습니다.',
   'send.amount_invalid_positive': '금액은 0보다 커야 합니다.',
   'send.pending': '송금을 처리하고 있습니다. 잠시만 기다려주세요...',
@@ -232,6 +255,9 @@ export const ko: Catalog = {
   'activity.collapse': '접기',
   'activity.tx_hash_label': '트랜잭션 해시',
   'activity.view_in_explorer': '탐색기에서 보기 ↗',
+  // 활동 행의 메모. 메모가 없는 tx 에는 이 줄을 아예 그리지 않는다 —
+  // '메모 없음' 문구를 넣으면 목록 대부분이 그 문구로 덮인다.
+  'activity.memo_label': '메모',
 
   // ──── 앱 푸터 / 공통 안내 ────
   'footer.non_custodial.web': '비수탁(non-custodial) 지갑 · 복구 문구는 브라우저 세션에만 저장됩니다.\n탭을 닫으면 잠금이 해제 상태로 돌아갑니다.',
@@ -475,6 +501,14 @@ export const ko: Catalog = {
   'portfolio.status.live': '연결',
   'portfolio.status.pending': '준비 중',
   'portfolio.balance_error': '잔액 오류 · {reason}',
+  // 합계는 TTL 로만 낸다. 값을 모르는 자산은 더하지 않고 세어서 따로 밝힌다 —
+  // 빠진 것을 숨기고 낸 합계는 거짓이다.
+  'portfolio.total_ttl': '합계 ≈ {v} TTL',
+  'portfolio.total_excluded': '값 미상 {n} 종 제외',
+  'portfolio.total_excluded_hint':
+    '신원을 확인하지 못했거나 시세·액면이 없는 자산은 합계에 더하지 않았습니다. 0 으로 친 것이 아니라 뺀 것입니다.',
+  // 시세 자산이 섞이면 합계가 출렁인다. 그 출렁임의 출처를 미리 밝힌다.
+  'portfolio.total_volatile_note': '시세 자산 {n} 건 포함',
 
   // ──── dApp 연결 화면 ────
   'dapp.title': 'dApp 연결',
@@ -610,10 +644,38 @@ export const ko: Catalog = {
   'tokens.value_labor_days': '노동자 {v} 일 품삯',
   // 외부 상장자산 전용. t{ISO} 토큰 줄에는 쓰지 않는다.
   'tokens.value_usd': '≈ ${v}',
+  // 값 칸을 비우면 "0" 으로 읽힌다. 숫자 자리에 문장을 넣어 "모른다" 로 읽히게 한다.
+  // 숫자·통화기호·0 을 넣지 않는 것이 이 문구의 요건이다.
+  'tokens.value_unverified': '값 모름 · 신원 미확인',
+  'tokens.value_unverified_hint':
+    '이 토큰의 컨트랙트 주소가 지갑의 확인 목록에 없습니다. 심볼은 누구나 똑같이 지을 수 있어 값 판단에 쓰지 않습니다.',
+  // 신원은 확인됐으나 시세가 없는 경우 — 미확인과 뭉뚱그리지 않는다.
+  'tokens.value_unlisted': '시세 없음',
   // t 접두가 실제 통화가 아님을 짧게 못 박는다 (긴 문장은 tokens.disclaimer).
   'tokens.t_prefix_note': 't 접두 토큰은 그 나라의 실제 통화가 아닙니다. 상환·예치·페그 어느 것도 없습니다.',
   'tokens.measured_in_ttl': '통화 토큰은 TTL 을 기준으로 잽니다. 1 {symbol} = {v} TTL.',
+  // 시세 기준 자산 전용 줄. 고정 액면(tokens.value_ttl)과 문자열을 갈라 둔다 —
+  // 한 키로 합치면 두 성질을 화면에서 구별할 방법이 없어진다.
+  'tokens.value_ttl_market': '≈ {v} TTL',
+  // 배지: 이 값이 무엇에 매여 있는지. 아이콘이 아니라 짧은 글자로 — 좁은 팝업과
+  // 고대비 모드에서 색·아이콘은 사라진다.
+  'tokens.basis_fixed': '고정 액면',
+  'tokens.basis_fixed_hint':
+    '액면 통화를 벼린 환율로 환산한 값입니다. 시장 시세가 들어가지 않으므로 시세에 따라 움직이지 않습니다.',
+  'tokens.basis_market': '시세 기준',
+  'tokens.basis_market_hint':
+    '시장 시세로 잰 값이라 시세 따라 움직입니다. 움직이는 것은 재어지는 자산이지 TTL 이 아닙니다 — TTL 눈금은 그대로입니다.',
+  // 시세 근거 줄 (근거 패널 안). USD 가 화면에 남는 유일한 자리다.
+  'tokens.basis_market_unit': '1 단위 ${usd} · 출처 {via}',
+  // 어느 앵커의 값인지 밝히지 않으면 사용자는 언제 기준인지 알 수 없다.
+  'tokens.anchor_line': '환율 기준 {date}',
+  'tokens.basis_anchored_at': '환율 기준일',
   'tokens.no_rate': '환율 없음',
+  // 기준 통화(USD)의 환율이 스냅샷에 없어 시세를 TTL 로 옮기지 못한 경우.
+  // 옛 값으로 떨어지지 않고 비운다.
+  'tokens.value_no_face_rate': '기준 환율 없음',
+  // 소수 자릿수를 신뢰할 수 없으면 자릿수 하나에 값이 10 배가 된다. 계산하지 않는다.
+  'tokens.value_bad_decimals': '자릿수 확인 불가',
   'tokens.basis_show': '환율 근거',
   'tokens.basis_hide': '근거 닫기',
   'tokens.basis_per_ttl': '환율',

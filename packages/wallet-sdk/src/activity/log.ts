@@ -58,6 +58,16 @@ export interface Activity {
   token?: Address;
   /** 'success' | 'failed' | 'pending'. explorer 가 못 주면 'success' 로 추정. */
   status: 'success' | 'failed' | 'pending';
+  /**
+   * TTL 인덱서가 tx `data` 를 메모로 판정해 디코드해 준 텍스트.
+   *
+   * 메모가 아닌 tx(일반 송금·계약 호출)이거나, 인덱서 배포 이전 블록이거나,
+   * 인덱서를 안 쓰는 경로(로그 스캔·로컬 기록)면 undefined 다. **없는 것이
+   * 정상**이므로 화면은 없을 때를 기본으로 그려야 한다.
+   */
+  memo?: string;
+  /** 메모 판정 전 원본 data 의 바이트 수. 2048 초과로 탈락한 경우를 안내할 때 쓴다. */
+  memoByteLength?: number;
 }
 
 export interface ActivityLogOptions {
@@ -97,6 +107,10 @@ interface TtlScanTxRow {
   status?: number;
   timestamp?: number;
   contract_address?: string | null;
+  /** 인덱서가 판정·디코드한 메모. 메모가 아니면 null. */
+  memo?: string | null;
+  /** 판정 전 원본 data 바이트 수. */
+  input_size?: number | null;
 }
 
 interface TtlScanTxsResponse {
@@ -299,6 +313,13 @@ export class ActivityLog {
         to: ((r.to ?? r.contract_address ?? '0x') as string) as Address,
         value,
         status: r.status === 0 ? 'failed' : 'success',
+        // 인덱서가 메모로 인정한 것만 온다. null 이면 메모 아닌 tx 다 —
+        // 빈 문자열로 바꾸지 않는다(화면이 "메모 있음"으로 오해한다).
+        // input_data 는 74자에서 잘리므로 메모 읽기에 절대 쓰지 않는다.
+        ...(typeof r.memo === 'string' && r.memo.length > 0 ? { memo: r.memo } : {}),
+        ...(typeof r.input_size === 'number' && r.input_size > 0
+          ? { memoByteLength: r.input_size }
+          : {}),
       });
     }
     return out;

@@ -467,6 +467,12 @@ footer {
   font-size: 11.5px;
   font-weight: 400;
 }
+/* 값을 모른다는 문장은 실제 금액과 같은 무게로 보이면 안 된다 — 숫자 자리에
+   있기 때문에 스타일이 같으면 사용자가 값으로 읽는다. */
+.zion-assets__usd--unknown {
+  font-style: italic;
+  opacity: 0.72;
+}
 .zion-assets__toggle {
   align-self: flex-start;
   background: transparent;
@@ -856,6 +862,29 @@ input.verify-row__input {
   border-bottom: 1px dashed var(--popup-border-soft);
 }
 
+/* 확인 화면의 메모 값 — 2048 바이트(한글 682자)가 한 줄에 다 오면 행이 밀린다.
+   줄바꿈·탭은 메모에서 허용되는 문자라 pre-wrap 으로 보존하고, 공백 없는 긴
+   문자열이 가로 스크롤을 만들지 않게 anywhere 로 끊는다. */
+.send-review__memo {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: right;
+  max-height: 92px;
+  overflow-y: auto;
+}
+
+/* 메모 입력 — bare textarea 규칙(styles.css 상단)을 그대로 쓰고 여백만 맞춘다. */
+.send-memo__input {
+  margin-top: 2px;
+  min-height: 52px;
+}
+
+/* N / 2048 바이트 카운터 — 입력칸 오른쪽 아래. */
+.send-memo__count {
+  margin: 2px 0 0 0;
+  text-align: right;
+}
+
 .send-sent {
   display: flex;
   flex-direction: column;
@@ -1047,6 +1076,23 @@ input.verify-row__input {
 
 .activity-row__line--foot {
   align-items: center;
+}
+
+/* 메모 줄 — 라벨 왼쪽, 본문 오른쪽. 본문이 길어도 카드를 밀어내지 않게 접는다. */
+.activity-row__memo {
+  align-items: flex-start;
+}
+
+.activity-row__memo-text {
+  min-width: 0;
+  text-align: right;
+  color: var(--popup-text);
+  white-space: pre-wrap; /* 메모의 \n \t 는 허용 문자다 — 보존한다 */
+  overflow-wrap: anywhere; /* 공백 없는 2048B 가 가로 스크롤을 만들지 않게 */
+  display: -webkit-box; /* 4줄 접기 — 한글 682자가 목록 하나를 다 먹는다 */
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .activity-row__dir {
@@ -1245,4 +1291,79 @@ input.verify-row__input {
   margin: 4px 0 0;
   font-size: 10.5px;
   word-break: break-all;
+}
+
+/* ────────── TTL 표시 — 값 · 근거 배지 · 앵커 고지 ────────── */
+/*
+ * TTL 이 주(主) 표시다. 예전에는 이 자리가 USD 였고 muted 로 물러나 있었다.
+ * 이제 잔액 아래 첫 줄이 TTL 이므로 무게를 올린다 — 작고 흐리면 "부속 정보"로
+ * 읽혀 기준이 무엇인지가 화면에서 뒤집힌다.
+ */
+.zion-assets__ttl {
+  color: var(--popup-text);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+/* 시세 기준 값은 출렁인다. 고정 액면과 같은 무게로 보이면 안 된다. */
+.zion-assets__ttl--market { color: var(--popup-muted); font-weight: 500; }
+/* 값을 모른다는 문장은 실제 금액과 같은 무게로 보이면 안 된다 — 숫자 자리에
+   있기 때문에 스타일이 같으면 사용자가 값으로 읽는다. */
+.zion-assets__ttl--unknown {
+  color: var(--popup-yellow-soft);
+  font-style: italic;
+  font-weight: 400;
+  opacity: 0.85;
+}
+.balance-hero__ttl { display: inline-flex; align-items: baseline; gap: 5px; }
+.balance-hero__ttl--unknown { font-style: italic; opacity: 0.8; }
+
+/*
+ * 근거 배지 — **아이콘이 아니라 텍스트**다.
+ *
+ * popup 은 360px 이고 hover 툴팁이 닿지 않는 조작(키보드·터치)이 있다. 색만으로
+ * 가르면 고대비 모드에서 구분이 사라진다. 고정 액면과 시세 기준이 화면에서
+ * 구별되지 않으면, 출렁이는 TTL 값이 "TTL 이 BTC 를 따라간다" 로 읽힌다 — 그건
+ * 방금 지운 옛 페그와 화면상 같은 그림이다.
+ */
+.value-badge {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.value-badge--fixed {
+  color: var(--popup-muted);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.value-badge--market {
+  color: var(--popup-yellow-soft, #ffd54f);
+  border-color: rgba(255, 213, 79, 0.32);
+  background: rgba(255, 213, 79, 0.08);
+}
+.token-row__ttl--market { color: var(--popup-muted); }
+
+/* 포트폴리오 합계 — 값 미상 건수를 같은 줄에 드러낸다. 숨긴 합계는 거짓이다. */
+.balance-hero__total {
+  margin: 6px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--popup-text);
+}
+
+/* 앵커 고지 — 어느 시점 환율로 잰 값인지. 한 화면에 한 번, 가장 약한 위계. */
+.anchor-line {
+  margin: 4px 0 0;
+  font-size: 10.5px;
+  opacity: 0.75;
 }

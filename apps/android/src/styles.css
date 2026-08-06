@@ -467,6 +467,12 @@ footer {
   font-size: 11.5px;
   font-weight: 400;
 }
+/* 값을 모른다는 문장은 실제 금액과 같은 무게로 보이면 안 된다 — 숫자 자리에
+   있기 때문에 스타일이 같으면 사용자가 값으로 읽는다. */
+.zion-assets__usd--unknown {
+  font-style: italic;
+  opacity: 0.72;
+}
 .zion-assets__toggle {
   align-self: flex-start;
   background: transparent;
@@ -856,6 +862,35 @@ input.verify-row__input {
   border-bottom: 1px dashed var(--popup-border-soft);
 }
 
+/* 확인 화면의 메모 값 — 개행·탭이 허용 문자라 그대로 보존해 보여준다.
+   공백 없는 2048 바이트가 행을 가로로 밀어내지 않게 anywhere 로 끊는다. */
+.send-review__memo {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: right;
+  max-height: 6.2em;
+  overflow-y: auto;
+  /* 전역 user-select:none(styles.css 의 `*` 규칙)을 되돌린다 — 보낼 문장을
+     확정 전에 복사해 확인할 수 있어야 한다. */
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* TTL 메모 입력칸. bare textarea 규칙 위에 .input 의 16px 를 얹으므로
+   (안드로이드는 16px 미만 입력에 포커스하면 화면을 확대한다) 여기서는
+   높이와 줄바꿈만 손본다. */
+.send-memo__input {
+  min-height: 64px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 바이트 카운터 — 입력칸 바로 아래에 붙여 한 덩어리로 읽히게 한다. */
+.send-memo__count {
+  margin: 4px 0 0;
+  text-align: right;
+}
+
 .send-sent {
   display: flex;
   flex-direction: column;
@@ -1047,6 +1082,29 @@ input.verify-row__input {
 
 .activity-row__line--foot {
   align-items: center;
+}
+
+/* 메모 줄 — 라벨은 왼쪽 고정, 본문이 남은 폭을 쓴다. */
+.activity-row__line--memo {
+  align-items: flex-start;
+}
+
+/* 메모 본문. 규칙상 탭·개행이 허용되므로 보존하고(pre-wrap), 공백 없는
+   2048 바이트가 카드를 밀어내지 않게 anywhere 로 끊는다. 목록 한 줄이 화면을
+   다 먹지 않도록 4줄에서 접는다 — 전문은 탐색기 링크로 볼 수 있다. */
+.activity-row__memo {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  /* 전역 user-select:none 이 걸려 있어 메모만 복사할 수 있게 되돌린다. */
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .activity-row__dir {

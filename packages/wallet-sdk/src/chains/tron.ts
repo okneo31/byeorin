@@ -12,6 +12,12 @@ import type {
 } from '../tokens/portable.js';
 import type { Address, TransferIntent, TxHash } from '../types.js';
 import type { ChainAdapter, SignRequest, TxContext } from './chain.js';
+import {
+  lookupKnownTrc20,
+  noteSymbolMismatch,
+  reconcileKnownDecimals,
+  type KnownTrc20,
+} from './trc20-known.js';
 
 // TronWeb v6 ships dual ESM/CJS but its types are loose.
 // Use a typed dynamic import via createRequire-style namespace import
@@ -64,12 +70,24 @@ export interface TronAdapterOptions {
    */
   maxTokens?: number;
   /**
-   * 토큰마다 symbol()/name() 까지 읽을지. 기본 false.
+   * 이름표를 체인에서도 읽을지. 기본 false.
    *
-   * 켜면 토큰당 왕복이 1 → 3 회가 된다. 무키 TronGrid 는 그 예산을 감당하지
-   * 못해 오히려 조회되는 토큰 수가 줄어든다. API 키를 넣은 노드에서만 켜라.
+   * 켜도 예전처럼 토큰마다 3 회를 쏘지 않는다 — decimals 를 전부 끝낸 **뒤에**
+   * 잔액 큰 순으로 상위 `maxLabelLookups` 개만 symbol() 을 부른다(name() 은
+   * 부르지 않는다. name 은 symbol 로 대체되므로 예산 2배를 쓸 이유가 없다).
+   *
+   * 주의: 이 옵션은 API 키와 무관하다. 키는 TronGrid REST(계정 API)에만 붙고
+   * 계약 상수 호출은 tronweb 인스턴스를 타므로 키가 전달되지 않는다.
+   * 내장 목록(trc20-known.ts)에 있는 토큰은 이 옵션과 상관없이 RPC 0 회로
+   * 이름이 붙는다.
    */
   fetchLabels?: boolean;
+  /**
+   * `fetchLabels` 가 켜졌을 때 symbol() 을 부를 토큰 수 상한. 기본 5.
+   *
+   * `maxTokens` 와 분리한 이유: 이름표 예산이 decimals 예산을 잠식하면 안 된다.
+   */
+  maxLabelLookups?: number;
   /** TronGrid 계정 API 응답 대기 상한(ms). 기본 8000. */
   timeoutMs?: number;
   /** TRC-20 송금의 feeLimit(SUN). 기본 100 TRX. 근거는 DEFAULT_TRC20_FEE_LIMIT_SUN 주석. */
@@ -108,8 +126,16 @@ const DEFAULT_HOST: Record<TronNetwork, string> = {
  */
 export const DEFAULT_TRC20_FEE_LIMIT_SUN = 100_000_000;
 
-/** 토큰 1개당 계약 호출 3회가 나가므로 상한이 곧 왕복 수다. */
+/** 토큰 1개당 계약 호출 1회(decimals)가 나가므로 상한이 곧 왕복 수다. */
 const DEFAULT_MAX_TOKENS = 20;
+/**
+ * 이름표(symbol) 조회 상한. decimals 예산과 **분리**한다.
+ *
+ * 5 인 근거: 기본 총 호출이 21회(계정 API 1 + decimals 20)이고, 5 를 더하면
+ * 26회 — 옛 3배안(61회)의 1/8 증가폭이다. 화면 상단에 뜨는 잔액 큰 몇 줄만
+ * 덮으면 사용자가 실제로 보는 곳의 이름이 채워진다.
+ */
+const DEFAULT_MAX_LABEL_LOOKUPS = 5;
 const DEFAULT_TIMEOUT_MS = 8000;
 
 /** base58check 형식(T + 33자). Tron 주소의 정규 표기. */
@@ -147,6 +173,28 @@ interface RawTrc20Entry {
   balance: bigint;
 }
 
+/** `source` 문자열의 재료. 2단계에서 갱신하므로 값이 아니라 상태로 들고 있는다. */
+interface SourceOpts {
+  symbolFromContract: boolean;
+  nameFromContract: boolean;
+  /** 이름표를 내장 목록에서 가져왔는지(=RPC 0회). */
+  symbolFromKnown: boolean;
+  /** decimals 대조 결과 등, 숨기면 안 되는 사실. */
+  notes?: string[];
+  truncation: { total: number; kept: number } | undefined;
+}
+
+/**
+ * 1단계 결과 한 줄. 2단계(`fillLabels`)가 이름표를 덧칠할 수 있도록
+ * 완성된 토큰과 그 재료를 함께 들고 있는다.
+ */
+interface Trc20MetaResult {
+  token: PortableTokenBalance;
+  /** 내장 목록에 있으면 2단계에서 건너뛴다 — 이미 이름이 있다. */
+  known: KnownTrc20 | undefined;
+  srcOpts: SourceOpts;
+}
+
 /**
  * TronAdapter — Tron mainnet/shasta/nile.
  *
@@ -172,6 +220,7 @@ export class TronAdapter
   private readonly fetchImpl: typeof fetch | undefined;
   private readonly maxTokens: number;
   private readonly fetchLabels: boolean;
+  private readonly maxLabelLookups: number;
   private readonly timeoutMs: number;
   private readonly feeLimitSun: number;
   private readonly onTokenNotice: ((n: TronTokenNotice) => void) | undefined;
@@ -194,6 +243,10 @@ export class TronAdapter
         ? Math.floor(opts.maxTokens)
         : DEFAULT_MAX_TOKENS;
     this.fetchLabels = opts.fetchLabels === true;
+    this.maxLabelLookups =
+      opts.maxLabelLookups !== undefined && opts.maxLabelLookups >= 0
+        ? Math.floor(opts.maxLabelLookups)
+        : DEFAULT_MAX_LABEL_LOOKUPS;
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.feeLimitSun = opts.feeLimitSun ?? DEFAULT_TRC20_FEE_LIMIT_SUN;
     this.onTokenNotice = opts.onTokenNotice;
@@ -315,11 +368,18 @@ export class TronAdapter
       // 아무것도 못 가져오는 것은 빠른 게 아니다.
       //
       // 한 토큰이 실패해도 다음으로 넘어간다(부분 성공 허용).
-      const results: Array<PortableTokenBalance | null> = [];
+      const results: Array<Trc20MetaResult | null> = [];
       for (const e of kept) {
         results.push(await this.readTrc20Metadata(ownerAddr.base58, e, truncation));
       }
-      return results.filter((r): r is PortableTokenBalance => r !== null);
+      const alive = results.filter((r): r is Trc20MetaResult => r !== null);
+
+      // **2단계 — decimals 가 전부 끝난 뒤에만 시작한다.**
+      // 여기서 무슨 일이 나도 위 배열은 손대지 않는다. 이름표는 없어도 되지만
+      // decimals 는 없으면 그 토큰이 사라지기 때문이다.
+      await this.fillLabels(ownerAddr.base58, alive);
+
+      return alive.map((r) => r.token);
     } catch {
       // 목록을 못 만들어도 지갑은 열려야 한다.
       return [];
@@ -368,8 +428,15 @@ export class TronAdapter
       contract.base58,
       SELECTOR_DECIMALS,
     );
+    const known = lookupKnownTrc20(contract.base58);
     const decimalsBig = decRaw === null ? null : decodeAbiUint(decRaw);
-    if (decimalsBig === null || decimalsBig < 0n || decimalsBig > 36n) {
+    const onChainDec =
+      decimalsBig === null || decimalsBig < 0n || decimalsBig > 36n
+        ? null
+        : Number(decimalsBig);
+    // 체인값 우선. 못 읽었을 때만 내장 폴백을 쓰고 미검증임을 source 에 남긴다.
+    const rec = reconcileKnownDecimals(known, onChainDec);
+    if (rec.decimals === null) {
       // 자릿수를 모르면 등록하지 않는다. (범위 밖 값도 신뢰할 수 없으므로 같은 처리.)
       return null;
     }
@@ -404,9 +471,11 @@ export class TronAdapter
       // 그대로 TransferIntent.asset 에 넣으면 송금이 된다. 0x41… hex 로 넣었어도
       // base58 정본으로 돌려줘 조회와 송금이 같은 문자열을 보게 한다.
       id: contract.base58,
-      symbol: symbol ?? fallback,
-      name: name ?? symbol ?? fallback,
-      decimals: Number(decimalsBig),
+      // 체인 → 내장 목록 → 주소축약. 체인이 먼저인 이유는 내장 목록이 낡을 수
+      // 있어서고, 내장 목록이 축약보다 먼저인 이유는 축약은 정보가 아니어서다.
+      symbol: symbol ?? known?.symbol ?? fallback,
+      name: name ?? known?.name ?? symbol ?? fallback,
+      decimals: rec.decimals,
       // 잔액을 못 구해도 등록 자체는 되게 한다 — 아직 안 받은 토큰을 미리 등록하는
       // 것은 정상이다. 다만 0 의 출처가 무엇인지는 source 에 남긴다.
       balance: balance ?? 0n,
@@ -414,6 +483,11 @@ export class TronAdapter
         balanceFromContract: balance !== null,
         symbolFromContract: symbol !== null,
         nameFromContract: name !== null,
+        symbolFromKnown: symbol === null && known !== undefined,
+        nameFromKnown: name === null && known !== undefined,
+        notes: [rec.note, noteSymbolMismatch(known, symbol)].filter(
+          (n): n is string => n !== undefined,
+        ),
       }),
     };
   }
@@ -487,7 +561,7 @@ export class TronAdapter
     ownerBase58: string,
     entry: RawTrc20Entry,
     truncation: { total: number; kept: number } | undefined,
-  ): Promise<PortableTokenBalance | null> {
+  ): Promise<Trc20MetaResult | null> {
     // **decimals 만 먼저, 단독으로.**
     //
     // 실측(2026-07-29): 무키 TronGrid 는 연속 3 회까지만 받고 4 회째부터 거부한다.
@@ -499,58 +573,107 @@ export class TronAdapter
     // 없으면 주소 축약으로 대체할 수 있으므로, 예산을 decimals 에 먼저 쓴다.
     const decRaw = await this.constantCall(ownerBase58, entry.contract, SELECTOR_DECIMALS);
 
+    const known = lookupKnownTrc20(entry.contract);
     const decimalsBig = decRaw === null ? null : decodeAbiUint(decRaw);
-    if (decimalsBig === null) {
+    // 범위 밖 값은 읽지 못한 것과 같이 취급한다 — portable.ts 의 검증 상한과 같은
+    // 선이고, 벗어난 값을 그대로 쓰면 잔액이 자릿수째로 거짓이 된다.
+    const outOfRange =
+      decimalsBig !== null && (decimalsBig < 0n || decimalsBig > 36n);
+    const onChain = decimalsBig === null || outOfRange ? null : Number(decimalsBig);
+    // 체인값이 항상 이긴다. 내장값은 체인을 못 읽었을 때만, 그 사실을 적어서 쓴다.
+    const rec = reconcileKnownDecimals(known, onChain);
+    if (rec.decimals === null) {
       this.notice({
         kind: 'dropped',
         contract: entry.contract,
-        reason: 'decimals-unreadable',
-      });
-      return null;
-    }
-    if (decimalsBig < 0n || decimalsBig > 36n) {
-      // portable.ts 의 검증 상한과 같은 선. 벗어나면 신뢰할 수 없는 값이다.
-      this.notice({
-        kind: 'dropped',
-        contract: entry.contract,
-        reason: 'decimals-out-of-range',
+        reason: outOfRange ? 'decimals-out-of-range' : 'decimals-unreadable',
       });
       return null;
     }
 
-    // 이름표는 **기본적으로 조회하지 않는다.**
+    // 이름표는 **이 루프에서 한 번도 조회하지 않는다.**
     //
     // 실측(2026-07-29): 무키 TronGrid 는 IP 할당량을 금방 소진하고, 소진되면
     // 2 초를 기다려도 회복되지 않는다. 토큰마다 symbol/name 까지 부르면 예산이
     // 3 배로 나가 대부분의 토큰이 decimals 조차 못 읽고 버려진다 — 실제 주소로
-    // 880 개 중 0 개가 나왔다.
+    // 880 개 중 0 개가 나왔다. 이름표가 필요하면 decimals 를 전부 끝낸 뒤
+    // `fillLabels` 가 별도로 가져온다.
     //
-    // 잔액을 옳게 보여주는 데 필요한 것은 decimals 뿐이다. 이름표는 없으면 주소
-    // 축약으로 대체되지만 decimals 가 없으면 그 토큰은 아예 사라진다. 그래서
-    // 예산을 decimals 에 몰아준다. API 키가 있으면 fetchLabels 로 켤 수 있다.
-    const [symRaw, nameRaw] = this.fetchLabels
-      ? await Promise.all([
-          this.constantCall(ownerBase58, entry.contract, SELECTOR_SYMBOL),
-          this.constantCall(ownerBase58, entry.contract, SELECTOR_NAME),
-        ])
-      : [null, null];
-
-    const symbol = symRaw === null ? null : decodeAbiString(symRaw);
-    const name = nameRaw === null ? null : decodeAbiString(nameRaw);
+    // 대신 주소가 고정된 유명 토큰은 **RPC 0 회**로 이름이 붙는다. 그 주소가
+    // 무엇인지는 체인에 물어보지 않아도 아는 공개 사실이기 때문이다.
     const fallback = shortenAddress(entry.contract);
+    const srcOpts: SourceOpts = {
+      symbolFromContract: false,
+      nameFromContract: false,
+      symbolFromKnown: known !== undefined,
+      notes: rec.note ? [rec.note] : [],
+      truncation,
+    };
 
     return {
-      id: entry.contract, // 그대로 TransferIntent.asset 에 넣으면 송금이 된다.
-      symbol: symbol ?? fallback,
-      name: name ?? symbol ?? fallback,
-      decimals: Number(decimalsBig),
-      balance: entry.balance,
-      source: buildSource({
-        symbolFromContract: symbol !== null,
-        nameFromContract: name !== null,
-        truncation,
-      }),
+      token: {
+        id: entry.contract, // 그대로 TransferIntent.asset 에 넣으면 송금이 된다.
+        symbol: known?.symbol ?? fallback,
+        name: known?.name ?? known?.symbol ?? fallback,
+        decimals: rec.decimals,
+        balance: entry.balance,
+        source: buildSource(srcOpts),
+      },
+      known,
+      srcOpts,
     };
+  }
+
+  /**
+   * 2단계 — 이름표가 아직 축약 주소인 토큰의 symbol() 만 뒤늦게 채운다.
+   *
+   * 규칙 4가지. 전부 예산 때문이다:
+   *   1. decimals 루프가 **끝난 뒤에만** 부른다(호출자가 순서를 지킨다).
+   *   2. `fetchLabels` 가 켜졌을 때만. 기본값은 여전히 추가 호출 0 회다.
+   *   3. `name()` 은 부르지 않는다 — 이름 칸은 symbol 로 대체되므로,
+   *      호출 1 회당 이름표 1 칸이 채워지는 쪽이 예산 대비 두 배 낫다.
+   *   4. 내장 목록으로 이미 이름이 붙은 토큰은 건너뛴다.
+   *
+   * 잔액 큰 순인 이유: 화면 위쪽, 즉 사용자가 실제로 보는 줄이 먼저 이름을
+   * 얻는다. 정렬은 decimals 를 아는 지금 시점에 해야 자릿수가 다른 토큰끼리
+   * 비교가 어긋나지 않는다.
+   *
+   * 실패는 전부 삼킨다. 이름표를 못 얻는 것은 축약 주소로 되돌아가는 것뿐이다.
+   */
+  private async fillLabels(
+    ownerBase58: string,
+    results: Trc20MetaResult[],
+  ): Promise<void> {
+    if (!this.fetchLabels || this.maxLabelLookups <= 0) return;
+
+    const targets = results
+      .filter((r) => r.known === undefined)
+      .sort((a, b) => {
+        const av = scaleDown(a.token.balance, a.token.decimals);
+        const bv = scaleDown(b.token.balance, b.token.decimals);
+        return av === bv ? 0 : av < bv ? 1 : -1;
+      })
+      .slice(0, this.maxLabelLookups);
+
+    // 순차. 병렬로 쏘면 실측 3 회 한도를 즉시 밟는다.
+    for (const r of targets) {
+      let symbol: string | null = null;
+      try {
+        const raw = await this.constantCall(
+          ownerBase58,
+          r.token.id,
+          SELECTOR_SYMBOL,
+        );
+        symbol = raw === null ? null : decodeAbiString(raw);
+      } catch {
+        symbol = null;
+      }
+      if (symbol === null || symbol === '') continue;
+      r.token.symbol = symbol;
+      r.token.name = symbol;
+      r.srcOpts.symbolFromContract = true;
+      r.token.source = buildSource(r.srcOpts);
+    }
   }
 
   /**
@@ -693,18 +816,21 @@ export class TronAdapter
  * symbol 을 못 읽어 주소로 대체했다는 사실, 상한에 걸려 목록이 잘렸다는 사실도
  * 같은 문자열에 담는다 — 화면이 배열 하나만 받아도 다 알 수 있어야 한다.
  */
-function buildSource(o: {
-  symbolFromContract: boolean;
-  nameFromContract: boolean;
-  truncation: { total: number; kept: number } | undefined;
-}): string {
+function buildSource(o: SourceOpts): string {
   const parts = ['trongrid:/v1/accounts(목록·잔액)'];
   const read = ['decimals'];
   if (o.symbolFromContract) read.push('symbol');
   if (o.nameFromContract) read.push('name');
   parts.push(`contract:${read.join(',')}`);
-  if (!o.symbolFromContract) parts.push('symbol=주소축약(읽기실패)');
-  if (!o.nameFromContract) parts.push('name=대체(읽기실패)');
+  // 내장 목록에서 온 이름표는 그렇다고 적는다 — 어디서 온 값인지 화면이 알 수
+  // 있어야 한다. 체인에서 읽은 값과 같은 표기로 뭉뚱그리지 않는다.
+  if (!o.symbolFromContract && o.symbolFromKnown) {
+    parts.push('symbol,name=내장목록(RPC 0회)');
+  } else {
+    if (!o.symbolFromContract) parts.push('symbol=주소축약(읽기실패)');
+    if (!o.nameFromContract) parts.push('name=대체(읽기실패)');
+  }
+  for (const n of o.notes ?? []) parts.push(n);
   if (o.truncation) {
     parts.push(`truncated:${o.truncation.kept}/${o.truncation.total}`);
   }
@@ -722,6 +848,9 @@ function buildManualSource(o: {
   balanceFromContract: boolean;
   symbolFromContract: boolean;
   nameFromContract: boolean;
+  symbolFromKnown?: boolean;
+  nameFromKnown?: boolean;
+  notes?: string[];
 }): string {
   const read = ['decimals'];
   if (o.balanceFromContract) read.push('balanceOf');
@@ -729,8 +858,13 @@ function buildManualSource(o: {
   if (o.nameFromContract) read.push('name');
   const parts = [`contract:${read.join(',')}`];
   if (!o.balanceFromContract) parts.push('balance=0(조회실패)');
-  if (!o.symbolFromContract) parts.push('symbol=주소축약(읽기실패)');
-  if (!o.nameFromContract) parts.push('name=대체(읽기실패)');
+  if (!o.symbolFromContract) {
+    parts.push(o.symbolFromKnown ? 'symbol=내장목록' : 'symbol=주소축약(읽기실패)');
+  }
+  if (!o.nameFromContract) {
+    parts.push(o.nameFromKnown ? 'name=내장목록' : 'name=대체(읽기실패)');
+  }
+  for (const n of o.notes ?? []) parts.push(n);
   return parts.join('; ');
 }
 
@@ -738,6 +872,18 @@ function describeNotice(n: TronTokenNotice): string {
   return n.kind === 'truncated'
     ? `토큰 ${n.total}개 중 ${n.kept}개만 조회 (maxTokens 상한)`
     : `${n.contract} 제외 — ${n.reason}`;
+}
+
+/**
+ * 이름표 우선순위를 정하려고 잔액을 자릿수로 나눈 정수부만 뽑는다.
+ *
+ * raw 잔액끼리 비교하면 decimals 가 다른 토큰 사이에서 순서가 뒤집힌다
+ * (6자리 1 USDT 와 18자리 0.000001 토큰). 화면 정렬용이 아니라 예산 배분용
+ * 비교이므로 소수부는 버려도 된다.
+ */
+function scaleDown(balance: bigint, decimals: number): bigint {
+  if (decimals <= 0) return balance;
+  return balance / 10n ** BigInt(decimals);
 }
 
 /** `TR7NHq…LjLj6t` 꼴. symbol 을 못 읽었을 때 지어내는 대신 쓴다. */

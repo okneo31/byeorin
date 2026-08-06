@@ -43,6 +43,8 @@ export {
   rateByIso,
   unresolvedRates,
   tokenAmountToTtl,
+  stableAmountToTtl,
+  baseUnitsToNumber,
   authoritativeDecimals,
   ttlToTokenAmount,
   crossRate,
@@ -52,6 +54,48 @@ export {
   type UnresolvedRate,
   type RateInputs,
 } from './rates/index.js';
+
+// 스테이블코인 액면(주소 → 통화 ISO) — 셸이 심볼로 판정하지 못하도록 주소
+// 기반 조회만 노출한다. 경계 설명은 rates/stable.ts 상단.
+export {
+  stableDenomOf,
+  stableDenomOfEvm,
+  listStableDenoms,
+  stableToTtl,
+  stableFaceRate,
+  type StableDenom,
+  type StableFamily,
+} from './rates/stable.js';
+
+// 토큰 신원 — "값을 매겨도 되는가" 판정 + 환산 + 시세 게이트를 한 번에.
+// 셸이 이걸 각자 짜서 두 셸의 decimals·분기 조건이 갈라졌다(v0.5.21).
+export {
+  tokenIdentityOf,
+  tokenValueOf,
+  UNKNOWN_TOKEN,
+  type TokenIdentity,
+  type TokenIdentityKind,
+  type TokenValue,
+} from './rates/stable.js';
+
+// 통합 환산 — "이 잔액은 몇 TTL 인가" 에 답하는 유일한 함수. TTL 이 자(尺)다.
+// 셸은 이것만 부른다. tokenValueOf·stableToTtl·tokenAmountToTtl 을 셸에서
+// 조합하면 v0.5.21 처럼 셸 수만큼 갈라진다.
+export {
+  assetValueInTtl,
+  sumTtl,
+  type AssetRef,
+  type AssetValue,
+  type ValueBasis,
+  type ValueReason,
+  type ValueContext,
+  type MarketBasis,
+  type TtlSum,
+} from './rates/value.js';
+
+// Binance ticker 표 → 1 단위 USD. fetch 는 셸이 하고 표만 여기로 들어온다.
+// TTL·WTTL 은 여기서 무조건 null 이다 — TTL 에 시세가 붙는 두 번째 자물쇠.
+export { symbolUnitUsd, type PriceTable, type UnitUsd } from './rates/market.js';
 
 export {
   discoverPortableTokens,

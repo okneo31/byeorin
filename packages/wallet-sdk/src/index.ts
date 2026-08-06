@@ -104,3 +104,69 @@ export {
   getPrice,
   type PriceClientOptions,
 } from './prices/index.js';
+
+// ── 벼린 환율 / 통합 환산 ────────────────────────────────
+//
+// 루트 배럴에도 낸다. v0.5.21 에 `/evm` 에만 있어서 그 subpath 를 쓰지 않는
+// 셸(desktop·web)이 산식을 자기 파일에 복제했다 — 표면이 갈리면 값이 갈린다.
+export {
+  RATE_SNAPSHOT,
+  rateByAddress,
+  rateByIso,
+  unresolvedRates,
+  baseUnitsToNumber,
+  authoritativeDecimals,
+  ttlToTokenAmount,
+  crossRate,
+  snapshot as rateSnapshot,
+  type RateSnapshot,
+  type TokenRate,
+  type UnresolvedRate,
+  type RateInputs,
+} from './rates/index.js';
+
+// 주소 기반 신원 판정만 노출한다. 심볼 문자열로 판정할 길을 열어 주지 않는다.
+export {
+  stableDenomOf,
+  stableDenomOfEvm,
+  listStableDenoms,
+  stableFaceRate,
+  tokenIdentityOf,
+  UNKNOWN_TOKEN,
+  type StableDenom,
+  type StableFamily,
+  type TokenIdentity,
+  type TokenIdentityKind,
+} from './rates/stable.js';
+
+// "이 잔액은 몇 TTL 인가" 에 답하는 유일한 함수. 셸은 이것만 부른다.
+export {
+  assetValueInTtl,
+  sumTtl,
+  type AssetRef,
+  type AssetValue,
+  type ValueBasis,
+  type ValueReason,
+  type ValueContext,
+  type MarketBasis,
+  type TtlSum,
+} from './rates/value.js';
+
+export { symbolUnitUsd, type PriceTable, type UnitUsd } from './rates/market.js';
+
+// ── 메모 (TTL 체인 tx.data UTF-8) ────────────────────────
+// 규칙 원본은 서버 wallet-api/memo.js. 셸에서 다시 짜지 마라.
+export {
+  encodeMemo,
+  decodeMemo,
+  validateMemo,
+  memoByteLength,
+  splitMemoLinks,
+  MemoError,
+  MEMO_MIN_BYTES,
+  MEMO_MAX_BYTES,
+  MEMO_ALLOWED_CONTROLS,
+  type MemoCheck,
+  type MemoRejectReason,
+  type MemoSegment,
+} from './memo.js';

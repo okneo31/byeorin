@@ -143,8 +143,27 @@ export const en: Catalog = {
   'theme.light': 'Light',
   'theme.dark': 'Dark',
   'send.max_native_note': 'Filled with balance minus estimated gas.',
+  // 메모. cosmos(tx memo) · ton(코멘트 셀) · TTL(EVM, 송금 tx 의 data 바이트) 공용 문구다 —
+  // 특정 체인 이름을 문구에 넣지 않는다.
   'send.memo_label': 'Memo (optional)',
   'send.memo_placeholder': 'This chain records memos on-chain',
+  // 길이는 문자 수가 아니라 UTF-8 바이트로 센다.
+  'send.memo_bytes': '{n} / {max} bytes',
+  'send.memo_remaining': '{n} bytes left',
+  // SDK 의 MemoRejectReason 코드와 키 꼬리가 1:1.
+  'send.memo_reason.empty': 'The memo is empty.',
+  'send.memo_reason.blank': 'A memo cannot be whitespace only.',
+  'send.memo_reason.too-short': 'A memo must be at least {min} bytes.',
+  'send.memo_reason.too-long': 'Memo is too long — {n} bytes (max {max} bytes).',
+  'send.memo_reason.control-char': 'The memo contains characters that cannot be stored. Line breaks and tabs are allowed.',
+  'send.memo_reason.replacement-char': 'The memo contains broken characters. Check what you pasted.',
+  'send.memo_checking_recipient': 'Checking the recipient address…',
+  'send.memo_contract_recipient': 'The recipient is a contract, so a memo cannot be attached.',
+  'send.memo_recipient_check_failed': 'Could not check whether the recipient is a contract. Send without a memo, or try again shortly.',
+  'send.memo_token_unsupported': 'Memos cannot be attached to token transfers.',
+  'send.memo_gas_note': 'Attaching a memo increases the fee. The longer the memo, the higher the fee.',
+  'send.memo_public_note': 'The memo stays on-chain and anyone can read it. Do not write anything private.',
+  'send.review_memo_label': 'Memo',
   'send.amount_invalid': 'Invalid amount.',
   'send.amount_invalid_positive': 'Amount must be greater than 0.',
   'send.pending': 'Sending… please wait.',
@@ -227,6 +246,8 @@ export const en: Catalog = {
   'activity.collapse': 'Hide',
   'activity.tx_hash_label': 'Transaction hash',
   'activity.view_in_explorer': 'View in explorer ↗',
+  // 메모가 없는 tx 에는 이 줄을 아예 그리지 않는다.
+  'activity.memo_label': 'Memo',
 
   // ──── Footers / disclaimers ────
   'footer.non_custodial.web': 'Non-custodial wallet · Your recovery phrase is held only in the browser session.\nClosing this tab returns the wallet to its locked state.',
@@ -466,6 +487,11 @@ export const en: Catalog = {
   'portfolio.status.live': 'Live',
   'portfolio.status.pending': 'Coming soon',
   'portfolio.balance_error': 'Balance error · {reason}',
+  'portfolio.total_ttl': 'Total ≈ {v} TTL',
+  'portfolio.total_excluded': '{n} with unknown value excluded',
+  'portfolio.total_excluded_hint':
+    'Assets whose identity could not be verified, or that have no market price or face value, were not added to the total. They were left out, not counted as zero.',
+  'portfolio.total_volatile_note': 'includes {n} priced at market',
 
   // ──── dApp connection screen ────
   'dapp.title': 'dApp connection',
@@ -599,9 +625,25 @@ export const en: Catalog = {
   'tokens.value_ttl': '≈ {v} TTL',
   'tokens.value_labor_days': '{v} days of a worker\'s wage',
   'tokens.value_usd': '≈ ${v}',
+  'tokens.value_unverified': 'Value unknown · unverified',
+  'tokens.value_unverified_hint':
+    "This token's contract address is not in the wallet's verified list. Anyone can pick the same symbol, so symbols are not used to decide value.",
+  'tokens.value_unlisted': 'No market price',
   'tokens.t_prefix_note': 'A t-prefixed token is not the real currency of that country. There is no redemption, no deposit, no peg.',
   'tokens.measured_in_ttl': 'Currency tokens are measured in TTL. 1 {symbol} = {v} TTL.',
+  'tokens.value_ttl_market': '≈ {v} TTL',
+  'tokens.basis_fixed': 'Fixed face value',
+  'tokens.basis_fixed_hint':
+    'A face-value amount converted at the Byeorin rate. No market price enters this figure, so it does not move with the market.',
+  'tokens.basis_market': 'At market price',
+  'tokens.basis_market_hint':
+    'Measured at the market price, so it moves with the market. What moves is the asset being measured, not TTL — the TTL scale is unchanged.',
+  'tokens.basis_market_unit': '${usd} per unit · source {via}',
+  'tokens.anchor_line': 'Rates anchored {date}',
+  'tokens.basis_anchored_at': 'Rate anchor date',
   'tokens.no_rate': 'No rate',
+  'tokens.value_no_face_rate': 'No base rate',
+  'tokens.value_bad_decimals': 'Decimals unverified',
   'tokens.basis_show': 'Rate basis',
   'tokens.basis_hide': 'Close basis',
   'tokens.basis_per_ttl': 'Rate',

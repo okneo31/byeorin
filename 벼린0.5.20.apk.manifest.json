@@ -1,0 +1,30 @@
+{
+  "artifact": "벼린0.5.20.apk",
+  "sha256": "6de8f48b08906d1786fb811b88f5118fd0a5c1a0522aff61e576b66a30cc1099",
+  "sizeBytes": 5598960,
+  "versionName": "0.5.20",
+  "versionCode": 21,
+  "signer": {
+    "certSha256": "303f801bb44af8c494b6e89844fbe86c36bd6f48ab404a4b6c0228fa3f103480"
+  },
+  "source": {
+    "commit": "6529912a637cf7e98e8d1d75accef18f07aef227",
+    "commitShort": "6529912",
+    "branch": "main",
+    "workingTreeClean": false,
+    "warning": "커밋되지 않은 변경이 섞인 빌드다. 이 산출물은 소스로 추적할 수 없다."
+  },
+  "toolchain": {
+    "node": "v24.15.0",
+    "gradle": "8.14.3",
+    "androidGradlePlugin": "8.13.0",
+    "compileSdk": "36",
+    "minSdk": "24",
+    "targetSdk": "36"
+  },
+  "claims": {
+    "integrity": "이 해시와 일치하는 파일은 우리가 배포한 그 파일이다.",
+    "authenticity": "이 인증서 지문으로 서명된 APK 만 벼린이 만든 것이다.",
+    "notClaimed": "재현 빌드는 아직 보장하지 않는다 — 같은 커밋으로 빌드해도 바이트가 다를 수 있다."
+  }
+}

@@ -2,8 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { parseUnits } from 'viem';
 import {
   Erc20,
+  MEMO_MAX_BYTES,
+  MEMO_MIN_BYTES,
   TokenRegistry,
+  TTL_CHAIN,
   discoverTokens,
+  memoByteLength,
+  validateMemo,
   type DiscoveredBalance,
   type TransferIntent,
 } from '@byeorin/wallet-sdk';
@@ -39,6 +44,22 @@ const AMOUNT_RE = /^\d+(\.\d{1,18})?$/;
 // "native" 는 TTL 송금. 그 외 값은 토큰 컨트랙트 주소(소문자 비교 X — UI 식별자).
 type AssetKey = 'native' | string;
 
+// 주소 형식 검사 — 훅 안팎에서 같은 기준을 쓴다.
+const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+
+// 메모를 붙일 수신자 판정 상태.
+//   idle     — 확인할 이유가 없다(메모칸이 비었거나 주소가 아직 형식 미달).
+//   checking — eth_getCode 응답 대기.
+//   eoa      — 코드 없음. 메모를 붙여도 된다.
+//   contract — 코드 있음. 메모 바이트가 함수 호출로 해석되므로 막는다.
+//   error    — RPC 가 답을 못 줬다. 모르면 멈춘다(어댑터도 같은 자리에서 던진다).
+type RecipientKind = 'idle' | 'checking' | 'eoa' | 'contract' | 'error';
+
+const RPC_URL = TTL_CHAIN.rpcUrls.default.http[0] ?? 'https://rpc.ttl1.top';
+
+// 타자마다 RPC 를 때리지 않는다 — 입력이 멎고 이 시간이 지나야 한 번 부른다.
+const RECIPIENT_CHECK_DEBOUNCE_MS = 500;
+
 const sharedRegistry = new TokenRegistry();
 
 export function Send({ onBack }: Props) {
@@ -52,6 +73,10 @@ export function Send({ onBack }: Props) {
   const [scanOpen, setScanOpen] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanNote, setScanNote] = useState<string | null>(null);
+  // 메모 — TTL 은 평범한 송금 tx 의 data 에 UTF-8 바이트로 싣는다. 셸은 원문
+  // 문자열만 넘기고 hex 변환·판정은 SDK(EvmAdapter + memo.ts) 가 한다.
+  const [memo, setMemo] = useState('');
+  const [recipientKind, setRecipientKind] = useState<RecipientKind>('idle');
 
   useEffect(() => {
     let cancelled = false;
@@ -71,6 +96,58 @@ export function Send({ onBack }: Props) {
       cancelled = true;
     };
   }, []);
+
+  // 앞뒤 공백은 잘라서 판정하고 잘라서 보낸다. 서버(wallet-api/memo.js)가
+  // trim() 후 비면 탈락시키므로, 안 자르고 보내면 벼린이 센 바이트 수와 체인에
+  // 남는 바이트 수가 어긋난다. 다른 셸 3종도 잘라서 보낸다.
+  const trimmedMemo = memo.trim();
+  const memoEmpty = trimmedMemo.length === 0;
+
+  // ── 수신자가 EOA 인지 확인 ────────────────────────────────
+  // 메모칸에 글자가 있고 주소가 형식을 갖췄을 때만 부른다. 메모를 안 쓰는
+  // 사용자에게는 RPC 왕복이 0 이다. 어댑터도 서명 직전에 같은 확인을 하지만
+  // (evm.ts assertEoaRecipient), 보내고 나서 실패를 보는 것보다 입력 중에 알려
+  // 주는 편이 낫다.
+  useEffect(() => {
+    const target = to.trim();
+    if (memoEmpty || !ADDRESS_RE.test(target)) {
+      setRecipientKind('idle');
+      return;
+    }
+    let cancelled = false;
+    setRecipientKind('checking');
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetch(RPC_URL, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'eth_getCode',
+              params: [target, 'latest'],
+            }),
+          });
+          const body = (await res.json()) as { result?: unknown };
+          if (cancelled) return;
+          // 답을 못 읽으면 'eoa' 로 추정하지 않는다 — 컨트랙트에 메모를 붙이면
+          // 그 바이트가 함수 호출이 된다.
+          if (typeof body.result !== 'string') {
+            setRecipientKind('error');
+            return;
+          }
+          setRecipientKind(body.result === '0x' ? 'eoa' : 'contract');
+        } catch {
+          if (!cancelled) setRecipientKind('error');
+        }
+      })();
+    }, RECIPIENT_CHECK_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [to, memoEmpty]);
 
   const selectedToken = useMemo(() => {
     if (asset === 'native') return null;
@@ -102,7 +179,33 @@ export function Send({ onBack }: Props) {
   const showAmountError = trimmedAmount.length > 0 && !validAmount;
 
   const locked = status.kind === 'pending' || status.kind === 'sent';
-  const canProceed = validAddress && validAmount && !locked;
+
+  // ── 메모 게이트 ───────────────────────────────────────────
+  // 이 셸은 TTL(evm:ttl) 전용이다(wallet-store.ts 의 defaultAdapter). 따라서
+  // 체인 조건은 필요 없고 자산 조건만 남는다 — ERC-20 전송은 tx.data 가 transfer
+  // calldata 로 이미 차 있어 메모가 들어갈 자리가 없다(evm.ts buildTransfer).
+  const memoCapable = selectedToken === null;
+  const memoActive = memoCapable && !memoEmpty;
+  // 판정은 SDK 가 한다 — 규칙(2..2048 바이트·제어문자·공백)을 셸에 복제하지 않는다.
+  const memoCheck = memoEmpty ? null : validateMemo(trimmedMemo);
+  const memoErrorText =
+    memoActive && memoCheck && !memoCheck.ok
+      ? t(`send.memo_reason.${memoCheck.reason}`, {
+          n: memoCheck.byteLength,
+          min: MEMO_MIN_BYTES,
+          max: MEMO_MAX_BYTES,
+        })
+      : memoActive && recipientKind === 'contract'
+        ? t('send.memo_contract_recipient')
+        : memoActive && recipientKind === 'error'
+          ? t('send.memo_recipient_check_failed')
+          : undefined;
+  // 확인 중(checking)에도 다음 단계로 넘기지 않는다 — 컨트랙트로 판명될 수 있다.
+  const memoReady = !memoActive || (memoCheck?.ok === true && recipientKind === 'eoa');
+  // 토큰을 고른 채 메모가 남아 있으면 조용히 버리지 않고 이유를 보인다.
+  const memoDroppedByToken = selectedToken !== null && !memoEmpty;
+
+  const canProceed = validAddress && validAmount && !locked && memoReady;
 
   // ── QR 스캔 결과 반영 ─────────────────────────────────────
   // 돈 보내는 자리라 스캔값을 그대로 입력란에 넣지 않는다. 형식 파싱과 주소
@@ -170,12 +273,18 @@ export function Send({ onBack }: Props) {
       intent = erc20.transfer(selectedToken.token.address, trimmedTo, value);
     } else {
       intent = { to: trimmedTo, amount: value };
+      // 메모칸이 비면 memo 를 아예 넣지 않는다 — 빈 '0x' 도 data 에 넣지 않는다.
+      // 어댑터는 원문 문자열을 받아 encodeMemo 로 hex 를 만든다(evm.ts).
+      if (memoActive) intent.memo = trimmedMemo;
     }
 
     setStatus({ kind: 'pending' });
     try {
       const hash = await walletStore.transfer(intent);
       setStatus({ kind: 'sent', hash });
+      // 보낸 메모는 지운다. 남겨 두면 다음 송금에 앞 거래의 메모가 그대로
+      // 실려 나간다 — 사용자는 칸이 비어 있다고 믿기 쉽다.
+      setMemo('');
     } catch (err) {
       let msg: string;
       if (err instanceof ShellError) msg = t(`errors.${err.code}`);
@@ -208,6 +317,14 @@ export function Send({ onBack }: Props) {
               address: shortAddr,
             })}
           </p>
+          {memoActive && (
+            // 메모는 체인에 그대로 남는다 — 보내기 전에 원문을 그대로 보인다.
+            // React 텍스트 노드라 이스케이프는 프레임워크가 한다.
+            <div className="web-send-review__row web-send-review__row--memo">
+              <span>{t('send.review_memo_label')}</span>
+              <span className="web-send-review__memo-text">{memo}</span>
+            </div>
+          )}
           <div className="web-send-review__row">
             <span>{t('send.review_gas_label')}</span>
             <span>{t('send.review_gas_unknown')}</span>
@@ -359,6 +476,50 @@ export function Send({ onBack }: Props) {
             }
           />
         </Card>
+
+        {/* 메모 — native(TTL) 송금에만 붙는다. design-system 의 Input 은 input
+            전용이라 2048 바이트를 담기엔 좁다. 여기서만 bare textarea 를 쓰고
+            클래스는 기존 nd-input 체계를 그대로 따른다. */}
+        {memoCapable && (
+          <Card>
+            <label className="nd-field__label" htmlFor="nd-memo-input">
+              {t('send.memo_label')}
+            </label>
+            <textarea
+              id="nd-memo-input"
+              className="nd-input web-send__memo-input"
+              rows={2}
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              placeholder={t('send.memo_placeholder')}
+              disabled={locked}
+              aria-invalid={memoErrorText ? true : undefined}
+            />
+            <div className="web-send__memo-meta">
+              <span>
+                {t('send.memo_bytes', {
+                  n: memoByteLength(memo),
+                  max: MEMO_MAX_BYTES,
+                })}
+              </span>
+              {memoActive && recipientKind === 'checking' && (
+                <span>{t('send.memo_checking_recipient')}</span>
+              )}
+            </div>
+            {memoErrorText && (
+              <div className="nd-field__error" role="alert">
+                {memoErrorText}
+              </div>
+            )}
+            <p className="web-send__memo-note">{t('send.memo_public_note')}</p>
+            {memoActive && (
+              <p className="web-send__memo-note">{t('send.memo_gas_note')}</p>
+            )}
+          </Card>
+        )}
+        {memoDroppedByToken && (
+          <div className="nd-warn">{t('send.memo_token_unsupported')}</div>
+        )}
 
         <Button
           type="submit"

@@ -14,8 +14,11 @@
 // 가져온 값을 props 로 받는다 — 같은 화면에서 같은 RPC 를 두 번 때리지 않기
 // 위해서다.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ChainAdapter, TransferIntent } from '@byeorin/wallet-sdk/core';
+// 메모 판정은 SDK 한 곳에만 있다. 규칙(2~2048바이트·엄격 UTF-8·제어문자)은 서버
+// 인덱서(wallet-api/memo.js)와 한 글자도 어긋나면 안 되므로 셸에서 다시 짜지 않는다.
+import { validateMemo, MEMO_MAX_BYTES, type MemoCheck } from '@byeorin/wallet-sdk/core';
 import { ShellError, type Addressbook, type ScanResult } from '@byeorin/shell-core';
 import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../../../src/lib/wallet-service.js';
@@ -29,6 +32,7 @@ import {
   type SelectedAsset,
 } from '../lib/token-send.js';
 import type { PortableTokenBalance } from '../lib/token-visibility.js';
+import { probeRecipientKind } from '../lib/memo-recipient.js';
 import { QrScanField } from './QrScanField.js';
 
 export interface SendPaneProps {
@@ -76,11 +80,16 @@ export function SendPane({
   const [assetKey, setAssetKey] = useState<AssetKey>('native');
   // 메모 — **체인이 프로토콜에 원래 가진 기능만 노출한다** (CLAUDE.md 경계 원칙).
   // Cosmos 계열(ZION)은 tx memo 필드, TON 은 코멘트 셀이 네이티브다.
-  // EVM 등 메모 개념이 없는 체인에서는 입력칸 자체를 그리지 않는다 —
-  // 지갑이 관행·트릭으로 체인에 없는 기능을 발명하지 않는다.
+  // TTL(evm:ttl)은 메모 필드가 없는 대신, 체인이 원래 가진 tx.data 에 UTF-8
+  // 바이트를 싣고 **TTL 인덱서가 그것을 메모로 판정한다**(벼린-메모연동.md 1·2절).
+  // 발명이 아니라 이미 배포된 체인 기능을 노출하는 것이다.
+  // 그 외 체인에서는 입력칸 자체를 그리지 않는다.
   const [memo, setMemo] = useState('');
-  const memoCapable = chainKey.startsWith('cosmos:') || chainKey === 'ton';
   const trimmedMemo = memo.trim();
+  // 받는 주소의 정체. TTL 메모 경로에서만 조회한다 (아래 useEffect).
+  //   null = 아직 모름/조회 안 함, 'checking' = 조회 중, 'error' = 확인 실패
+  type RecipientState = null | 'checking' | 'eoa' | 'contract' | 'error';
+  const [recipient, setRecipient] = useState<RecipientState>(null);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   // "최대" 로 채웠고 아직 사용자가 수정하지 않았다는 표시 — native 는 가스를
   // 뺀 값이라 왜 잔액보다 작은지 화면이 설명해야 한다.
@@ -129,7 +138,96 @@ export function SendPane({
   const amountError =
     trimmedAmount.length > 0 && !parsed.ok ? amountErrorText(parsed.reason) : null;
   const locked = status.kind === 'pending' || status.kind === 'sent';
-  const canProceed = validAddress && validAmount && !locked;
+
+  // ── 메모 게이트 ────────────────────────────────────────────────────────
+  //
+  // TTL 만 연다. 다른 EVM 체인은 열지 않는다 — 메모를 판정해 되읽어 주는 인덱서가
+  // TTL 에만 배포돼 있어(벼린-메모연동.md 5절), 다른 체인에서는 사용자가 수수료를
+  // 더 내고 data 를 실어도 화면 어디에도 다시 뜨지 않는다. "보냈는데 안 보인다" 를
+  // 만들지 않기 위해 TTL 만 연다.
+  //
+  // 토큰은 제외한다. ERC-20 전송은 tx.data 가 이미 transfer calldata 로 차 있고,
+  // tx.data 는 한 칸뿐이다. 메모를 같이 넘기면 SDK 가 던진다(evm.ts:226).
+  const isTtlMemo = isTtl && asset.kind === 'native';
+  const memoCapable = chainKey.startsWith('cosmos:') || chainKey === 'ton' || isTtlMemo;
+
+  // 입력 중 실시간 판정. 빈 문자열은 오류가 아니다 — 메모 없는 송금이다.
+  const memoCheck: MemoCheck | null =
+    isTtlMemo && trimmedMemo.length > 0 ? validateMemo(trimmedMemo) : null;
+  const memoRuleError =
+    memoCheck !== null && !memoCheck.ok && memoCheck.reason !== undefined
+      ? t(`send.memo_reason.${memoCheck.reason}`, {
+          n: memoCheck.byteLength,
+          min: 2,
+          max: MEMO_MAX_BYTES,
+        })
+      : null;
+
+  // 받는 주소가 컨트랙트면 메모 바이트가 함수 호출로 해석된다(명세서 7절).
+  // 어댑터가 서명 직전에 다시 막지만, 화면이 먼저 알려 준다.
+  const memoRecipientError =
+    isTtlMemo && trimmedMemo.length > 0
+      ? recipient === 'contract'
+        ? t('send.memo_contract_recipient')
+        : recipient === 'error'
+          ? t('send.memo_recipient_check_failed')
+          : null
+      : null;
+  // 조회가 끝나기 전에는 다음 단계로 보내지 않는다 — 모르는 채로 메모를 실어
+  // 보내면 되돌릴 수 없다.
+  const memoRecipientPending =
+    isTtlMemo && trimmedMemo.length > 0 && (recipient === null || recipient === 'checking');
+  const memoBlocked =
+    memoRuleError !== null || memoRecipientError !== null || memoRecipientPending;
+
+  const canProceed = validAddress && validAmount && !locked && !memoBlocked;
+
+  // "최대" 로 채운 뒤에 메모를 적으면 남겨둔 가스 몫이 모자라진다 — 그 상태로
+  // 두면 그 송금은 반드시 실패한다(메모 없이 남긴 21,000×1.2 몫 0.00126 TTL 로는
+  // 2048 B 메모의 103,911 가스 = 0.0051956 TTL 을 못 낸다). 메모 길이가 변하면
+  // 최대치를 다시 계산한다. "최대" 를 누른 상태(maxNote)에서만 돈다.
+  useEffect(() => {
+    if (!maxNote || !isTtlMemo) return;
+    const timer = setTimeout(() => {
+      void fillMax();
+    }, 400);
+    return () => clearTimeout(timer);
+    // fillMax 는 매 렌더 새로 만들어지므로 의존성에 넣지 않는다 — 넣으면 매
+    // 렌더마다 타이머가 다시 걸린다. 값이 바뀌는 축은 아래 셋뿐이다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maxNote, isTtlMemo, memoCheck?.byteLength]);
+
+  /**
+   * 받는 주소 정체 조회 — **디바운스 400ms**. 타자마다 eth_getCode 를 부르면
+   * 한 글자에 RPC 왕복 하나가 생긴다. 주소가 유효 형식일 때, 그리고 메모를
+   * 실제로 쓰고 있을 때만 부른다 (메모 없는 송금은 왕복 0회).
+   */
+  useEffect(() => {
+    if (!isTtlMemo || trimmedMemo.length === 0 || !validAddress) {
+      setRecipient(null);
+      return;
+    }
+    let cancelled = false;
+    setRecipient('checking');
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const kind = await probeRecipientKind(adapter, trimmedTo);
+          if (!cancelled) setRecipient(kind);
+        } catch {
+          // 모르는 것을 EOA 로 추정하지 않는다. 화면이 "확인하지 못했다" 고 말한다.
+          if (!cancelled) setRecipient('error');
+        }
+      })();
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // trimmedMemo 는 길이 0 여부만 쓰므로 의존성에서 길이만 본다 — 메모 한 글자
+    // 칠 때마다 조회를 다시 걸지 않기 위해서다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTtlMemo, trimmedMemo.length === 0, validAddress, trimmedTo, adapter]);
 
   // native 전송 수수료를 추정할 수 있는 어댑터의 구조적 표면 (EVM 계열).
   type NativeFeeEstimator = { estimateNativeSendFee(gasUnits?: bigint): Promise<bigint> };
@@ -157,7 +255,21 @@ export function SendPane({
     }
     if (feeEstimator === null) return;
     try {
-      const fee = await feeEstimator.estimateNativeSendFee();
+      // 메모가 붙으면 가스가 21,000 을 훌쩍 넘는다. 기본값(21,000)으로 최대를
+      // 계산하면 남는 몫이 수수료보다 적어 전송 자체가 실패한다.
+      //
+      // 계수 44 의 근거(실측, rpc.ttl1.top / EOA 수신자):
+      //   1 B → 21,205 / 256 B → 31,593 / 1024 B → 62,789 / 2048 B → 103,911
+      //   = 노드가 EIP-7623(비영 40/B) 로 매긴다. 2048×40+21,000 = 102,920 이라
+      //   실측 103,911 에 못 미치므로 40 이 아니라 **44** 로 올려 잡는다
+      //   (2048×44+21,000 = 111,112 > 103,911). 넉넉히 잡으면 최대 금액이 조금
+      //   줄 뿐이지만, 모자라게 잡으면 전송이 OOG 로 죽는다.
+      //   명세서 4절의 EIP-2028 식(바이트당 16)은 이 노드에서 틀렸다.
+      const memoGas =
+        isTtlMemo && trimmedMemo.length > 0
+          ? 21_000n + BigInt(validateMemo(trimmedMemo).byteLength) * 44n
+          : undefined;
+      const fee = await feeEstimator.estimateNativeSendFee(memoGas);
       const max = asset.balance > fee ? asset.balance - fee : 0n;
       setAmount(assetAmountToInputString(max, asset.decimals));
       setMaxNote(true);
@@ -233,12 +345,18 @@ export function SendPane({
     }
     // native 면 예전과 같은 { to, amount }. 토큰이면 체인에 맞는 형식.
     const intent = buildAssetIntent(asset, trimmedTo, result.value, adapter, isEvm);
+    // 메모는 **원문 문자열**로 넘긴다. hex 변환(encodeMemo)은 어댑터의 일이다 —
+    // cosmos(tx memo)·ton(코멘트 셀)·TTL(tx.data) 이 같은 한 줄을 쓴다.
+    // 비어 있으면 필드를 아예 넣지 않는다: 빈 '0x' data 를 붙이면 안 된다(7절).
     if (memoCapable && trimmedMemo.length > 0) intent.memo = trimmedMemo;
     setStatus({ kind: 'pending' });
     try {
       // 활성 체인 어댑터로 송금 — defaultAdapter(TTL) 아님.
       const hash = await walletStore.transfer(intent, adapter);
       setStatus({ kind: 'sent', hash });
+      // 보낸 메모는 지운다. 남겨 두면 다음 송금에 앞 거래의 메모가 그대로
+      // 실려 나간다 — 사용자는 칸이 비어 있다고 믿기 쉽다.
+      setMemo('');
     } catch (err) {
       let msg: string;
       if (err instanceof ShellError) msg = t(`errors.${err.code}`);
@@ -273,14 +391,23 @@ export function SendPane({
         )}
         {memoCapable && trimmedMemo.length > 0 && (
           <div className="send-review__row">
-            <span className="muted small">{t('send.memo_label')}</span>
-            <span className="small">{trimmedMemo}</span>
+            <span className="muted small">{t('send.review_memo_label')}</span>
+            {/* 사용자가 방금 친 문자열이지만 렌더 규칙은 활동 화면과 같게 둔다 —
+                React 텍스트 노드. dangerouslySetInnerHTML 을 쓰지 않는다. */}
+            <span className="small send-review__memo">{trimmedMemo}</span>
           </div>
         )}
         <div className="send-review__row">
           <span className="muted small">{t('send.review_gas_label')}</span>
           <span className="small">{t('send.review_gas_unknown')}</span>
         </div>
+        {/* 메모가 붙으면 가스가 바이트 수만큼 늘어난다(실측 2048B → 103,911).
+            확인 화면에서 한 번 더 말해 준다 — 되돌릴 수 없는 단계라서. */}
+        {isTtlMemo && trimmedMemo.length > 0 && (
+          <p className="muted small" style={{ margin: 0 }}>
+            {t('send.memo_gas_note')}
+          </p>
+        )}
         <p className="warn small" style={{ margin: 0 }}>
           {t('send.review_irreversible')}
         </p>
@@ -445,17 +572,47 @@ export function SendPane({
           <label className="label" htmlFor="send-memo">
             {t('send.memo_label')}
           </label>
-          <input
+          {/* TTL 은 2048 **바이트**(한글 682자)까지 실린다. 한 줄 input + 문자 수
+              maxLength 로는 그 한계를 표현할 수 없어 textarea + 바이트 카운터로
+              바꿨다 — maxLength={256} 은 규칙과 무관한 제한이었다.
+              (styles.css:335 의 bare textarea 규칙이 그대로 적용된다.) */}
+          <textarea
             id="send-memo"
-            type="text"
-            className="verify-row__input"
+            className="send-memo__input"
+            rows={2}
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
             placeholder={t('send.memo_placeholder')}
-            maxLength={256}
+            spellCheck={false}
             disabled={locked}
           />
+          {isTtlMemo && (
+            <>
+              <p className="muted small send-memo__count">
+                {t('send.memo_bytes', {
+                  n: memoCheck?.byteLength ?? 0,
+                  max: MEMO_MAX_BYTES,
+                })}
+              </p>
+              {/* 규칙 위반 사유는 SDK 의 reason 코드를 그대로 i18n 키로 쓴다. */}
+              {memoRuleError !== null && <p className="error small">{memoRuleError}</p>}
+              {memoRecipientPending && (
+                <p className="muted small">{t('send.memo_checking_recipient')}</p>
+              )}
+              {memoRecipientError !== null && (
+                <p className="error small">{memoRecipientError}</p>
+              )}
+              {trimmedMemo.length > 0 && memoRuleError === null && (
+                <p className="muted small">{t('send.memo_public_note')}</p>
+              )}
+            </>
+          )}
         </>
+      )}
+      {/* 토큰을 고르면 메모칸 자체가 사라진다. 왜 사라졌는지 말해 준다 —
+          ERC-20 전송은 tx.data 가 이미 차 있어 메모를 넣을 자리가 없다. */}
+      {isTtl && !isTtlMemo && (
+        <p className="muted small">{t('send.memo_token_unsupported')}</p>
       )}
       {amountError !== null && <p className="error small">{amountError}</p>}
 

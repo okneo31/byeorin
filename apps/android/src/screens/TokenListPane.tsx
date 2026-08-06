@@ -23,8 +23,13 @@
 // 판단(필터·정렬·검색·가리기 상태)은 전부 `lib/token-visibility.ts` 에 있다.
 // 이 파일은 그 결과를 그리기만 한다 — 그래야 규칙을 jsdom 없이 테스트할 수 있다.
 //
-// 환율은 재구현하지 않는다. wallet-sdk 의 벼린 환율(`rateByAddress` /
-// `tokenAmountToTtl`)이 유일한 출처다.
+// 값은 재구현하지 않는다. wallet-sdk 의 `assetValueInTtl` 이 유일한 출처다 —
+// 이 화면은 그 결과의 `basis`·`volatile`·`reason` 을 표기로 옮기기만 한다.
+//
+// **고정 액면과 시세 기준을 구분해 적는다.** 둘 다 "≈ N TTL" 로만 적으면 시세
+// 따라 출렁이는 줄이 "TTL 이 BTC 를 따라간다" 로 읽히고, 그건 방금 지운 옛
+// 페그와 화면상 구별이 안 된다. 그래서 배지 텍스트(아이콘 아님 — 좁은 화면과
+// 고대비 모드에서 아이콘·색은 사라진다)와 마커 문자를 붙인다.
 //
 // 용어 주의: 1 TTL = 노동자 1일 품삯이고, perTtl 은 "1 TTL 이 그 통화로 얼마인가"
 // 다. 시장환율이 아니다. tUSD 는 실제 달러가 아니다. 화면 문구에서 이 둘을
@@ -32,6 +37,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { LocalStorageBackend } from '@byeorin/shell-core';
+import { rateSnapshot, type PriceTable } from '@byeorin/wallet-sdk/evm';
 import { useT } from '@byeorin/i18n/react';
 import { formatAssetAmount } from '../lib/token-send.js';
 import {
@@ -58,6 +64,16 @@ export interface TokenListPaneProps {
   /** 활성 체인 키. 가리기 상태를 체인별로 저장하는 데 쓴다. */
   chainKey: string;
   /**
+   * EVM chainId (EVM 이 아니면 null). 스테이블 액면은 chainId 스코프로만
+   * 판정되므로, 넘기지 않으면 EVM 스테이블이 액면을 못 얻어 값이 통째로 빈다.
+   */
+  chainId?: number | null;
+  /**
+   * Binance ticker 표. 상장자산 행의 TTL 값이 여기서만 온다.
+   * 상위가 시세를 못 받았으면 `null` — 그 행은 "시세 없음" 으로 사유를 밝힌다.
+   */
+  prices: PriceTable | null;
+  /**
    * 이 체인의 어댑터가 토큰을 다룰 수 있는가 — 상위가 wallet-sdk 의
    * `supportsTokens(adapter)` 를 그대로 넘긴다.
    *
@@ -76,6 +92,8 @@ export interface TokenListPaneProps {
 export function TokenListPane({
   tokens,
   chainKey,
+  chainId = null,
+  prices,
   supported = true,
   error = null,
   onRefresh,
@@ -104,9 +122,14 @@ export function TokenListPane({
   }, [backend]);
 
   const rows = useMemo<TokenRow[]>(
-    () => (tokens ? buildTokenRows(tokens, hidden, chainKey) : []),
-    [tokens, hidden, chainKey],
+    () => (tokens ? buildTokenRows(tokens, hidden, chainKey, chainId, prices) : []),
+    [tokens, hidden, chainKey, chainId, prices],
   );
+
+  // 어느 앵커의 값인지. 화면에 TTL 값을 보이면서 기준 날짜를 감추면, 재앵커 후
+  // 옛 화면과 새 화면이 같은 얼굴로 다른 수를 말한다. 값은 스냅샷에서 읽는다 —
+  // 날짜를 코드에 적지 않는다.
+  const anchoredAt = rateSnapshot().anchoredAt;
 
   const view = useMemo(
     () => selectTokenView(rows, { query, showHidden }),
@@ -209,6 +232,7 @@ export function TokenListPane({
                     setExpanded((cur) => (cur === row.key ? null : row.key))
                   }
                   onToggleHidden={() => toggleHidden(row)}
+                  anchoredAt={anchoredAt}
                   t={t}
                 />
               ))}
@@ -219,6 +243,9 @@ export function TokenListPane({
             <p className="warn small">{t('tokens.persist_failed')}</p>
           )}
           <p className="muted small">{t('tokens.hidden_note')}</p>
+          {/* 이 화면의 TTL 값이 전부 어느 앵커 기준인지 한 번만 고지한다.
+              줄마다 붙이면 66 줄이 두 배가 된다 — 행 단위 근거는 펼침 패널에. */}
+          <p className="muted small">{t('tokens.anchor_line', { date: anchoredAt })}</p>
           {/* 통화토큰과 실제 통화를 섞지 않게 하는 고지. 지워서는 안 된다. */}
           <p className="muted small">{t('tokens.disclaimer')}</p>
         </>
@@ -240,16 +267,29 @@ function TokenRowItem({
   expanded,
   onToggleExpand,
   onToggleHidden,
+  anchoredAt,
   t,
 }: {
   row: TokenRow;
   expanded: boolean;
   onToggleExpand: () => void;
   onToggleHidden: () => void;
+  anchoredAt: string;
   t: (key: string, vars?: Record<string, string | number>) => string;
 }) {
   const held = row.balance > 0n;
   const panelId = `token-basis-${row.key}`;
+  const v = row.value;
+  // 값을 못 낸 사유 → 문구 키. 뭉뚱그리지 않는다: 신원을 모르는 것, 시세가 없는
+  // 것, 환율표에 그 통화가 없는 것, 자릿수가 이상한 것은 서로 다른 사실이다.
+  const reasonKey =
+    v.reason === 'unverified'
+      ? 'tokens.value_unverified'
+      : v.reason === 'unlisted'
+        ? 'tokens.value_unlisted'
+        : v.reason === 'bad-decimals'
+          ? 'tokens.value_bad_decimals'
+          : 'tokens.value_no_face_rate';
 
   return (
     <li className={row.hidden ? 'token-row token-row--hidden' : 'token-row'}>
@@ -271,15 +311,42 @@ function TokenRowItem({
           >
             {formatAssetAmount(row.balance, row.decimals)}
           </span>
-          {/* 환율이 없으면 가치 자리를 **비운다**. 0 이나 추정치를 넣으면
-              "값이 없는 토큰" 과 "값을 모르는 토큰" 이 구분되지 않는다. */}
+          {/* 값을 못 내면 가치 자리를 **비우되 사유를 적는다**. 0 이나 추정치를
+              넣으면 "값이 없는 토큰" 과 "값을 모르는 토큰" 이 구분되지 않는다.
+              시세 기준(volatile)은 다른 문구·다른 배지로 적는다 — 고정 액면과
+              같은 얼굴로 그리면 출렁임이 TTL 의 성질로 읽힌다. */}
           {row.ttl !== null ? (
-            <span className="token-row__ttl">
-              {t('tokens.value_ttl', { v: formatTtl(row.ttl) })}
+            <span
+              className={
+                v.volatile ? 'token-row__ttl token-row__ttl--market' : 'token-row__ttl'
+              }
+            >
+              {v.volatile
+                ? t('tokens.value_ttl_market', { v: formatTtl(row.ttl) })
+                : t('tokens.value_ttl', { v: formatTtl(row.ttl) })}
+              <span
+                className={
+                  v.volatile
+                    ? 'value-badge value-badge--market'
+                    : 'value-badge value-badge--fixed'
+                }
+                title={
+                  v.volatile
+                    ? t('tokens.basis_market_hint')
+                    : t('tokens.basis_fixed_hint')
+                }
+              >
+                {v.volatile ? t('tokens.basis_market') : t('tokens.basis_fixed')}
+              </span>
             </span>
           ) : (
-            <span className="token-row__ttl token-row__ttl--none">
-              {t('tokens.no_rate')}
+            <span
+              className="token-row__ttl token-row__ttl--none"
+              title={
+                v.reason === 'unverified' ? t('tokens.value_unverified_hint') : undefined
+              }
+            >
+              {t(reasonKey)}
             </span>
           )}
         </span>
@@ -344,6 +411,25 @@ function TokenRowItem({
               })}
             </p>
           )}
+          {/* 시세 기준 행의 근거. "몇 USD 를 어느 페어로 얻었는가" 를 적는다 —
+              이 줄이 없으면 출렁이는 TTL 값의 출처가 화면 어디에도 없다. */}
+          {v.market && (
+            <div className="token-basis__row">
+              <dt>{t('tokens.basis_market')}</dt>
+              <dd>
+                {t('tokens.basis_market_unit', {
+                  usd: formatPerTtl(v.market.unitUsd),
+                  via: v.market.via,
+                })}
+              </dd>
+            </div>
+          )}
+          {/* 어느 앵커의 값인가. 스냅샷을 다시 만들면 66 종이 전부 바뀐다 —
+              날짜 없이 숫자만 보이면 그 사실을 확인할 방법이 없다. */}
+          <div className="token-basis__row">
+            <dt>{t('tokens.basis_anchored_at')}</dt>
+            <dd>{anchoredAt}</dd>
+          </div>
           {/* 잔액의 출처. 체인에서 직접 읽은 값과 인덱서가 말해준 값은 신뢰도가
               다르므로 숫자 옆이 아니라 근거 자리에 사실대로 적는다.
               (문구가 하드코딩인 이유: i18n 카탈로그는 이 작업의 소유 범위 밖이라

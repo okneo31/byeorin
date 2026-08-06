@@ -30,6 +30,30 @@ export interface TokenInfo {
   custom?: boolean;
   /** CoinGecko 가격 조회용 ID (있다면). */
   coingeckoId?: string;
+  /**
+   * **액면 통화 ISO** — 이 토큰 1 개가 발행자 선언상 어느 통화 1 단위인가.
+   * USD·KRW·EUR… 없으면 스테이블코인이 아니다.
+   *
+   * 왜 여기 붙나: 이 목록은 이미 "값을 매겨도 되는 주소" 의 판정원이다. 스테이블
+   * 주소 목록을 따로 만들면 같은 주소가 두 곳에 생기고, 어긋나면 틀린 쪽이 값을
+   * 매긴다. 주소 1 개당 진실은 1 개여야 한다.
+   *
+   * 왜 시장환율 위반이 아닌가: 액면은 발행자가 선언한 **단위**(1 USDT ≡ 1 USD)지
+   * 시장 시세가 아니다. 그 단위를 벼린 환율(GDP/인구/365)로 TTL 에 옮기는 경로에는
+   * 시장환율이 한 번도 들어오지 않는다. BTC·ETH·WETH 는 다르다 — 그 달러값은
+   * Binance 시장 시세이므로 TTL 로 옮기면 시장이 벼린 환율에 섞인다.
+   * **상장자산에는 이 필드를 절대 넣지 마라.**
+   *
+   * 신원(이 목록에 있음)만으로는 TTL 환산 자격이 되지 않는다 — WETH·WBTC.e 도
+   * 이 목록에 있다. 자격은 신원 ∧ faceIso, 둘 다일 때만이다.
+   *
+   * 한계(고쳐지지 않는다): 이 구조는 페그를 무조건 믿는다. 디페그를 탐지하려면
+   * 시장 시세를 입력으로 써야 하고 그건 금지된 입력이다. 온체인 DEX 풀 가격도
+   * 시장가라 같은 위반이다. 지갑 안에 탐지 경로는 없다. 대신 디페그가 확인되면
+   * 그 항목의 faceIso 를 지운다 — 신원은 남고 값만 비어 "시세 없음" 으로
+   * 떨어지며, 잔액·송금은 그대로 된다.
+   */
+  faceIso?: string;
 }
 
 // chainId 상수 — viem/chains 와 일치.
@@ -54,6 +78,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'USD Coin',
       decimals: 6,
       coingeckoId: 'usd-coin',
+      faceIso: 'USD',
     },
     {
       address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
@@ -61,6 +86,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'Tether USD',
       decimals: 6,
       coingeckoId: 'tether',
+      faceIso: 'USD',
     },
     {
       address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
@@ -75,6 +101,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'Dai Stablecoin',
       decimals: 18,
       coingeckoId: 'dai',
+      faceIso: 'USD',
     },
   ],
   [CHAIN_POLYGON]: [
@@ -84,6 +111,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'USD Coin',
       decimals: 6,
       coingeckoId: 'usd-coin',
+      faceIso: 'USD',
     },
     {
       address: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
@@ -91,6 +119,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'Tether USD',
       decimals: 6,
       coingeckoId: 'tether',
+      faceIso: 'USD',
     },
     {
       address: '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619',
@@ -105,6 +134,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'Dai Stablecoin',
       decimals: 18,
       coingeckoId: 'dai',
+      faceIso: 'USD',
     },
   ],
   [CHAIN_ARBITRUM]: [
@@ -114,6 +144,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'USD Coin',
       decimals: 6,
       coingeckoId: 'usd-coin',
+      faceIso: 'USD',
     },
     {
       address: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
@@ -121,6 +152,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'Tether USD',
       decimals: 6,
       coingeckoId: 'tether',
+      faceIso: 'USD',
     },
     {
       address: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
@@ -135,6 +167,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'Dai Stablecoin',
       decimals: 18,
       coingeckoId: 'dai',
+      faceIso: 'USD',
     },
   ],
   [CHAIN_OPTIMISM]: [
@@ -144,6 +177,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'USD Coin',
       decimals: 6,
       coingeckoId: 'usd-coin',
+      faceIso: 'USD',
     },
     {
       address: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58',
@@ -151,6 +185,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'Tether USD',
       decimals: 6,
       coingeckoId: 'tether',
+      faceIso: 'USD',
     },
     {
       address: '0x4200000000000000000000000000000000000006',
@@ -165,6 +200,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'Dai Stablecoin',
       decimals: 18,
       coingeckoId: 'dai',
+      faceIso: 'USD',
     },
   ],
   [CHAIN_BASE]: [
@@ -174,6 +210,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'USD Coin',
       decimals: 6,
       coingeckoId: 'usd-coin',
+      faceIso: 'USD',
     },
     {
       address: '0x4200000000000000000000000000000000000006',
@@ -188,6 +225,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'Dai Stablecoin',
       decimals: 18,
       coingeckoId: 'dai',
+      faceIso: 'USD',
     },
   ],
   [CHAIN_BSC]: [
@@ -197,6 +235,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'USD Coin',
       decimals: 18,
       coingeckoId: 'usd-coin',
+      faceIso: 'USD',
     },
     {
       address: '0x55d398326f99059fF775485246999027B3197955',
@@ -204,6 +243,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'Tether USD',
       decimals: 18,
       coingeckoId: 'tether',
+      faceIso: 'USD',
     },
     {
       address: '0x2170Ed0880ac9A755fd29B2688956BD959F933F8',
@@ -218,6 +258,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'Dai Stablecoin',
       decimals: 18,
       coingeckoId: 'dai',
+      faceIso: 'USD',
     },
   ],
   // Avalanche C-Chain. 빌트인이 0 종이라 이 체인에서는 토큰이 하나도 안 보였다.
@@ -238,6 +279,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'USD Coin',
       decimals: 6,
       coingeckoId: 'usd-coin',
+      faceIso: 'USD',
     },
     {
       // Tether 네이티브 발행분 (Snowtrace 라벨 "Tether: Tether Token", 심볼 USDt).
@@ -246,6 +288,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'Tether USD',
       decimals: 6,
       coingeckoId: 'tether',
+      faceIso: 'USD',
     },
     {
       address: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7',
@@ -261,6 +304,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'USD Coin (Bridged)',
       decimals: 6,
       coingeckoId: 'usd-coin',
+      faceIso: 'USD',
     },
     {
       address: '0xc7198437980c041c805A1EDcbA50c1Ce5db95118',
@@ -268,6 +312,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'Tether USD (Bridged)',
       decimals: 6,
       coingeckoId: 'tether',
+      faceIso: 'USD',
     },
     {
       address: '0x49D5c2BdFfac6CE2BFdB6640F4F80f226bc10bAB',
@@ -291,6 +336,7 @@ const BUILTIN: Readonly<Record<number, readonly TokenInfo[]>> = {
       name: 'Dai Stablecoin (Bridged)',
       decimals: 18,
       coingeckoId: 'dai',
+      faceIso: 'USD',
     },
   ],
   // 환율 스냅샷에서 기계 생성 — 주소·심볼·decimals 의 출처는 커밋된 앵커다.
@@ -342,7 +388,10 @@ export class TokenRegistry {
     const list = this.tokens.get(chainId) ?? [];
     const target = normAddr(info.address);
     if (list.some((t) => normAddr(t.address) === target)) return;
-    list.push({ ...info, custom: info.custom ?? true });
+    // faceIso 는 **내장 목록만의 사실**이다. 커스텀 경로로 들어오면 사용자가
+    // (또는 사용자를 속인 사이트가) 아무 주소에나 "USD 액면" 을 붙여 TTL 값을
+    // 얻는다 — v0.5.20 이 심볼 판정을 없애며 막은 구멍과 같은 구멍이다.
+    list.push({ ...info, faceIso: undefined, custom: info.custom ?? true });
     this.tokens.set(chainId, list);
   }
 

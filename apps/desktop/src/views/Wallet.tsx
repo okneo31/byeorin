@@ -6,11 +6,19 @@ import {
   NEW_MNEMONIC_STRENGTH,
   NEW_MNEMONIC_WORD_COUNT,
   discoverTokens,
-  getPrice,
   type DiscoveredBalance,
   type TokenInfo,
   type WalletAccount,
 } from '@byeorin/wallet-sdk';
+// 환산은 SDK 한 곳에서만 한다. 셸은 이 함수만 부른다 — v0.5.21 에 셸마다
+// 짜서 4 벌이 어긋났다. 환율 숫자는 여기(그리고 어디에도) 적지 않는다:
+// 값은 런타임에 rate-snapshot 에서 온다.
+import {
+  assetValueInTtl,
+  sumTtl,
+  rateSnapshot,
+  type AssetValue,
+} from '@byeorin/wallet-sdk/evm';
 import {
   AddressDisplay,
   AmountDisplay,
@@ -50,7 +58,6 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
   const [tokens, setTokens] = useState<DiscoveredBalance[] | null>(null);
   const [tokensLoading, setTokensLoading] = useState(false);
   const [tokensError, setTokensError] = useState<string | null>(null);
-  const [ttlPrice, setTtlPrice] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
   // 계정 이름 — WalletAccount 에는 label 이 없어 listAccounts() 에서 따로 읽는다.
@@ -89,16 +96,6 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
       setTokensLoading(false);
     }
   }, [t]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void getPrice('ttl').then((v) => {
-      if (!cancelled) setTtlPrice(v);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // unlocked 상태 변화에 따라 account 를 비동기로 동기화.
   useEffect(() => {
@@ -226,6 +223,45 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
     onLock();
   };
 
+  // 토큰 행마다 "몇 TTL 인가" 를 SDK 에 묻는다. 셸은 산식을 만들지 않는다 —
+  // v0.5.21 에 셸마다 짜서 4 벌이 어긋났다. chainId 는 어댑터 id('evm:7777')
+  // 에서 온다: 주소 신원 판정이 체인별이라 이 값이 빠지면 전부 미확인이 된다.
+  const chainId = Number(walletStore.getDefaultAdapter().id.replace(/^evm:/, ''));
+  // desktop 은 시세를 가져오지 않는다. 없는 표를 있는 척하지 않기 위해 null 을
+  // **명시적으로** 넘긴다 — 그러면 시세가 있어야 값이 나오는 자산은 조용히
+  // 0 이 되는 대신 '시세 없음' 으로 드러난다.
+  const prices = null;
+  const tokenValues: { row: DiscoveredBalance; value: AssetValue }[] = (tokens ?? []).map((row) => ({
+    row,
+    value: assetValueInTtl(
+      {
+        kind: 'token',
+        id: row.token.address,
+        family: 'evm',
+        chainId: Number.isFinite(chainId) ? chainId : null,
+        symbol: row.token.symbol,
+        balance: row.balance,
+        decimals: row.token.decimals,
+      },
+      { prices },
+    ),
+  }));
+  // native TTL 은 환산이 아니라 자기 자신이다 — 그래도 같은 함수로 묻는다.
+  // 셸이 자릿수를 따로 정하면 합계와 히어로가 갈라진다.
+  const nativeValue =
+    balance != null ? assetValueInTtl({ kind: 'ttl', balance }, { prices }) : null;
+  // 합계. 값 미상은 더하지 않고 센다 — `?? 0` 으로 때우면 빠진 자산을 숨긴
+  // 총액이 되고 그건 거짓이다.
+  const portfolio = sumTtl([
+    ...(nativeValue ? [nativeValue] : []),
+    ...tokenValues.map((v) => v.value),
+  ]);
+  // 잔액 자체를 못 읽은 것도 빠진 자산 1 건이다.
+  const portfolioMissing = portfolio.missing + (balance == null ? 1 : 0);
+  // 이 화면의 TTL 값이 **어느 앵커의 것인지**. 스냅샷을 다시 만들면 바뀌므로
+  // 날짜를 코드에 적지 않고 런타임에 읽는다.
+  const anchoredAt = rateSnapshot().anchoredAt;
+
   if (account && unlocked) {
     return (
       <div className="nd-view">
@@ -307,11 +343,38 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
           {!loadingBalance && !balanceError && balance != null && (
             <>
               <AmountDisplay value={balance} decimals={18} symbol="TTL" size="lg" />
-              {ttlPrice != null && (
-                <div className="nd-muted" style={{ marginTop: 6 }}>
-                  ≈ ${usdValueOf(balance, 18, ttlPrice)} USD
-                </div>
-              )}
+              {/* TTL 은 기준이라 다른 것으로 바꿔 적지 않는다 — 자기 정의(품삯 일수)를 적는다. */}
+              <div className="nd-muted" style={{ marginTop: 6 }}>
+                {nativeValue?.ttl !== null && nativeValue !== null &&
+                  t('tokens.value_labor_days', { v: formatTtl(nativeValue.ttl) })}
+              </div>
+              {/*
+                포트폴리오 TTL 합계. 모든 자산을 같은 자로 재므로 성립한다.
+                값을 못 낸 자산 수를 반드시 함께 적는다 — 빠진 것을 숨긴 합계는
+                거짓이다. desktop 은 TTL 체인 전용이라 시세 기반 항목이 없어
+                이 합계는 출렁이지 않는다.
+              */}
+              <div className="nd-muted" style={{ marginTop: 4 }}>
+                {t('portfolio.total_ttl', { v: formatTtl(portfolio.ttl) })}
+                {portfolioMissing > 0 && (
+                  <span title={t('portfolio.total_excluded_hint')} style={{ marginLeft: 6 }}>
+                    {t('portfolio.total_excluded', { n: portfolioMissing })}
+                  </span>
+                )}
+                {/* 시세 자산이 섞이면 합계가 출렁인다. 그 사실을 적지 않으면
+                    출렁임이 "TTL 이 시장을 따라간다" 로 읽힌다. */}
+                {portfolio.volatile && (
+                  <span style={{ marginLeft: 6 }}>
+                    {t('portfolio.total_volatile_note', {
+                      n: tokenValues.filter((v) => v.value.volatile && v.value.ttl !== null).length,
+                    })}
+                  </span>
+                )}
+              </div>
+              {/* 어느 앵커의 값인지. 한 화면에 한 번만 적는다. */}
+              <div className="nd-muted nd-anchor-line">
+                {t('tokens.anchor_line', { date: anchoredAt })}
+              </div>
             </>
           )}
           <div className="nd-muted" style={{ marginTop: 12 }}>
@@ -343,17 +406,22 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
           )}
           {tokens && tokens.length > 0 && (
             <ul className="nd-tokens">
-              {tokens.map((t) => (
-                <li key={t.token.address} className="nd-tokens__row">
-                  <span className="nd-tokens__sym">{t.token.symbol}</span>
-                  <span className="nd-tokens__name">{t.token.name}</span>
-                  <AmountDisplay
-                    value={t.balance}
-                    decimals={t.token.decimals}
-                    symbol={t.token.symbol}
-                    maxDecimals={4}
-                    size="md"
-                  />
+              {tokenValues.map(({ row, value }) => (
+                <li key={row.token.address} className="nd-tokens__row">
+                  <span className="nd-tokens__sym">{row.token.symbol}</span>
+                  <span className="nd-tokens__name">{row.token.name}</span>
+                  {/* 수량과 TTL 값은 **같은 자릿수**를 쓴다(value.decimals) —
+                      갈라지면 한 줄 안의 두 숫자가 서로를 부정한다. */}
+                  <span className="nd-tokens__value">
+                    <AmountDisplay
+                      value={row.balance}
+                      decimals={value.decimals}
+                      symbol={row.token.symbol}
+                      maxDecimals={4}
+                      size="md"
+                    />
+                    <TtlValueLine value={value} />
+                  </span>
                 </li>
               ))}
             </ul>
@@ -450,6 +518,54 @@ export function Wallet({ unlocked, onReady, onLock }: Props) {
         </Card>
       )}
     </div>
+  );
+}
+
+/**
+ * 한 자산의 TTL 값 한 줄.
+ *
+ * 산식은 이미 SDK 에서 끝났다 — 여기는 그 결과(ttl·basis·volatile·reason)를
+ * 그리기만 한다. 셸이 다시 계산하지 않는다.
+ *
+ * 두 가지를 반드시 구분해 보인다:
+ *  - 고정 액면(t{ISO}·스테이블) vs 시세 기준(상장자산). 구분이 없으면 출렁이는
+ *    TTL 값이 "TTL 이 시장을 따라간다" 로 읽히고, 그건 지운 페그와 화면상
+ *    구별이 안 된다.
+ *  - 값 미상은 빈칸이 아니라 문장이다. 빈칸은 "0" 으로 읽힌다.
+ */
+function TtlValueLine({ value }: { value: AssetValue }) {
+  const t = useT();
+  if (value.ttl === null) {
+    const reasonKey =
+      value.reason === 'unverified'
+        ? 'tokens.value_unverified'
+        : value.reason === 'no-face-rate'
+          ? 'tokens.value_no_face_rate'
+          : value.reason === 'bad-decimals'
+            ? 'tokens.value_bad_decimals'
+            : 'tokens.value_unlisted';
+    return (
+      <span
+        className="nd-ttl-value nd-ttl-value--unknown"
+        title={value.reason === 'unverified' ? t('tokens.value_unverified_hint') : undefined}
+      >
+        {t(reasonKey)}
+      </span>
+    );
+  }
+  // 배지는 아이콘이 아니라 짧은 텍스트다 — 좁은 화면·고대비 모드에서 아이콘과
+  // 색은 사라지지만 글자는 남는다.
+  const market = value.basis === 'market';
+  return (
+    <span className={`nd-ttl-value${market ? ' nd-ttl-value--market' : ''}`}>
+      {t(market ? 'tokens.value_ttl_market' : 'tokens.value_ttl', { v: formatTtl(value.ttl) })}
+      <span
+        className={`value-badge value-badge--${market ? 'market' : 'fixed'}`}
+        title={t(market ? 'tokens.basis_market_hint' : 'tokens.basis_fixed_hint')}
+      >
+        {t(market ? 'tokens.basis_market' : 'tokens.basis_fixed')}
+      </span>
+    </span>
   );
 }
 
@@ -553,18 +669,14 @@ function AddTokenModal({
   );
 }
 
-/**
- * bigint base unit + decimals + USD price → 표시용 USD 문자열.
- * Number 변환은 표시용에 한정 (잔액 자체는 항상 bigint 로 유지).
- */
-function usdValueOf(base: bigint, decimals: number, priceUsd: number): string {
-  const factor = 10n ** BigInt(decimals);
-  const whole = base / factor;
-  const frac = base % factor;
-  const fracNum = Number(frac) / Number(factor);
-  const value = Number(whole) + fracNum;
-  return (value * priceUsd).toLocaleString('en-US', {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  });
+// bigint → number 하강은 SDK(baseUnitsToNumber) 한 곳에서만 한다.
+// 여기 있던 사본은 지웠다 — 사본은 반드시 갈라진다.
+
+/** 품삯 일수 표기 — 1 미만은 자리를 더 보여야 0 으로 보이지 않는다. */
+function formatTtl(ttl: number): string {
+  if (!Number.isFinite(ttl)) return '—';
+  if (ttl === 0) return '0';
+  if (Math.abs(ttl) < 0.0001) return '<0.0001';
+  const digits = Math.abs(ttl) < 1 ? 4 : 2;
+  return ttl.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }

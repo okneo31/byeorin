@@ -17,7 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Activity } from '@byeorin/wallet-sdk';
 // 토큰 메타는 core 서브패스에서 가져온다 — 루트 배럴은 이 심볼을 export 하지 않고,
 // core 는 이미 정적으로 쓰고 있어 popup 번들이 늘지 않는다.
-import { readPortableToken } from '@byeorin/wallet-sdk/core';
+import { readPortableToken, validateMemo } from '@byeorin/wallet-sdk/core';
 import type { ChainAdapter, PortableTokenBalance } from '@byeorin/wallet-sdk/core';
 import type { EvmAdapter } from '@byeorin/wallet-sdk/evm';
 import { ShellError } from '@byeorin/shell-core';
@@ -151,6 +151,24 @@ export function absoluteTime(unixSec: number): string | null {
 /** 활성 주소 기준 방향 판정. 대소문자 무시 (체크섬 주소 대비). */
 export function isOutgoing(activity: Activity, self: string): boolean {
   return activity.from.toLowerCase() === self.toLowerCase();
+}
+
+/**
+ * 활동 항목의 메모. 메모가 아니면 null — 화면은 줄 자체를 안 그린다.
+ *
+ * **왜 캐스팅을 하나.** 메모는 TTL 인덱서(`/api/indexer/address/:addr/txs`) 응답의
+ * `memo` 필드에서 온다. SDK 의 `Activity` 에 이 필드가 실리는 시점과 이 화면이
+ * 붙는 시점이 달라, 필드가 아직 없어도 컴파일이 깨지지 않게 unknown 경유로 읽는다.
+ * 필드가 없으면 undefined → null 이라 화면은 예전과 똑같다.
+ *
+ * **왜 다시 검사하나.** 인덱서가 이미 판정한 값이지만 지갑은 서명 주체다. 남이
+ * 준 문자열을 그대로 화면에 올리지 않는다 — SDK 의 `validateMemo`(서버
+ * wallet-api/memo.js 와 같은 규칙)로 제어문자·깨진 글자·길이 초과를 한 번 더 거른다.
+ */
+export function activityMemo(it: Activity): string | null {
+  const raw = (it as unknown as { memo?: unknown }).memo;
+  if (typeof raw !== 'string' || raw.length === 0) return null;
+  return validateMemo(raw).ok ? raw : null;
 }
 
 /** 상태 → i18n 키. 카탈로그의 기존 activity.status_* 를 그대로 쓴다. */
@@ -361,6 +379,8 @@ export function ActivityPane({
                 : shortenHex(it.token)
               : nativeSymbol;
             const url = explorerTxUrl(chainKey, it.hash);
+            // 메모는 TTL 인덱서만 판정해 준다 — 다른 EVM 체인에는 그 필드가 없다.
+            const memo = chainKey === TTL_CHAIN_KEY ? activityMemo(it) : null;
             return (
               // RPC fallback 경로에서는 같은 hash 가 native/토큰 양쪽으로 잡힐 수
               // 있어 index 까지 키에 넣는다.
@@ -394,6 +414,18 @@ export function ActivityPane({
                     )}
                   </span>
                 </div>
+
+                {/* 메모 — 체인에서 온 임의 문자열이다. React 텍스트 노드로만
+                    렌더한다(dangerouslySetInnerHTML 금지). 링크로 만들지도
+                    않는다: 누구든 tx 하나로 피싱 URL 을 써 넣을 수 있고, 지갑이
+                    그린 클릭 가능한 링크는 사용자에게 "내 지갑이 보여준 것" 으로
+                    읽힌다. 텍스트는 그대로 보이고 복사도 된다. */}
+                {memo !== null && (
+                  <div className="activity-row__line activity-row__memo">
+                    <span className="muted small">{t('activity.memo_label')}</span>
+                    <span className="small activity-row__memo-text">{memo}</span>
+                  </div>
+                )}
 
                 <div className="activity-row__line activity-row__line--foot">
                   <span className="muted small" title={it.token ?? undefined}>

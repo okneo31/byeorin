@@ -100,13 +100,48 @@ export function crossRate(from: TokenRate | null, to: TokenRate | null): number 
 /**
  * base unit(bigint) → 사람이 읽는 수. decimals 가 큰 토큰에서 Number 정밀도가
  * 깨지지 않도록 정수부와 소수부를 나눠 만든다.
+ *
+ * **부동소수로 내려오는 유일한 지점이다.** rates/value.ts 와 셸 4 종이 이 함수를
+ * 공유한다 — 사본을 만들면 오차 한계를 한 곳에서 따질 수 없게 된다.
  */
-function baseUnitsToNumber(v: bigint, decimals: number): number {
+export function baseUnitsToNumber(v: bigint, decimals: number): number {
   if (decimals <= 0) return Number(v);
   const d = 10n ** BigInt(decimals);
   const whole = v / d;
   const frac = v % d;
   return Number(whole) + Number(frac) / Number(d);
+}
+
+/**
+ * **스테이블코인** 잔액(base unit) → TTL.
+ *
+ * tokenAmountToTtl 을 쓰면 안 된다. 그쪽은 rate.decimals 를 강제로 쓰는데, 그건
+ * 토큰 주소 == rate 주소(= t{ISO} 통화토큰)일 때만 옳다. 스테이블은 다른
+ * 컨트랙트다 — USDT decimals 6, tUSD decimals 18. 그대로 쓰면 100 USDT 가
+ * 1e8/1e18/246.648 ≈ 4.05e-13 TTL 로 찍힌다(정답 0.405436 TTL). 10^12 배 오차다.
+ *
+ * 그래서 수량은 **그 토큰 자신의 decimals** 로 풀고, rate 에서는 perTtl 만 쓴다.
+ *
+ * decimals 는 반드시 내장 목록의 값을 넘겨라. 익스플로러가 준 값을 넘기면
+ * 익스플로러가 장악됐을 때 표시 금액이 임의 배율로 부풀려진다
+ * (authoritativeDecimals 와 같은 이유).
+ *
+ * rate 가 null(=그 ISO 가 스냅샷에 없음)이면 null 을 돌려준다. 0 이 아니다 —
+ * 0 은 "가치 없음" 으로 읽힌다.
+ *
+ * 부동소수로 내려오는 지점은 baseUnitsToNumber 한 곳뿐이다. bigint 잔액을
+ * 정수부/소수부로 갈라 Number 로 만들고 그 다음에야 나눗셈을 한다 — 먼저
+ * Number(bigint) 로 통째 변환하면 decimals 18 토큰에서 2^53 을 넘겨 잔액
+ * 상위 자릿수가 소리 없이 뭉개진다.
+ */
+export function stableAmountToTtl(
+  baseUnits: bigint,
+  tokenDecimals: number,
+  rate: TokenRate | null,
+): number | null {
+  if (!rate || !(rate.perTtl > 0)) return null;
+  if (!Number.isInteger(tokenDecimals) || tokenDecimals < 0 || tokenDecimals > 36) return null;
+  return baseUnitsToNumber(baseUnits, tokenDecimals) / rate.perTtl;
 }
 
 /** 스냅샷 원본 — 산식·출처·입력값을 화면에 노출할 때 쓴다. */

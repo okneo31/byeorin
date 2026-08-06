@@ -9,7 +9,7 @@
 // Cosmos denom)로도 같은 규칙이 도는지 함께 고정한다.
 
 import { describe, expect, it } from 'vitest';
-import { unresolvedRates } from '@byeorin/wallet-sdk/evm';
+import { rateByIso, unresolvedRates } from '@byeorin/wallet-sdk/evm';
 import {
   EMPTY_HIDDEN,
   HIDDEN_TOKENS_KEY,
@@ -30,6 +30,7 @@ import {
   withHidden,
   type HiddenMap,
   type HiddenTokensBackend,
+  type BuildTokenRowsOptions,
   type MetaResolver,
   type PortableTokenBalance,
   type TokenMeta,
@@ -112,6 +113,15 @@ const META: Record<string, TokenMeta> = {
 
 const resolve: MetaResolver = (_id, symbol) =>
   META[symbol] ?? { rate: null, iso: null, country: null, unresolvedReason: null };
+
+/**
+ * 이 테스트의 공통 옵션.
+ *
+ * 시세 표는 **null 을 명시**한다 — 이 파일이 검증하는 것은 가리기·검색·정렬
+ * 규칙이지 시세가 아니고, 시세를 넣으면 Binance 표에 따라 테스트가 흔들린다.
+ * 옵셔널이 아니라서 빠뜨릴 수 없다(v0.5.22 실사고를 타입으로 막은 자리다).
+ */
+const OPTS: BuildTokenRowsOptions = { prices: null, resolveMeta: resolve };
 
 const TOKENS: PortableTokenBalance[] = [
   token('tUSD', A_USD, 0n),
@@ -200,7 +210,7 @@ describe('deny-list 규칙', () => {
       [...TOKENS, token('tJPY', '0xDDdd000000000000000000000000000000000004', 0n)],
       map,
       CHAIN,
-      resolve,
+      OPTS,
     );
     const jpy = rows.find((r) => r.symbol === 'tJPY');
     expect(jpy?.hidden).toBe(false);
@@ -257,12 +267,36 @@ describe('loadHidden / saveHidden', () => {
 // ────────── 행 구성 ──────────
 
 describe('buildTokenRows', () => {
-  const rows = buildTokenRows(TOKENS, EMPTY_HIDDEN, CHAIN, resolve);
+  const rows = buildTokenRows(TOKENS, EMPTY_HIDDEN, CHAIN, OPTS);
 
-  it('환율이 있으면 TTL 환산값을 낸다', () => {
-    const krw = rows.find((r) => r.symbol === 'tKRW')!;
-    // 3,000,000 tKRW ÷ 150,000 (1 TTL 당) = 20 TTL
-    expect(krw.ttl).toBeCloseTo(20, 9);
+  // 값은 **스냅샷에서만** 온다. 가짜 meta(resolve)로는 값을 만들 수 없다 —
+  // 화면 표시용 국가·ISO 와 값 산식이 서로 다른 출처를 보기 때문이다. 그래서
+  // 아래 두 테스트는 스냅샷의 실제 주소를 쓰고, 기대값도 스냅샷의 perTtl 에서
+  // 계산한다. 환율 숫자를 테스트에 적으면 재앵커되는 순간 테스트가 거짓이 된다.
+  const KRW = rateByIso('KRW');
+  const USD = rateByIso('USD');
+
+  it('환율이 있으면 TTL 환산값을 낸다 — 기대값도 스냅샷에서 계산한다', () => {
+    if (KRW === null) return; // 스냅샷에 없으면 이 주장 자체가 성립하지 않는다
+    const amount = 3_000_000n * 10n ** BigInt(KRW.decimals);
+    const [row] = buildTokenRows(
+      [token('tKRW', KRW.address, amount, KRW.decimals)],
+      EMPTY_HIDDEN,
+      CHAIN,
+      { prices: null },
+    );
+    expect(row!.ttl).toBeCloseTo(3_000_000 / KRW.perTtl, 6);
+  });
+
+  it('스냅샷 값이 바뀌면 결과가 따라 바뀐다 — 상수로 박혀 있지 않다', () => {
+    if (KRW === null || USD === null) return;
+    const one = 10n ** BigInt(KRW.decimals);
+    const [k] = buildTokenRows([token('tKRW', KRW.address, one, KRW.decimals)],
+      EMPTY_HIDDEN, CHAIN, { prices: null });
+    const [u] = buildTokenRows([token('tUSD', USD.address, 10n ** BigInt(USD.decimals), USD.decimals)],
+      EMPTY_HIDDEN, CHAIN, { prices: null });
+    // 두 값의 비는 두 perTtl 의 역비다. 어느 쪽도 코드에 적혀 있지 않다.
+    expect(k!.ttl! / u!.ttl!).toBeCloseTo(USD.perTtl / KRW.perTtl, 6);
   });
 
   it('환율이 없으면 ttl 은 null — 0 이나 추정치로 채우지 않는다', () => {
@@ -274,8 +308,14 @@ describe('buildTokenRows', () => {
   });
 
   it('잔액 0 도 ttl 은 0 (환율이 있으면) — null 과 구분된다', () => {
-    const usd = rows.find((r) => r.symbol === 'tUSD')!;
-    expect(usd.ttl).toBe(0);
+    if (USD === null) return;
+    const [row] = buildTokenRows(
+      [token('tUSD', USD.address, 0n, USD.decimals)],
+      EMPTY_HIDDEN,
+      CHAIN,
+      { prices: null },
+    );
+    expect(row!.ttl).toBe(0);
   });
 
   it('key 는 소문자 식별자 — id 는 원본 표기 그대로 남는다', () => {
@@ -291,7 +331,7 @@ describe('buildTokenRows', () => {
       ],
       EMPTY_HIDDEN,
       CHAIN,
-      resolve,
+      OPTS,
     );
     expect(withSource.find((r) => r.symbol === 'tKRW')?.source).toBe('ttlscan');
     expect(withSource.find((r) => r.symbol === 'tUSD')?.source).toBeNull();
@@ -311,6 +351,9 @@ describe('비-EVM 식별자', () => {
     [token('USDC', MINT, 1_000_000n, 6, 'solana-rpc'), token('ATOM', DENOM, 5n, 6)],
     EMPTY_HIDDEN,
     'solana:mainnet',
+    // 시세 표를 **명시적으로** null 로 넘긴다. 옵셔널이었다면 배선을 빠뜨려도
+    // 타입이 통과하고 화면만 비었을 것이다(v0.5.22 실사고).
+    { prices: null },
   );
 
   it('환율이 없으므로 가치 자리를 비운다 — 0 이나 추정치로 채우지 않는다', () => {
@@ -384,7 +427,7 @@ describe('defaultMetaResolver', () => {
 // ────────── 검색 ──────────
 
 describe('matchesQuery', () => {
-  const rows = buildTokenRows(TOKENS, EMPTY_HIDDEN, CHAIN, resolve);
+  const rows = buildTokenRows(TOKENS, EMPTY_HIDDEN, CHAIN, OPTS);
   const krw = rows.find((r) => r.symbol === 'tKRW')!;
   const twd = rows.find((r) => r.symbol === 'tTWD')!;
 
@@ -431,7 +474,7 @@ describe('sortTokenRows', () => {
       ],
       EMPTY_HIDDEN,
       CHAIN,
-      resolve,
+      OPTS,
     );
     expect(sortTokenRows(rows).map((r) => r.symbol)).toEqual([
       'tKRW',
@@ -442,7 +485,7 @@ describe('sortTokenRows', () => {
   });
 
   it('원본 배열을 변형하지 않는다', () => {
-    const rows = buildTokenRows(TOKENS, EMPTY_HIDDEN, CHAIN, resolve);
+    const rows = buildTokenRows(TOKENS, EMPTY_HIDDEN, CHAIN, OPTS);
     const before = rows.map((r) => r.symbol);
     sortTokenRows(rows);
     expect(rows.map((r) => r.symbol)).toEqual(before);
@@ -453,7 +496,7 @@ describe('sortTokenRows', () => {
 
 describe('selectTokenView', () => {
   const hidden = withHidden(EMPTY_HIDDEN, CHAIN, A_USD, true);
-  const rows = buildTokenRows(TOKENS, hidden, CHAIN, resolve);
+  const rows = buildTokenRows(TOKENS, hidden, CHAIN, OPTS);
 
   it('기본 목록에서 가린 토큰이 빠진다', () => {
     const view = selectTokenView(rows, { query: '', showHidden: false });

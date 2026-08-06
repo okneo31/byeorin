@@ -17,7 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Activity } from '@byeorin/wallet-sdk';
 // core 서브패스는 App.tsx 가 이미 정적으로 쓴다 — 여기서 dynamic import 를 해도
 // 청크가 갈리지 않으므로 정적 import 로 둔다. (루트 배럴만 dynamic 유지)
-import { readPortableToken } from '@byeorin/wallet-sdk/core';
+import { readPortableToken, validateMemo } from '@byeorin/wallet-sdk/core';
 import type { ChainAdapter, PortableTokenBalance } from '@byeorin/wallet-sdk/core';
 import type { EvmAdapter } from '@byeorin/wallet-sdk/evm';
 import { ShellError } from '@byeorin/shell-core';
@@ -62,6 +62,22 @@ export function explorerTxUrl(chainKey: string, hash: string): string | null {
   if (chainKey !== TTL_CHAIN_KEY) return null;
   if (!hash || hash === '0x') return null;
   return `${TTL_EXPLORER}/tx/${hash}`;
+}
+
+/**
+ * 활동 한 건의 메모. 없으면 null.
+ *
+ * 인덱서가 이미 판정을 통과시킨 값이지만 **지갑은 남이 준 문자열을 그대로 믿지
+ * 않는다** — SDK 의 같은 규칙(validateMemo)으로 한 번 더 거른다. 제어문자·깨진
+ * 글자가 목록에 오르지 않는다.
+ *
+ * `Activity` 에 memo 필드가 아직 없어도(SDK 쪽 작업 순서상) 컴파일되도록 구조적
+ * 으로 읽는다. 필드가 없으면 항상 null 이라 화면은 예전과 같다.
+ */
+function readMemo(it: Activity): string | null {
+  const raw = (it as Partial<{ memo: unknown }>).memo;
+  if (typeof raw !== 'string') return null;
+  return validateMemo(raw).ok ? raw : null;
 }
 
 /** 주소/해시 축약. App.tsx 의 shortenAddress 와 같은 모양(6…4). */
@@ -392,6 +408,17 @@ export function ActivityPane({
                     )}
                   </span>
                 </div>
+
+                {/* 메모 — TTL 인덱서가 판정해 준 텍스트다(다른 체인 경로는 이
+                 * 필드를 채우지 않으므로 자동으로 안 그려진다). 체인에서 온 임의
+                 * 문자열이라 React 텍스트 노드로만 렌더한다 —
+                 * dangerouslySetInnerHTML 금지, 링크 변환도 하지 않는다. */}
+                {readMemo(it) !== null && (
+                  <div className="activity-row__line activity-row__line--memo">
+                    <span className="muted small">{t('activity.memo_label')}</span>
+                    <span className="activity-row__memo small">{readMemo(it)}</span>
+                  </div>
+                )}
 
                 <div className="activity-row__line activity-row__line--foot">
                   <span className="muted small" title={it.token ?? undefined}>
