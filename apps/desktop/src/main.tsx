@@ -1,3 +1,7 @@
+// 반드시 첫 줄이어야 한다 — 뒤따르는 멀티체인 import 가 평가되기 전에
+// globalThis.Buffer 를 채운다. 이유는 그 파일의 주석에 있다.
+import './buffer-polyfill.js';
+
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import {

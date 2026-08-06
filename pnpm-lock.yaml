@@ -124,6 +124,9 @@ importers:
       '@tauri-apps/api':
         specifier: ^2.1.1
         version: 2.11.0
+      buffer:
+        specifier: ^6.0.3
+        version: 6.0.3
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -277,6 +280,9 @@ importers:
       '@byeorin/wallet-sdk':
         specifier: workspace:*
         version: link:../../packages/wallet-sdk
+      buffer:
+        specifier: ^6.0.3
+        version: 6.0.3
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
