@@ -1107,6 +1107,28 @@ input.verify-row__input {
   -webkit-user-select: text;
 }
 
+/* 메모 안의 링크. 목적지와 화면 글자가 같은 값이라 잘라 쓰지 않는다.
+   색은 같은 행의 탐색기 링크(.activity-row__link)가 쓰는 토큰 그대로다. */
+.activity-row__memo-link {
+  color: var(--popup-yellow-soft);
+  text-decoration: underline;
+  overflow-wrap: anywhere; /* 2048B 짜리 URL 이 가로 스크롤을 만들지 않게 */
+  /* 링크 글자도 골라서 복사할 수 있어야 한다 — 전역 user-select:none 해제. */
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* 링크가 있는 메모는 줄접기를 끈다 — 접히면 URL 끝이 "…" 로 잘려 화면 글자가
+   목적지의 앞부분만 보이게 되고, 그게 곧 링크 위장이다. 대신 높이만 묶고
+   스크롤로 전문을 볼 수 있게 한다. */
+.activity-row__memo--has-link {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  max-height: 12em;
+  overflow-y: auto;
+}
+
 .activity-row__dir {
   font-size: 12px;
   font-weight: 700;

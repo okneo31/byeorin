@@ -13,11 +13,12 @@
 // cosmos/ton/xrp/solana 어댑터를 전부 끌고 온다. 그래서 App.tsx 가 multichain 을
 // 다루는 방식과 동일하게 **dynamic import** 로 가져와 popup 초기 번들을 지킨다.
 
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import type { Activity } from '@byeorin/wallet-sdk';
 // 토큰 메타는 core 서브패스에서 가져온다 — 루트 배럴은 이 심볼을 export 하지 않고,
 // core 는 이미 정적으로 쓰고 있어 popup 번들이 늘지 않는다.
-import { readPortableToken, validateMemo } from '@byeorin/wallet-sdk/core';
+import { readPortableToken, splitMemoLinks, validateMemo } from '@byeorin/wallet-sdk/core';
 import type { ChainAdapter, PortableTokenBalance } from '@byeorin/wallet-sdk/core';
 import type { EvmAdapter } from '@byeorin/wallet-sdk/evm';
 import { ShellError } from '@byeorin/shell-core';
@@ -169,6 +170,95 @@ export function activityMemo(it: Activity): string | null {
   const raw = (it as unknown as { memo?: unknown }).memo;
   if (typeof raw !== 'string' || raw.length === 0) return null;
   return validateMemo(raw).ok ? raw : null;
+}
+
+/** 메모 안 URL 의 <a> 클래스. 셸마다 이 상수만 다르다. */
+const MEMO_LINK_CLASS = 'activity-row__memo-link';
+
+// 이 셸의 행은 클릭 대상이 아니라 지금은 아무 효과도 없다. 4종이 같은
+// 렌더 계약을 쓰므로 형태만 맞춰 둔다 — 나중에 행을 눌러 펼치게 바꿔도
+// 링크 클릭이 그리로 새지 않는다.
+function handleMemoLinkClick(e: MouseEvent<HTMLAnchorElement>): void {
+  e.stopPropagation();
+}
+
+/**
+ * SDK 정규식은 /https?:\/\/[^\s<]+/g 라 공백 전까지 전부 먹는다 —
+ * "확인 https://a.com." 이면 마침표까지 링크가 된다. 꼬리 문장부호를 링크에서
+ * 떼어내 텍스트로 돌려준다.
+ *
+ * **잘라낸 뒤의 값을 href 와 화면 텍스트 양쪽에 똑같이 쓴다.** 둘이 달라지는
+ * 순간 링크 위장이 생긴다 — 이 함수의 반환값 link 는 그 하나뿐인 출처다.
+ */
+const MEMO_TAIL_PUNCT = '.,;:!?…\'"’”»';
+function trimMemoUrlTail(url: string): { link: string; tail: string } {
+  let end = url.length;
+  while (end > 0) {
+    const ch = url.charAt(end - 1);
+    if (ch === ')' || ch === ']' || ch === '}') {
+      // 괄호는 URL 안에 정상적으로 들어간다(위키백과 주소). 여는 짝이 URL 안에
+      // 있으면 URL 의 일부로 남기고, 짝이 없을 때만(= 감싼 괄호) 떼어낸다.
+      const open = ch === ')' ? '(' : ch === ']' ? '[' : '{';
+      const body = url.slice(0, end);
+      const opens = body.split(open).length - 1;
+      const closes = body.split(ch).length - 1;
+      if (closes <= opens) break;
+      end -= 1;
+      continue;
+    }
+    if (MEMO_TAIL_PUNCT.includes(ch)) {
+      end -= 1;
+      continue;
+    }
+    break;
+  }
+  return { link: url.slice(0, end), tail: url.slice(end) };
+}
+
+/**
+ * 메모 → React 노드 배열. **HTML 문자열을 만들지 않는다** —
+ * dangerouslySetInnerHTML / innerHTML 금지. 텍스트는 React 텍스트 노드,
+ * 링크만 <a> 다. 이스케이프는 React 가 한다.
+ *
+ * 링크가 0개면 조각이 text 하나뿐이라 결과 DOM 은 예전과 완전히 같다(회귀 0).
+ * 잘림(말줄임) 은 절대 하지 않는다 — 화면 텍스트가 목적지의 앞부분만 보이면
+ * 그 자체가 링크 위장이다.
+ */
+export function renderMemo(text: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  splitMemoLinks(text).forEach((seg, i) => {
+    if (seg.kind === 'text') {
+      out.push(<Fragment key={`t${i}`}>{seg.value}</Fragment>);
+      return;
+    }
+    const { link, tail } = trimMemoUrlTail(seg.value);
+    // 꼬리를 떼고 나니 http(s)://호스트 꼴이 아니면 링크로 만들지 않는다.
+    if (!/^https?:\/\/[^/\s]/.test(link)) {
+      out.push(<Fragment key={`t${i}`}>{seg.value}</Fragment>);
+      return;
+    }
+    out.push(
+      <a
+        key={`l${i}`}
+        className={MEMO_LINK_CLASS}
+        href={link}
+        target="_blank"
+        rel="noreferrer noopener"
+        onClick={handleMemoLinkClick}
+      >
+        {link}
+      </a>,
+    );
+    if (tail.length > 0) out.push(<Fragment key={`p${i}`}>{tail}</Fragment>);
+  });
+  return out;
+}
+
+/** 메모에 링크가 하나라도 있나. 있으면 컨테이너의 줄접기(-webkit-line-clamp)를 끈다. */
+export function memoHasLink(text: string): boolean {
+  return splitMemoLinks(text).some(
+    (s) => s.kind === 'link' && /^https?:\/\/[^/\s]/.test(trimMemoUrlTail(s.value).link),
+  );
 }
 
 /** 상태 → i18n 키. 카탈로그의 기존 activity.status_* 를 그대로 쓴다. */
@@ -415,15 +505,21 @@ export function ActivityPane({
                   </span>
                 </div>
 
-                {/* 메모 — 체인에서 온 임의 문자열이다. React 텍스트 노드로만
-                    렌더한다(dangerouslySetInnerHTML 금지). 링크로 만들지도
-                    않는다: 누구든 tx 하나로 피싱 URL 을 써 넣을 수 있고, 지갑이
-                    그린 클릭 가능한 링크는 사용자에게 "내 지갑이 보여준 것" 으로
-                    읽힌다. 텍스트는 그대로 보이고 복사도 된다. */}
+                {/* 메모 — 체인에서 온 임의 문자열이다. React 노드로만 렌더한다
+                    (dangerouslySetInnerHTML/innerHTML 금지). http(s) URL 만
+                    <a> 로 감싼다: 정규식이 javascript:·data: 를 애초에 안 잡고,
+                    href 와 화면 글자가 같은 값이라 링크 위장이 생기지 않는다.
+                    말줄임도 하지 않는다 — 앞부분만 보이면 그게 곧 위장이다. */}
                 {memo !== null && (
                   <div className="activity-row__line activity-row__memo">
                     <span className="muted small">{t('activity.memo_label')}</span>
-                    <span className="small activity-row__memo-text">{memo}</span>
+                    <span
+                      className={`small activity-row__memo-text${
+                        memoHasLink(memo) ? ' activity-row__memo-text--has-link' : ''
+                      }`}
+                    >
+                      {renderMemo(memo)}
+                    </span>
                   </div>
                 )}
 

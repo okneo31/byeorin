@@ -95,6 +95,9 @@ export function SendPane({
   // 메모 개념이 없는 나머지 체인에서는 입력칸 자체를 그리지 않는다.
   const [memo, setMemo] = useState('');
   const trimmedMemo = memo.trim();
+  // 수신자 조회 effect 의 의존값. 길이를 그대로 쓰면 한 글자마다 effect 가 다시
+  // 돌아 디바운스가 늘 리셋된다 — "비었나" 한 비트만 본다(web Send.tsx:104 과 동일).
+  const memoEmpty = trimmedMemo.length === 0;
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   // "최대" 로 채웠고 아직 사용자가 수정하지 않았다는 표시 — native 는 가스를
   // 뺀 값이라 왜 잔액보다 작은지 화면이 설명해야 한다.
@@ -218,8 +221,10 @@ export function SendPane({
     (adapter as Partial<{ chain: { rpcUrls?: { default?: { http?: readonly string[] } } } }>)
       .chain?.rpcUrls?.default?.http?.[0] ?? null;
 
+  // 메모칸에 글자가 있을 때만 부른다 — 메모를 안 쓰는 사용자에게는 RPC 왕복이 0
+  // 이다. 다른 셸 3종도 같은 조건이다(web Send.tsx:113 memoEmpty).
   useEffect(() => {
-    if (!memoTtl || !validAddress || evmRpcUrl === null) {
+    if (!memoTtl || memoEmpty || !validAddress || evmRpcUrl === null) {
       setRecipientKind('unknown');
       return;
     }
@@ -256,7 +261,7 @@ export function SendPane({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [memoTtl, validAddress, trimmedTo, evmRpcUrl]);
+  }, [memoTtl, memoEmpty, validAddress, trimmedTo, evmRpcUrl]);
 
   // 실제로 메모를 실을 수 있는가. TTL 은 수신자가 EOA 로 확인된 경우만.
   const memoAttachable = memoNativeChain || (memoTtl && recipientKind === 'eoa');
@@ -611,7 +616,13 @@ export function SendPane({
           </label>
           {/* TTL 은 2048 **바이트** 다 — 글자 수가 아니다(한글 3바이트/자). 그래서
            * maxLength(글자 수 제한)를 걸지 않고 SDK 판정으로 알린다. cosmos/ton 은
-           * 예전 그대로 한 줄 input · 256 글자 제한을 유지한다. */}
+           * 예전 그대로 한 줄 input · 256 글자 제한을 유지한다.
+           *
+           * 수신자가 컨트랙트여도 입력칸을 disable 하지 않는다 — 막으면 메모를
+           * 지워서 빠져나올 수 없다(주소를 지워야 풀린다). 막아야 할 것은
+           * "컨트랙트에 메모를 실어 보내는 것"이고 그건 memoBlocking →
+           * canProceed 가 전송 단계에서 막는다. 사유 문구
+           * (send.memo_contract_recipient)는 아래에 계속 보인다. */}
           {memoTtl ? (
             <textarea
               id="send-memo"
@@ -621,7 +632,7 @@ export function SendPane({
               onChange={(e) => setMemo(e.target.value)}
               placeholder={t('send.memo_placeholder')}
               spellCheck={false}
-              disabled={locked || recipientKind === 'contract'}
+              disabled={locked}
             />
           ) : (
             <input

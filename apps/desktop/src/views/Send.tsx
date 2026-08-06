@@ -46,13 +46,11 @@ const TTL_RPC_URL = TTL_CHAIN.rpcUrls.default.http[0] ?? 'https://rpc.ttl1.top';
 
 type RecipientKind = 'eoa' | 'contract';
 
-// 주소별 결과 캐시 — 같은 주소를 다시 확인하려고 RPC 를 또 부르지 않는다.
-const recipientKindCache = new Map<string, RecipientKind>();
-
+// 판정 결과를 캐시하지 않는다 — 한 번 EOA 로 본 주소도 나중에 CREATE2 로
+// 컨트랙트가 배포될 수 있다. 오래된 'eoa' 를 믿으면 메모 바이트가 함수 호출로
+// 해석되는 tx 를 그대로 내보낸다. 자금 경로라 성능보다 정확성이다.
+// 왕복 절약은 아래 useEffect 의 600ms 디바운스가 맡는다(다른 셸 3종과 같다).
 async function fetchRecipientKind(address: string): Promise<RecipientKind> {
-  const key = address.toLowerCase();
-  const cached = recipientKindCache.get(key);
-  if (cached) return cached;
   const res = await fetch(TTL_RPC_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -68,7 +66,6 @@ async function fetchRecipientKind(address: string): Promise<RecipientKind> {
   if (json.error) throw new Error(json.error.message ?? 'eth_getCode 오류');
   const code = typeof json.result === 'string' ? json.result : '0x';
   const kind: RecipientKind = code === '0x' || code === '' ? 'eoa' : 'contract';
-  recipientKindCache.set(key, kind);
   return kind;
 }
 
@@ -151,11 +148,6 @@ export function Send({ unlocked, onGoWallet }: Props) {
   useEffect(() => {
     if (!memoWanted || !toLooksValid) {
       setRecipientKind('idle');
-      return;
-    }
-    const cached = recipientKindCache.get(trimmedTo.toLowerCase());
-    if (cached) {
-      setRecipientKind(cached);
       return;
     }
     let cancelled = false;
@@ -274,7 +266,7 @@ export function Send({ unlocked, onGoWallet }: Props) {
           return;
         }
         // 디바운스 중이거나 아직 못 본 주소일 수 있으니 여기서 한 번 더 확정한다.
-        // 캐시에 있으면 RPC 왕복은 없다.
+        // 캐시를 두지 않으므로 이 확인은 항상 체인의 현재 상태를 읽는다.
         let kind: RecipientKind;
         try {
           kind = await fetchRecipientKind(trimmedTo);

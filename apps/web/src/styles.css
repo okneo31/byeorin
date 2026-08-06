@@ -678,7 +678,8 @@ a {
 }
 /* 활동 행의 메모. 2048 바이트가 목록 하나를 다 먹지 않게 3줄에서 접는다. */
 .web-activity__memo {
-  margin-top: 0.25rem;
+  /* 행 button 밖(li 의 형제)으로 나왔으므로 행과 같은 좌우 여백을 스스로 준다. */
+  padding: 0 0.25rem 0.75rem;
   font-size: 13px;
   color: var(--web-muted);
   white-space: pre-wrap;
@@ -694,6 +695,22 @@ a {
 }
 .web-activity__memo-text {
   color: inherit;
+}
+/* 메모 안의 링크. 목적지와 화면 글자가 같은 값이라 잘라 쓰지 않는다. */
+.web-activity__memo-link {
+  color: var(--nd-red);
+  text-decoration: underline;
+  overflow-wrap: anywhere; /* 2048B 짜리 URL 이 가로 스크롤을 만들지 않게 */
+}
+/* 링크가 있는 메모는 줄접기를 끈다 — 접히면 URL 끝이 "…" 로 잘려 화면 글자가
+   목적지의 앞부분만 보이게 되고, 그게 곧 링크 위장이다. 대신 높이만 묶고
+   스크롤로 전문을 볼 수 있게 한다. */
+.web-activity__memo--has-link {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  max-height: 12em;
+  overflow-y: auto;
 }
 .web-activity__amount {
   text-align: right;

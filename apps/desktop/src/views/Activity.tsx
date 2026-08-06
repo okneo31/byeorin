@@ -5,8 +5,10 @@
 // 외부 브라우저로 explorer URL 을 열도록 단순히 <a target="_blank"> 사용.
 
 import { Fragment, useCallback, useEffect, useState } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import {
   ActivityLog,
+  splitMemoLinks,
   TokenRegistry,
   TTL_CHAIN,
   validateMemo,
@@ -70,6 +72,97 @@ function readMemo(it: ActivityT): string | null {
   const raw = (it as { memo?: unknown }).memo;
   if (typeof raw !== 'string') return null;
   return validateMemo(raw).ok ? raw : null;
+}
+
+/** 메모 안 URL 의 <a> 클래스. 셸마다 이 상수만 다르다. */
+const MEMO_LINK_CLASS = 'nd-activity-memo-link';
+
+// 이 파일의 탐색기 링크(아래 <td> 안 <a target="_blank">)와 **같은 방식**을 쓴다.
+// 그쪽은 이미 출시돼 동작하는 경로다. 메모 링크만 preventDefault + window.open 으로
+// 따로 가면, 그 경로가 막혔을 때 두 칸 옆 탐색기 링크는 열리는데 메모 링크만
+// 무반응이 된다 — 한 화면에 서로 다른 동작이 생긴다.
+// 행 토글로 새지 않게 전파만 막는다. 나머지 3종도 이 한 줄뿐이다.
+function handleMemoLinkClick(e: MouseEvent<HTMLAnchorElement>): void {
+  e.stopPropagation();
+}
+
+/**
+ * SDK 정규식은 /https?:\/\/[^\s<]+/g 라 공백 전까지 전부 먹는다 —
+ * "확인 https://a.com." 이면 마침표까지 링크가 된다. 꼬리 문장부호를 링크에서
+ * 떼어내 텍스트로 돌려준다.
+ *
+ * **잘라낸 뒤의 값을 href 와 화면 텍스트 양쪽에 똑같이 쓴다.** 둘이 달라지는
+ * 순간 링크 위장이 생긴다 — 이 함수의 반환값 link 는 그 하나뿐인 출처다.
+ */
+const MEMO_TAIL_PUNCT = '.,;:!?…\'"’”»';
+function trimMemoUrlTail(url: string): { link: string; tail: string } {
+  let end = url.length;
+  while (end > 0) {
+    const ch = url.charAt(end - 1);
+    if (ch === ')' || ch === ']' || ch === '}') {
+      // 괄호는 URL 안에 정상적으로 들어간다(위키백과 주소). 여는 짝이 URL 안에
+      // 있으면 URL 의 일부로 남기고, 짝이 없을 때만(= 감싼 괄호) 떼어낸다.
+      const open = ch === ')' ? '(' : ch === ']' ? '[' : '{';
+      const body = url.slice(0, end);
+      const opens = body.split(open).length - 1;
+      const closes = body.split(ch).length - 1;
+      if (closes <= opens) break;
+      end -= 1;
+      continue;
+    }
+    if (MEMO_TAIL_PUNCT.includes(ch)) {
+      end -= 1;
+      continue;
+    }
+    break;
+  }
+  return { link: url.slice(0, end), tail: url.slice(end) };
+}
+
+/**
+ * 메모 → React 노드 배열. **HTML 문자열을 만들지 않는다** —
+ * dangerouslySetInnerHTML / innerHTML 금지. 텍스트는 React 텍스트 노드,
+ * 링크만 <a> 다. 이스케이프는 React 가 한다.
+ *
+ * 링크가 0개면 조각이 text 하나뿐이라 결과 DOM 은 예전과 완전히 같다(회귀 0).
+ * 잘림(말줄임) 은 절대 하지 않는다 — 화면 텍스트가 목적지의 앞부분만 보이면
+ * 그 자체가 링크 위장이다.
+ */
+function renderMemo(text: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  splitMemoLinks(text).forEach((seg, i) => {
+    if (seg.kind === 'text') {
+      out.push(<Fragment key={`t${i}`}>{seg.value}</Fragment>);
+      return;
+    }
+    const { link, tail } = trimMemoUrlTail(seg.value);
+    // 꼬리를 떼고 나니 http(s)://호스트 꼴이 아니면 링크로 만들지 않는다.
+    if (!/^https?:\/\/[^/\s]/.test(link)) {
+      out.push(<Fragment key={`t${i}`}>{seg.value}</Fragment>);
+      return;
+    }
+    out.push(
+      <a
+        key={`l${i}`}
+        className={MEMO_LINK_CLASS}
+        href={link}
+        target="_blank"
+        rel="noreferrer noopener"
+        onClick={handleMemoLinkClick}
+      >
+        {link}
+      </a>,
+    );
+    if (tail.length > 0) out.push(<Fragment key={`p${i}`}>{tail}</Fragment>);
+  });
+  return out;
+}
+
+/** 메모에 링크가 하나라도 있나. 있으면 컨테이너의 줄접기(-webkit-line-clamp)를 끈다. */
+function memoHasLink(text: string): boolean {
+  return splitMemoLinks(text).some(
+    (s) => s.kind === 'link' && /^https?:\/\/[^/\s]/.test(trimMemoUrlTail(s.value).link),
+  );
 }
 
 export function Activity({ unlocked, onGoWallet }: Props) {
@@ -233,14 +326,19 @@ export function Activity({ unlocked, onGoWallet }: Props) {
                     </td>
                   </tr>
                   {/* 메모 — 표를 6열로 늘리지 않고 행 아래 전폭 행으로 붙인다.
-                      React 텍스트 노드로만 렌더한다(dangerouslySetInnerHTML 금지).
-                      링크로 바꾸지 않는다 — 체인에서 온 임의 URL 을 지갑이
-                      클릭 가능하게 만들면 피싱 원클릭 경로가 된다. */}
+                      React 노드로만 렌더한다(dangerouslySetInnerHTML 금지).
+                      http(s) URL 은 <a> 로 만든다 — href 와 화면 글자가 같은 값이라
+                      링크 위장이 생기지 않고, javascript:/data: 는 SDK 정규식이
+                      애초에 잡지 않아 평문으로 남는다. */}
                   {memo && (
                     <tr className="nd-activity-table__memo-row">
                       <td colSpan={5}>
                         <span className="nd-muted">{t('activity.memo_label')}</span>{' '}
-                        <span className="nd-activity-memo">{memo}</span>
+                        <span
+                          className={`nd-activity-memo${memoHasLink(memo) ? ' nd-activity-memo--has-link' : ''}`}
+                        >
+                          {renderMemo(memo)}
+                        </span>
                       </td>
                     </tr>
                   )}

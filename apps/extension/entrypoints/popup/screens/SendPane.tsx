@@ -572,20 +572,35 @@ export function SendPane({
           <label className="label" htmlFor="send-memo">
             {t('send.memo_label')}
           </label>
-          {/* TTL 은 2048 **바이트**(한글 682자)까지 실린다. 한 줄 input + 문자 수
-              maxLength 로는 그 한계를 표현할 수 없어 textarea + 바이트 카운터로
-              바꿨다 — maxLength={256} 은 규칙과 무관한 제한이었다.
-              (styles.css:335 의 bare textarea 규칙이 그대로 적용된다.) */}
-          <textarea
-            id="send-memo"
-            className="send-memo__input"
-            rows={2}
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-            placeholder={t('send.memo_placeholder')}
-            spellCheck={false}
-            disabled={locked}
-          />
+          {/* TTL 은 2048 **바이트**(한글 682자)까지 실린다 — 글자 수가 아니다
+              (한글 3바이트/자). 그래서 TTL 경로만 textarea + 바이트 카운터로
+              바꾸고 maxLength(글자 수 제한)를 걸지 않는다.
+              (styles.css:335 의 bare textarea 규칙이 그대로 적용된다.)
+              cosmos/ton 은 예전 그대로 한 줄 input · 256 글자 제한을 유지한다 —
+              TTL 과 무관한 경로라 이번 작업에서 바꿀 이유가 없다. */}
+          {isTtlMemo ? (
+            <textarea
+              id="send-memo"
+              className="send-memo__input"
+              rows={2}
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              placeholder={t('send.memo_placeholder')}
+              spellCheck={false}
+              disabled={locked}
+            />
+          ) : (
+            <input
+              id="send-memo"
+              type="text"
+              className="verify-row__input"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              placeholder={t('send.memo_placeholder')}
+              maxLength={256}
+              disabled={locked}
+            />
+          )}
           {isTtlMemo && (
             <>
               <p className="muted small send-memo__count">

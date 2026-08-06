@@ -9,11 +9,13 @@
 //   - 상태 칩(완료/보류/실패) 으로 시각 위계 강화.
 //   - 비어 있을 때 중앙 정렬 빈 상태 메시지 + 작은 아이콘.
 
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import {
   ActivityLog,
   TokenRegistry,
   TTL_CHAIN,
+  splitMemoLinks,
   validateMemo,
   type Activity as ActivityT,
   type WalletAccount,
@@ -77,6 +79,98 @@ function memoOf(it: ActivityT): string | null {
   const raw = (it as { memo?: unknown }).memo;
   if (typeof raw !== 'string') return null;
   return validateMemo(raw).ok ? raw : null;
+}
+
+/** 메모 안 URL 의 <a> 클래스. 셸마다 이 상수만 다르다. */
+const MEMO_LINK_CLASS = 'web-activity__memo-link';
+
+// 활동 행 자체가 클릭 대상인 셸(web)이 있어 행 토글로 새지 않게 막는다.
+function handleMemoLinkClick(e: MouseEvent<HTMLAnchorElement>): void {
+  e.stopPropagation();
+}
+
+/**
+ * SDK 정규식은 /https?:\/\/[^\s<]+/g 라 공백 전까지 전부 먹는다 —
+ * "확인 https://a.com." 이면 마침표까지 링크가 된다. 꼬리 문장부호를 링크에서
+ * 떼어내 텍스트로 돌려준다.
+ *
+ * **잘라낸 뒤의 값을 href 와 화면 텍스트 양쪽에 똑같이 쓴다.** 둘이 달라지는
+ * 순간 링크 위장이 생긴다 — 이 함수의 반환값 link 는 그 하나뿐인 출처다.
+ */
+const MEMO_TAIL_PUNCT = '.,;:!?…\'"’”»';
+function trimMemoUrlTail(url: string): { link: string; tail: string } {
+  let end = url.length;
+  while (end > 0) {
+    const ch = url.charAt(end - 1);
+    if (ch === ')' || ch === ']' || ch === '}') {
+      // 괄호는 URL 안에 정상적으로 들어간다(위키백과 주소). 여는 짝이 URL 안에
+      // 있으면 URL 의 일부로 남기고, 짝이 없을 때만(= 감싼 괄호) 떼어낸다.
+      const open = ch === ')' ? '(' : ch === ']' ? '[' : '{';
+      const body = url.slice(0, end);
+      const opens = body.split(open).length - 1;
+      const closes = body.split(ch).length - 1;
+      if (closes <= opens) break;
+      end -= 1;
+      continue;
+    }
+    if (MEMO_TAIL_PUNCT.includes(ch)) {
+      end -= 1;
+      continue;
+    }
+    break;
+  }
+  return { link: url.slice(0, end), tail: url.slice(end) };
+}
+
+/**
+ * 메모 → React 노드 배열. **HTML 문자열을 만들지 않는다** —
+ * dangerouslySetInnerHTML / innerHTML 금지. 텍스트는 React 텍스트 노드,
+ * 링크만 <a> 다. 이스케이프는 React 가 한다.
+ *
+ * 링크가 0개면 조각이 text 하나뿐이라 이 함수의 출력은 예전과 같다.
+ *
+ * 다만 이 셸은 **메모 블록의 위치가 바뀌었다** — 예전에는 행 <button> 안에
+ * 있었으나 지금은 그 형제다. <button> 안에 <a> 를 넣는 것이 무효 마크업이라
+ * 어쩔 수 없다. 그래서 링크가 없는 메모라도 글자를 눌러 행이 펼쳐지지 않고
+ * 행 hover 배경도 들어오지 않는다. 나머지 3종은 메모를 제자리에 뒀다.
+ * 잘림(말줄임) 은 절대 하지 않는다 — 화면 텍스트가 목적지의 앞부분만 보이면
+ * 그 자체가 링크 위장이다.
+ */
+function renderMemo(text: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  splitMemoLinks(text).forEach((seg, i) => {
+    if (seg.kind === 'text') {
+      out.push(<Fragment key={`t${i}`}>{seg.value}</Fragment>);
+      return;
+    }
+    const { link, tail } = trimMemoUrlTail(seg.value);
+    // 꼬리를 떼고 나니 http(s)://호스트 꼴이 아니면 링크로 만들지 않는다.
+    if (!/^https?:\/\/[^/\s]/.test(link)) {
+      out.push(<Fragment key={`t${i}`}>{seg.value}</Fragment>);
+      return;
+    }
+    out.push(
+      <a
+        key={`l${i}`}
+        className={MEMO_LINK_CLASS}
+        href={link}
+        target="_blank"
+        rel="noreferrer noopener"
+        onClick={handleMemoLinkClick}
+      >
+        {link}
+      </a>,
+    );
+    if (tail.length > 0) out.push(<Fragment key={`p${i}`}>{tail}</Fragment>);
+  });
+  return out;
+}
+
+/** 메모에 링크가 하나라도 있나. 있으면 컨테이너의 줄접기(-webkit-line-clamp)를 끈다. */
+function memoHasLink(text: string): boolean {
+  return splitMemoLinks(text).some(
+    (s) => s.kind === 'link' && /^https?:\/\/[^/\s]/.test(trimMemoUrlTail(s.value).link),
+  );
 }
 
 // 상태 → 칩 prop. ActivityLog 의 status 가 'failed' | 'confirmed' | 'pending' 추정.
@@ -195,17 +289,6 @@ export function Activity({ onBack }: Props) {
                       <div className="web-activity__counterparty">
                         {shortAddr(counterparty)}
                       </div>
-                      {memo !== null && (
-                        // 메모는 체인에서 온 임의 문자열이다. React 텍스트 노드로만
-                        // 렌더한다 — dangerouslySetInnerHTML 금지, 링크 변환도 하지
-                        // 않는다(행이 button 이라 <a> 를 넣을 수도 없다).
-                        <div className="web-activity__memo">
-                          <span className="web-activity__memo-label">
-                            {t('activity.memo_label')}
-                          </span>{' '}
-                          <span className="web-activity__memo-text">{memo}</span>
-                        </div>
-                      )}
                     </div>
                     <div className="web-activity__amount">
                       <span>
@@ -232,6 +315,24 @@ export function Activity({ onBack }: Props) {
                       </span>
                     </div>
                   </button>
+                  {memo !== null && (
+                    // 메모는 체인에서 온 임의 문자열이다. React 노드로만 렌더한다 —
+                    // dangerouslySetInnerHTML 금지. http(s) URL 만 <a> 로 그리고
+                    // href 와 화면 글자는 같은 값이라 링크 위장이 생기지 않는다.
+                    //
+                    // <button> 안에 <a> 를 넣는 것은 대화형 요소 중첩이라 무효
+                    // 마크업이므로, 메모 블록은 행 button 밖(li 의 형제)에 둔다.
+                    <div
+                      className={`web-activity__memo${
+                        memoHasLink(memo) ? ' web-activity__memo--has-link' : ''
+                      }`}
+                    >
+                      <span className="web-activity__memo-label">
+                        {t('activity.memo_label')}
+                      </span>{' '}
+                      <span className="web-activity__memo-text">{renderMemo(memo)}</span>
+                    </div>
+                  )}
                   {isOpen && (
                     <div className="web-activity__expanded">
                       {it.token && resolveTokenMeta(it.token) === null && (

@@ -14,7 +14,9 @@ import {
   formatAmount,
   isEvmChainKey,
   isOutgoing,
+  memoHasLink,
   relativeParts,
+  renderMemo,
   shortenHex,
   statusKey,
 } from '../entrypoints/popup/screens/ActivityPane.js';
@@ -194,5 +196,88 @@ describe('activityMemo', () => {
   it('2048 바이트를 넘으면 버린다 (서버 판정과 같은 규칙)', () => {
     expect(activityMemo(withMemo('a'.repeat(2048)))).toBe('a'.repeat(2048));
     expect(activityMemo(withMemo('a'.repeat(2049)))).toBeNull();
+  });
+});
+
+// ── 메모 링크 렌더 ──────────────────────────────────────────────────────
+//
+// environment 가 'node' 라 DOM 이 없다. renderMemo 가 돌려주는 것은 React 엘리먼트
+// 객체 배열이므로 **객체 그대로** 들여다본다 — HTML 문자열을 만들지 않는다는 계약이
+// 여기서 그대로 검증된다(문자열이면 아래 type/props 검사가 성립하지 않는다).
+describe('renderMemo / memoHasLink', () => {
+  interface Elem {
+    type: unknown;
+    props: Record<string, unknown>;
+  }
+  const el = (n: unknown): Elem => n as unknown as Elem;
+  /** <a> 조각만. type 이 'a' 인 엘리먼트가 링크다. */
+  const links = (text: string): Elem[] =>
+    renderMemo(text)
+      .map(el)
+      .filter((e) => e.type === 'a');
+  /** 첫 번째 링크. 없으면 테스트가 그 자리에서 실패한다. */
+  const firstLink = (text: string): Elem => {
+    const [a] = links(text);
+    if (a === undefined) throw new Error(`링크 없음: ${text}`);
+    return a;
+  };
+  /** 텍스트 조각(Fragment)의 children 을 이어붙인 것. */
+  const plain = (text: string): string =>
+    renderMemo(text)
+      .map(el)
+      .filter((e) => e.type !== 'a')
+      .map((e) => String(e.props.children))
+      .join('');
+
+  it('링크가 없으면 조각 하나뿐 — 예전 렌더와 같은 텍스트 노드 하나', () => {
+    const out = renderMemo('2026년 용역계약서 3차 대금');
+    expect(out).toHaveLength(1);
+    expect(el(out[0]).type).not.toBe('a');
+    expect(el(out[0]).props.children).toBe('2026년 용역계약서 3차 대금');
+    expect(memoHasLink('2026년 용역계약서 3차 대금')).toBe(false);
+  });
+
+  it('href 와 화면 텍스트가 같은 값이다 — 링크 위장이 구조적으로 불가능', () => {
+    const a = firstLink('https://scan.ttl1.top/tx/0xabc');
+    expect(a.props.href).toBe('https://scan.ttl1.top/tx/0xabc');
+    expect(a.props.children).toBe(a.props.href);
+    expect(a.props.rel).toBe('noreferrer noopener');
+    expect(a.props.target).toBe('_blank');
+  });
+
+  it('문장 끝 마침표는 링크에 들어가지 않는다', () => {
+    const a = firstLink('확인 https://scan.ttl1.top/tx/0xabc.');
+    expect(a.props.href).toBe('https://scan.ttl1.top/tx/0xabc');
+    expect(plain('확인 https://scan.ttl1.top/tx/0xabc.')).toBe('확인 .');
+  });
+
+  it('감싼 괄호는 링크 밖 — 짝 맞는 괄호는 링크 안', () => {
+    expect(firstLink('(https://scan.ttl1.top)').props.href).toBe('https://scan.ttl1.top');
+    expect(plain('(https://scan.ttl1.top)')).toBe('()');
+    expect(firstLink('https://ko.wikipedia.org/wiki/A_(B)').props.href).toBe(
+      'https://ko.wikipedia.org/wiki/A_(B)',
+    );
+  });
+
+  it('javascript: · data: 는 링크가 되지 않는다 (평문)', () => {
+    const src = 'javascript:alert(1) 과 data:text/html,x';
+    expect(links(src)).toHaveLength(0);
+    expect(memoHasLink(src)).toBe(false);
+    expect(plain(src)).toBe(src);
+  });
+
+  it('호스트가 없는 https:// 는 링크로 만들지 않고 원문을 텍스트로 남긴다', () => {
+    expect(links('https://.')).toHaveLength(0);
+    expect(plain('https://.')).toBe('https://.');
+  });
+
+  it('링크가 하나라도 있으면 memoHasLink 가 true — 줄접기를 끄는 근거', () => {
+    expect(memoHasLink('영수증 https://scan.ttl1.top/tx/0xabc 확인')).toBe(true);
+  });
+
+  it('개행 너머로 URL 이 이어지지 않는다 (\\s 에서 끊긴다)', () => {
+    const a = firstLink('https://a.example/x\nhttps://b.example/y');
+    expect(a.props.href).toBe('https://a.example/x');
+    expect(links('https://a.example/x\nhttps://b.example/y')).toHaveLength(2);
   });
 });
