@@ -475,6 +475,21 @@ export function App() {
   const effectiveSymbol = activeSpec?.nativeSymbol ?? 'TTL';
   const effectiveDecimals = activeSpec?.nativeDecimals ?? 18;
 
+  // BTC 이력용 주소. accounts[].address 는 기본 어댑터(EVM) 기준 주소라
+  // (shell-core store.ts) BTC 조회에 쓸 수 없다. 홈 카드가 쓰는 것과 같은
+  // walletStore.getAccountAt(idx, adapter) 로 활성 체인 주소를 뽑는다.
+  const btcChainAddress = useMemo<string | null>(() => {
+    if (activeChainKey !== 'btc') return null;
+    const acc = accounts.find((a) => a.active);
+    if (!acc) return null;
+    try {
+      return walletStore.getAccountAt(acc.idx, effectiveAdapter).address;
+    } catch {
+      // raw key 계정 등 미지원 조합 — 화면은 미지원 안내로 떨어진다.
+      return null;
+    }
+  }, [accounts, activeChainKey, effectiveAdapter]);
+
   // 부팅. 앱은 항상 잠긴 상태로 시작한다 — 금고가 있어도 비밀번호 없이는
   // tryAutoRestore 가 false 를 돌려준다(autoRestoreAllowed 가 캐시 유무로
   // 결정되므로). 여기서는 로딩 플래그만 내린다.
@@ -782,11 +797,13 @@ export function App() {
         />
       )}
 
-      {/* 활동 내역 — EVM 체인 전용. 비-EVM 은 화면 안에서 미지원 안내. */}
+      {/* 활동 내역 — EVM(ActivityLog) · BTC(Electrum) 두 경로. 나머지 체인은
+          화면 안에서 미지원 안내. */}
       {unlocked && mode === 'activity' && (
         <ActivityPane
           onBack={() => setMode('home')}
           address={accounts.find((a) => a.active)?.address ?? null}
+          btcAddress={btcChainAddress}
           adapter={effectiveAdapter}
           chainKey={activeChainKey}
           nativeSymbol={effectiveSymbol}
@@ -899,7 +916,7 @@ function ThemeSwitch() {
 // Playwright smoke 가 `header.brand >> text=벼린` 으로 셀렉트하므로 구조는 유지.
 function BrandHeader({ t }: { t: (k: string) => string }) {
   const brandName = t('brand.name');
-  // toolbar 아이콘과 동일한 PNG 마스터 사용 — design-system 의 Logo SVG 는
+  // toolbar 아이콘과 동일한 PNG 마스터 사용 — 예전에 쓰던 브랜드 마크 SVG 는
   // 옛 디자인이라 toolbar 와 시각 일관성이 깨졌다. 48px PNG 를 28px 로 표시.
   return (
     <header className="brand">

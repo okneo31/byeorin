@@ -44,6 +44,16 @@
       "diff@>=6.0.0 <8.0.3": "^8.0.3",
       "valibot@<1.4.2": "^1.4.2",
       "@babel/core@<7.29.6": "^7.29.6"
-    }
+    },
+    "packageExtensions": {
+      "metro": {
+        "optionalDependencies": {
+          "image-size": "^1.0.2"
+        }
+      }
+    },
+    "ignoredOptionalDependencies": [
+      "image-size"
+    ]
   }
 }

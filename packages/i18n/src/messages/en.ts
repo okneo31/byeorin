@@ -224,6 +224,14 @@ export const en: Catalog = {
   'activity.count_with_max': '{n, plural, one {1 entry (latest 20)} other {# entries (latest 20)}}',
   'activity.empty': 'No activity yet.',
   'activity.failed': 'Could not load activity.',
+
+  // BTC activity — Electrum lookup. Amount/direction are not shown yet: the SDK
+  // has no input/output reconciliation, so we only have txid and block height.
+  'activity.btc.lead': 'Your Bitcoin transaction history.',
+  'activity.btc.no_amount_notice': 'Amount and direction are not shown yet — only transaction id and block.',
+  'activity.btc.relay_down': 'Could not reach the Bitcoin server.',
+  'activity.btc.failed': 'Could not load Bitcoin history.',
+  'activity.btc.mempool': 'Pending',
   'activity.outgoing': 'Sent',
   'activity.incoming': 'Received',
   'activity.label.token': 'Token',

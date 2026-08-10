@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' https://rpc.ttl1.top wss://ws.ttl1.top https://scan.ttl1.top; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' https://rpc.ttl1.top wss://ws.ttl1.top https://scan.ttl1.top; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
     }
   },
   "bundle": {

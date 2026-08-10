@@ -65,9 +65,9 @@ export function App() {
     <div className="nd-shell">
       <aside className="nd-sidebar">
         <div className="nd-sidebar__brand">
-          {/* 앱 아이콘과 동일한 PNG 마스터를 쓴다 — design-system 의 Logo SVG 는
-              옛 디자인이라 실제 아이콘과 시각이 어긋난다. android·확장 셸이
-              먼저 이 방식으로 옮겼고 web·desktop 만 남아 있었다. */}
+          {/* 앱 아이콘과 동일한 PNG 마스터를 쓴다 — 예전에 쓰던 브랜드 마크 SVG 는
+              옛 디자인이라 실제 아이콘과 시각이 어긋났다. 네 셸 모두 PNG 마스터
+              한 벌로 통일했다(SVG 컴포넌트는 제거됨). */}
           <img src="/icon/48.png" width={36} height={36} alt="" />
           <div>
             <div className="nd-sidebar__title">{t('brand.name')}</div>

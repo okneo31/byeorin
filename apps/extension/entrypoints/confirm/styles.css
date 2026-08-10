@@ -76,7 +76,12 @@ body {
   padding: 4px 0 4px 10px;
 }
 
-.brand svg {
+/* 마크는 PNG <img> 다(App.tsx BrandHeader).
+   flex: 0 0 auto — 420px 고정 폭 confirm 창에서 브랜드명이 길어져도 마크가
+   눌려 가로로 찌그러지지 않게 축소를 막는다.
+   display: block — inline 이미지 baseline 아래 여백을 없애 텍스트와 수직 중앙이
+   어긋나 보이지 않게 한다. */
+.brand img {
   flex: 0 0 auto;
   display: block;
 }

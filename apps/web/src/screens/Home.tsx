@@ -24,7 +24,7 @@ export function Home({ onReady }: Props) {
     return <RecoverFlow onDone={onReady} onBack={() => setMode('choose')} />;
 
   // 홈 히어로:
-  //   1) 큰 로고 (mark-with-text, 56px)
+  //   1) 큰 로고 (아이콘 PNG 56px + 워드마크 텍스트)
   //   2) 운동성 태그라인
   //   3) 평이한 보조 설명
   //   4) 두 개의 CTA 버튼 (red 채움 + ghost outline)
@@ -34,9 +34,9 @@ export function Home({ onReady }: Props) {
     <div>
       <div className="web-hero">
         <div className="web-hero__mark">
-          {/* 앱 아이콘과 동일한 PNG 마스터를 쓴다 — design-system 의 Logo SVG 는
-              옛 디자인이라 실제 아이콘과 시각이 어긋난다. android·확장 셸이
-              먼저 이 방식으로 옮겼고 web·desktop 만 남아 있었다. */}
+          {/* 앱 아이콘과 동일한 PNG 마스터를 쓴다 — 예전에 쓰던 브랜드 마크 SVG 는
+              옛 디자인이라 실제 아이콘과 시각이 어긋났다. 네 셸 모두 PNG 마스터
+              한 벌로 통일했다(SVG 컴포넌트는 제거됨). */}
           <img src="/icon/128.png" width={56} height={56} alt="" />
           <span className="web-hero__wordmark">{t('brand.name')}</span>
         </div>

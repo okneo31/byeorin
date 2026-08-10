@@ -23,6 +23,9 @@ import type { ChainAdapter, PortableTokenBalance } from '@byeorin/wallet-sdk/cor
 import type { EvmAdapter } from '@byeorin/wallet-sdk/evm';
 import { ShellError } from '@byeorin/shell-core';
 import { useT } from '@byeorin/i18n/react';
+// BTC 이력은 셸 모듈 하나만 본다. 그 모듈이 SDK 를 dynamic import 로 감싸므로
+// 여기서 타입만 정적으로 가져와도 초기 번들에는 아무것도 실리지 않는다.
+import type { BtcActivityRow } from '../lib/btc-history-source.js';
 
 // ────────── 상수 ──────────
 
@@ -46,6 +49,9 @@ const FALLBACK_LOOKBACK = 60;
 // (scan.ttl1.top 은 TTL 전용이라 다른 EVM 체인 해시를 붙이면 404 가 난다.)
 const TTL_CHAIN_KEY = 'evm:ttl';
 const TTL_EXPLORER = 'https://scan.ttl1.top';
+
+// BTC 체인 키 — multichain.ts:200 의 spec key 와 같은 문자열이어야 한다.
+const BTC_CHAIN_KEY = 'btc';
 
 // 온체인 보충 조회의 고유 컨트랙트 상한. 활동 20건이 전부 다른 토큰이면 주소당
 // 최대 3콜(symbol/decimals/balanceOf)이라 공개 RPC rate limit 을 친다.
@@ -287,6 +293,11 @@ export interface ActivityPaneProps {
   adapter: ChainAdapter;
   /** 활성 체인 키 ('evm:ttl' 등). EVM 분기와 탐색기 링크 판정에 쓴다. */
   chainKey: string;
+  /**
+   * BTC 활성 시의 BTC 주소. EVM 경로는 이 값을 보지 않는다.
+   * address 는 기본 어댑터(EVM) 기준이라 BTC 조회에 쓸 수 없어서 따로 받는다.
+   */
+  btcAddress?: string | null;
   /** native 금액 표기용. */
   nativeSymbol: string;
   nativeDecimals: number;
@@ -299,6 +310,7 @@ export function ActivityPane({
   address,
   adapter,
   chainKey,
+  btcAddress = null,
   nativeSymbol,
   nativeDecimals,
   tokens,
@@ -313,6 +325,14 @@ export function ActivityPane({
   const [now, setNow] = useState<number>(() => Date.now());
 
   const isEvm = isEvmChainKey(chainKey);
+  const isBtc = chainKey === BTC_CHAIN_KEY;
+
+  // BTC 이력 상태 — EVM 경로(items/loading/error)와 **공유하지 않는다**.
+  // 두 경로는 행의 모양도, 조회 수단도 다르다. 한 상태에 섞으면 체인을 바꿀 때
+  // 남은 값이 반대편 화면에 잠깐 비친다.
+  const [btcRows, setBtcRows] = useState<BtcActivityRow[] | null>(null);
+  const [btcLoading, setBtcLoading] = useState(false);
+  const [btcErr, setBtcErr] = useState<string | null>(null);
 
   // 조회 — App.tsx 의 잔액 로딩과 같은 패턴 (cancelled 플래그로 race 차단).
   // 체인/주소를 빠르게 바꾸면 늦게 도착한 응답이 최신 상태를 덮어쓸 수 있다.
@@ -392,14 +412,141 @@ export function ActivityPane({
     };
   }, [items, address, adapter, tokens, extraMeta]);
 
+  // BTC 이력 — Electrum 트랙. 안드로이드는 네이티브 소켓이 있어 릴레이가 없다.
+  // 전송은 1 인스턴스 = 1 연결이므로 조회할 때마다 새로 만든다(팩토리로 넘긴다).
+  // fetchBtcHistory 는 던지지 않으므로 여기에 try/catch 가 없다.
+  useEffect(() => {
+    if (!isBtc || !btcAddress) {
+      setBtcRows(null);
+      setBtcErr(null);
+      setBtcLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setBtcLoading(true);
+    setBtcErr(null);
+    setBtcRows(null);
+    void (async () => {
+      // dynamic import 를 try 밖에 두면 청크 로드 실패가 unhandled rejection 이 되어
+      // setBtcLoading(false) 에 도달하지 못한다 — 스피너가 영영 돈다. 그래서 import 도
+      // try 안에 넣고, 성공·실패 어느 쪽이든 finally 에서 로딩을 내린다.
+      try {
+        const { fetchBtcHistory, ELECTRUM } = await import('../lib/btc-history-source.js');
+        const { NativeTcpTransport } = await import('../native-tcp.js');
+        if (cancelled) return;
+        const r = await fetchBtcHistory(() => new NativeTcpTransport(), {
+          address: btcAddress,
+          server: ELECTRUM,
+        });
+        if (cancelled) return;
+        if (r.ok) setBtcRows(r.rows);
+        // 안드로이드는 릴레이가 없어 'transport' 도 결국 소켓 실패다 — 확장판의
+        // activity.btc.relay_down 은 여기서 쓰지 않는다.
+        else setBtcErr(t('activity.btc.failed'));
+      } catch {
+        // fetchBtcHistory 는 던지지 않는다. 여기 오는 건 청크 로드 실패뿐이다.
+        if (!cancelled) {
+          setBtcRows([]);
+          setBtcErr(t('activity.btc.failed'));
+        }
+      } finally {
+        if (!cancelled) setBtcLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isBtc, btcAddress, reloadKey, t]);
+
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
-  // 비-EVM 체인 — ActivityLog 는 EVM 전용이므로 조회 자체를 시도하지 않는다.
-  if (!isEvm) {
+  // 비-EVM·비-BTC 체인 — ActivityLog 는 EVM 전용, Electrum 은 BTC 전용이므로
+  // 조회 자체를 시도하지 않는다. (BTC 주소를 못 뽑은 경우도 여기로 떨어진다.)
+  if (!isEvm && !(isBtc && btcAddress)) {
     return (
       <section className="card">
         <h2 className="create-step__title">{t('activity.title')}</h2>
         <p className="muted small">{t('activity.unsupported_chain')}</p>
+        <button className="btn-ghost" onClick={onBack}>
+          {t('common.back')}
+        </button>
+      </section>
+    );
+  }
+
+  // BTC — Electrum get_history 는 txid·높이·컨펌 여부까지만 준다.
+  // 금액·방향은 tx 원문을 받아 입출력을 대조해야 나오는 별개 단계라 SDK 에 없다.
+  // **없는 값을 지어내지 않고, 없다는 사실을 화면에 적는다.**
+  if (isBtc) {
+    return (
+      <section className="card">
+        <h2 className="create-step__title">{t('activity.title')}</h2>
+        <p className="create-step__lead">{t('activity.btc.lead')}</p>
+        <p className="muted small">{t('activity.btc.no_amount_notice')}</p>
+
+        <div className="activity-head">
+          <span className="muted small">
+            {btcLoading
+              ? t('common.loading_ellipsis')
+              : t('activity.count_with_max', { n: btcRows?.length ?? 0 })}
+          </span>
+          <button className="btn-ghost btn-sm" onClick={reload} disabled={btcLoading}>
+            {t('common.refresh')}
+          </button>
+        </div>
+
+        {btcErr && (
+          <>
+            <p className="error small" role="alert">
+              {btcErr}
+            </p>
+            <button className="btn-primary btn-sm" onClick={reload} disabled={btcLoading}>
+              {t('activity.retry')}
+            </button>
+          </>
+        )}
+
+        {btcLoading && <p className="muted small">{t('common.loading_ellipsis')}</p>}
+
+        {!btcLoading && !btcErr && btcRows !== null && btcRows.length === 0 && (
+          <p className="empty-state">{t('activity.empty')}</p>
+        )}
+
+        {!btcLoading && btcRows !== null && btcRows.length > 0 && (
+          <ul className="activity-list">
+            {btcRows.map((row) => (
+              <li key={row.txid} className="activity-row">
+                <div className="activity-row__line">
+                  <span className="activity-row__peer addr" title={row.txid}>
+                    {shortenHex(row.txid)}
+                  </span>
+                  <span className="activity-row__time muted small">
+                    {row.height > 0
+                      ? t('activity.block_number', { n: row.height.toString() })
+                      : t('activity.btc.mempool')}
+                  </span>
+                </div>
+                <div className="activity-row__line activity-row__line--foot">
+                  <span className="muted small">
+                    <span
+                      className={
+                        row.confirmed
+                          ? 'activity-row__status'
+                          : 'activity-row__status activity-row__status--pending'
+                      }
+                    >
+                      {row.confirmed
+                        ? t('activity.status_confirmed')
+                        : t('activity.btc.mempool')}
+                    </span>
+                  </span>
+                  {/* 탐색기 링크 없음 — explorerTxUrl 은 TTL 전용이다. */}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
         <button className="btn-ghost" onClick={onBack}>
           {t('common.back')}
         </button>

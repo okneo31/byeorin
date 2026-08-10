@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatUnits, hexToString, hexToBytes, hexToNumber, isHex, type Hex } from 'viem';
 import { useT } from '@byeorin/i18n/react';
-import { AddressDisplay, AmountDisplay, Logo } from '@byeorin/design-system';
+import { AddressDisplay, AmountDisplay } from '@byeorin/design-system';
 import type { BackgroundMessage, ConfirmContext } from '../../src/lib/rpc.js';
 import {
   decode4Byte,
@@ -230,7 +230,9 @@ function BrandHeader() {
   const t = useT();
   return (
     <header className="brand">
-      <Logo size={20} variant="mark" />
+      {/* toolbar 아이콘과 동일한 PNG 마스터. popup·android·web·desktop 이 모두
+          이 파일을 쓴다 — 마크는 한 벌뿐이다. */}
+      <img src="/icon/48.png" width={20} height={20} alt="" />
       <span className="brand-text">{t('brand.name')}</span>
     </header>
   );

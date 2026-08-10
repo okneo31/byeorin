@@ -176,9 +176,16 @@ test.describe('벼린 extension smoke', () => {
         });
       });
       expect(announced.rdns).toBe('top.ttl1.byeorin');
-      expect(announced.name).toMatch(/노동자/);
+      // 정식 브랜드명은 "벼린" — "노동자의 지갑" 은 포지션 슬로건이라 provider name 에 안 실린다.
+      // (inpage.ts:61 BRAND_NAME = codesToString([0xBCBC, 0xB9B0]))
+      expect(announced.name).toMatch(/벼린/);
       expect(announced.uuid).toMatch(/^[0-9a-f-]{36}$/i);
-      expect(announced.icon.startsWith('data:image/svg+xml')).toBe(true);
+      // 아이콘은 포맷(svg/png/webp…)을 갈아탈 수 있으므로 MIME 문자열을 고정하지 않는다.
+      // EIP-6963 이 요구하는 본질만 검사한다 — (a) data URI, (b) image/*, (c) 페이로드가 비어 있지 않다.
+      const iconMatch = announced.icon.match(/^data:image\/([a-z0-9.+-]+)((?:;[^,]*)*),(.+)$/i);
+      expect(iconMatch, `아이콘이 image/* data URI 가 아니다: ${announced.icon.slice(0, 64)}`).not.toBeNull();
+      // 아이콘이 사라지거나 빈 값·잘린 값으로 바뀌는 회귀를 잡는다(현재 원본은 수십 KB).
+      expect(iconMatch![3].length).toBeGreaterThan(256);
     } finally {
       await teardown(context, userDataDir);
     }

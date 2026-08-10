@@ -233,6 +233,13 @@ export const ko: Catalog = {
   'activity.count_with_max': '{n}건 (최근 20)',
   'activity.empty': '아직 기록이 없습니다.',
   'activity.failed': '활동을 불러오지 못했습니다.',
+
+  // BTC 활동 — Electrum 조회. 금액·방향은 SDK 에 입출력 대조 로직이 없어 아직 못 그린다.
+  'activity.btc.lead': '비트코인 거래 기록입니다.',
+  'activity.btc.no_amount_notice': '금액과 방향은 아직 표시하지 않습니다 — 거래 번호와 블록만 보여줍니다.',
+  'activity.btc.relay_down': '비트코인 서버에 연결하지 못했습니다.',
+  'activity.btc.failed': '비트코인 기록을 불러오지 못했습니다.',
+  'activity.btc.mempool': '대기 중',
   'activity.outgoing': '보냄',
   'activity.incoming': '받음',
   'activity.label.token': '토큰',

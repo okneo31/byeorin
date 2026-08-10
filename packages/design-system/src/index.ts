@@ -6,8 +6,6 @@
 export { tokens } from './tokens.js';
 export type { Tokens } from './tokens.js';
 
-export { Logo } from './Logo.js';
-export type { LogoProps } from './Logo.js';
 
 export { Button } from './Button.js';
 export type { ButtonProps, ButtonVariant, ButtonSize } from './Button.js';

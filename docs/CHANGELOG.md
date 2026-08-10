@@ -181,7 +181,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Unt
 - 검증: BIP157 3 스위트 **118/118 통과**(수정 전 60 건 중 56 통과 · 4 실패), 패키지 전체 685 건 중 675 통과 · 10 skip · **0 실패**, `tsc --noEmit` 무오류. 실피어 5 곳 회귀 기준값과 전건 일치(tipHeight 960450 · 필터 300 · records 4), 성능 중앙값 **−31.6%**.
 - **테스트 약화 없음**: 의도적 실패 4 건의 본문·기대값 diff 0 줄, `.skip`/`xit`/`xdescribe` 0 건. 테스트 변경은 모의 피어가 D1 이후에도 "정직한 피어" 로 남도록 픽스처 `merkleRoot` 를 실값화한 것뿐.
 - **고치지 않고 남긴 것 5 건**은 `docs/BIP157-FIX-ROUND.md` §6 에 그대로 적혀 있다 (handleChunk closedErr 가드 없음 · `blockBatchSize > 16` 에서 정직한 피어도 상한 접촉 가능 · expectedRounds 의 2000헤더 가정 · 깊이 8 초과 재조직은 명시적 실패 · locator 가 지수 back-off 아님).
-- 이 코드는 **아직 어느 셸에도 배선되지 않았다.**
+- 이 코드는 작성 시점에 어느 셸에도 배선되지 않았다. **2026-08-09 라운드에서 Electrum 트랙만 extension·android·web 3 셸에 배선됐다** (desktop 미배선, BIP157 트랙은 4 셸 전부 미배선). 상세는 `docs/CONTEXT.md` 배선 상태 행.
 
 ### Changed — 릴리스 산출물 파일명에 버전이 들어간다
 - `벼린.apk` / `벼린.apk.manifest.json` → **`벼린<versionName>.apk` / `벼린<versionName>.apk.manifest.json`** (이번 릴리스는 `벼린0.5.16.apk`).

@@ -8,6 +8,17 @@
 //   - 클릭 → 인라인 확장(트랜잭션 해시 + 탐색기 링크).
 //   - 상태 칩(완료/보류/실패) 으로 시각 위계 강화.
 //   - 비어 있을 때 중앙 정렬 빈 상태 메시지 + 작은 아이콘.
+//
+// BTC 이력(Electrum 트랙) 은 위 EVM 목록과 **완전히 분리된** 두 번째 카드다.
+// 상태도 조회 경로도 공유하지 않는다. 웹 셸에는 체인 선택기가 없어 활성 체인이
+// 항상 EVM(TTL)이므로, BTC 주소는 같은 시드에서 BTC 어댑터로 따로 파생한다
+// (walletStore.getAccount(btcAdapter) — 활성 계정 기준, 캐시 우회).
+//
+// 조회는 사용자가 버튼을 눌렀을 때만 한다. 자동 조회를 하지 않는 이유:
+//   1) 전송이 로컬 릴레이(ws://127.0.0.1:18337) 경유라 릴레이가 꺼져 있으면
+//      화면을 열 때마다 실패 표시가 뜬다.
+//   2) 제3자 Electrum 서버에 내 주소를 알리는 일이라, 사용자가 요청하지 않은
+//      시점에 먼저 보내지 않는다 (서버 정책은 docs/BTC-HISTORY.md §7② 미결정).
 
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
@@ -20,6 +31,7 @@ import {
   type Activity as ActivityT,
   type WalletAccount,
 } from '@byeorin/wallet-sdk';
+import type { BtcActivityRow } from '@byeorin/wallet-sdk/btc-history';
 import { AmountDisplay, Button, Card } from '@byeorin/design-system';
 import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../wallet-store.js';
@@ -192,6 +204,14 @@ export function Activity({ onBack }: Props) {
   const [reloadKey, setReloadKey] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  // ── BTC 이력 (Electrum 트랙) — 위 EVM 상태와 공유하지 않는다 ──
+  // btcRequested: 사용자가 조회를 눌렀는가. 누르기 전에는 네트워크를 건드리지 않는다.
+  const [btcRequested, setBtcRequested] = useState(false);
+  const [btcReloadKey, setBtcReloadKey] = useState(0);
+  const [btcRows, setBtcRows] = useState<BtcActivityRow[] | null>(null);
+  const [btcLoading, setBtcLoading] = useState(false);
+  const [btcErr, setBtcErr] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     if (!walletStore.isUnlocked()) return;
@@ -230,6 +250,75 @@ export function Activity({ onBack }: Props) {
   }, [account, reloadKey, t]);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  // BTC 조회 트리거. 첫 조회와 재시도가 같은 경로다 (전송 계약이 "1 인스턴스 =
+  // 1 연결" 이라 재시도는 항상 새 연결이다).
+  const loadBtc = useCallback(() => {
+    setBtcRequested(true);
+    setBtcReloadKey((k) => k + 1);
+  }, []);
+
+  useEffect(() => {
+    if (!btcRequested || !account) return;
+    let cancelled = false;
+    setBtcLoading(true);
+    setBtcErr(null);
+    setBtcRows(null);
+    void (async () => {
+      // 1) BTC 주소 파생. raw private key 로 들여온 계정 등은 여기서 실패한다 —
+      //    그때는 미지원 안내로 떨어지고 소켓은 열지 않는다.
+      let addr: string;
+      try {
+        const { findChainSpec } = await import('@byeorin/wallet-sdk/multichain');
+        const spec = findChainSpec('btc');
+        if (!spec) throw new Error('btc chain spec 없음');
+        const btcAccount = await walletStore.getAccount(spec.build());
+        addr = btcAccount.address;
+      } catch {
+        if (cancelled) return;
+        setBtcErr(t('activity.unsupported_chain'));
+        setBtcLoading(false);
+        return;
+      }
+      if (cancelled) return;
+
+      // 2) 조회. fetchBtcHistory 는 던지지 않는다 — 실패도 값으로 온다.
+      //    dynamic import 인 이유는 btc-history-source.ts 상단 주석 참고.
+      //    **import 도 try 안에 둔다** — 밖에 두면 청크 로드 실패가 unhandled
+      //    rejection 이 되어 setBtcLoading(false) 에 못 가고 스피너가 영영 돈다.
+      try {
+        const [{ fetchBtcHistory, ELECTRUM, RELAY_URL }, { WsTcpTransport }] = await Promise.all([
+          import('../lib/btc-history-source.js'),
+          import('../lib/ws-tcp-transport.js'),
+        ]);
+        const r = await fetchBtcHistory(() => new WsTcpTransport(RELAY_URL), {
+          address: addr,
+          server: ELECTRUM,
+        });
+        if (cancelled) return;
+        if (r.ok) {
+          setBtcRows(r.rows);
+        } else {
+          // 릴레이가 꺼져 있는 것과 그 밖의 실패를 구분해서 적는다 —
+          // 사용자가 무엇을 해야 하는지가 달라진다.
+          setBtcErr(
+            r.failure === 'transport' ? t('activity.btc.relay_down') : t('activity.btc.failed'),
+          );
+        }
+      } catch {
+        // 여기 오는 건 청크 로드 실패뿐이다.
+        if (!cancelled) {
+          setBtcRows([]);
+          setBtcErr(t('activity.btc.failed'));
+        }
+      } finally {
+        if (!cancelled) setBtcLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [btcRequested, account, btcReloadKey, t]);
 
   const pillLabel = (k: PillKind) =>
     k === 'done' ? t('activity.status_done')
@@ -359,6 +448,67 @@ export function Activity({ onBack }: Props) {
                 </li>
               );
             })}
+          </ul>
+        )}
+      </Card>
+
+      {/*
+        BTC 이력 — Electrum 트랙. 위 카드(EVM)와 상태·조회 경로를 공유하지 않는다.
+        표시 항목은 txid · 확정여부 · 블록높이뿐이다: SDK 의 BtcActivityRow 에는
+        금액도 방향도 없다(electrum/history.ts). 원문 대조 단계가 SDK 에 없으므로
+        금액을 만들어내지 않고, 못 그린다는 사실을 화면에 적는다.
+      */}
+      <Card>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {/* 'Bitcoin' 은 고유명사 — 번역하지 않는다. */}
+          <strong>Bitcoin</strong>
+          <Button variant="ghost" size="sm" onClick={loadBtc} disabled={btcLoading}>
+            {t('common.refresh')}
+          </Button>
+        </div>
+        <p className="nd-muted">{t('activity.btc.lead')}</p>
+        <p className="nd-muted">{t('activity.btc.no_amount_notice')}</p>
+
+        {btcLoading && <div className="nd-muted">{t('common.loading_ellipsis')}</div>}
+
+        {!btcLoading && btcErr && (
+          <>
+            <div className="nd-error">{btcErr}</div>
+            <Button variant="ghost" size="sm" onClick={loadBtc}>
+              {t('activity.retry')}
+            </Button>
+          </>
+        )}
+
+        {!btcLoading && !btcErr && btcRows && btcRows.length === 0 && (
+          <div className="web-activity__empty">
+            <div className="web-activity__empty-icon" aria-hidden="true">·</div>
+            <p className="nd-muted" style={{ margin: 0 }}>
+              {t('activity.empty')}
+            </p>
+          </div>
+        )}
+
+        {!btcLoading && !btcErr && btcRows && btcRows.length > 0 && (
+          <ul className="web-activity">
+            {btcRows.map((row) => (
+              <li key={row.txid} className="web-activity__item">
+                <div className="web-activity__expanded">
+                  <div className="web-activity__direction">
+                    <span className={`web-pill web-pill--${row.confirmed ? 'done' : 'pending'}`}>
+                      {row.confirmed ? t('activity.status_confirmed') : t('activity.btc.mempool')}
+                    </span>
+                    {row.height > 0 && (
+                      <span className="nd-muted">{t('activity.block_number', { n: row.height })}</span>
+                    )}
+                  </div>
+                  <div>
+                    <strong>{t('activity.tx_hash_label')}: </strong>
+                    <span className="nd-hash">{row.txid}</span>
+                  </div>
+                </div>
+              </li>
+            ))}
           </ul>
         )}
       </Card>
