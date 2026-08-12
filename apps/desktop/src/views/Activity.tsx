@@ -17,14 +17,15 @@ import {
 } from '@byeorin/wallet-sdk';
 import { AmountDisplay, Button, Card } from '@byeorin/design-system';
 import { useT } from '@byeorin/i18n/react';
+// 타입만 정적 import — multichain 값(전 체인 어댑터)은 dynamic import 로만 끌어
+// 초기 번들에 넣지 않는다 (QrScanner.tsx 와 같은 패턴).
+import type { ChainExplorer } from '@byeorin/wallet-sdk/multichain';
 import { walletStore } from '../wallet-store.js';
 
 interface Props {
   unlocked: boolean;
   onGoWallet: () => void;
 }
-
-const EXPLORER = TTL_CHAIN.blockExplorers?.default?.url ?? 'https://scan.ttl1.top';
 
 function fmtTime(unix: number): string {
   if (!unix || !Number.isFinite(unix)) return '-';
@@ -172,6 +173,27 @@ export function Activity({ unlocked, onGoWallet }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // SDK 탐색기 — 하드코딩(구 EXPLORER 상수) 대신 evmExplorer(TTL_CHAIN) 를 쓴다.
+  // 표는 SDK 한 곳에만 둔다. 로드 전·실패 시 null → 링크 없이 상태 문구만 그린다
+  // (죽은 링크·지어낸 URL 금지).
+  const [explorer, setExplorer] = useState<Pick<ChainExplorer, 'txUrl'> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        // 값은 dynamic import — multichain 은 전 체인 어댑터를 끌므로 별도 청크로 둔다.
+        const mc = await import('@byeorin/wallet-sdk/multichain');
+        if (!cancelled) setExplorer(mc.evmExplorer(TTL_CHAIN));
+      } catch {
+        // 청크 로드 실패 — 탐색기 없이 동작한다(활동 목록 자체는 영향 없음).
+        if (!cancelled) setExplorer(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -316,13 +338,20 @@ export function Activity({ unlocked, onGoWallet }: Props) {
                       )}
                     </td>
                     <td>
-                      <a
-                        href={`${EXPLORER}/tx/${it.hash}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {it.status === 'failed' ? t('activity.status_failed') : t('activity.status_confirmed')}
-                      </a>
+                      {/* URL 을 못 만드는 해시(빈 값·'0x')는 SDK 가 null 을 주고,
+                          그때는 링크 없이 상태 문구만 그린다. */}
+                      {(() => {
+                        const statusText =
+                          it.status === 'failed' ? t('activity.status_failed') : t('activity.status_confirmed');
+                        const txUrl = explorer?.txUrl(it.hash) ?? null;
+                        return txUrl ? (
+                          <a href={txUrl} target="_blank" rel="noreferrer">
+                            {statusText}
+                          </a>
+                        ) : (
+                          statusText
+                        );
+                      })()}
                     </td>
                   </tr>
                   {/* 메모 — 표를 6열로 늘리지 않고 행 아래 전폭 행으로 붙인다.

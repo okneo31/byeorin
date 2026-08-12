@@ -90,6 +90,8 @@ import {
   notifyAddressbookChanged,
 } from './screens/AddressbookPane.js';
 import { ActivityPane } from './screens/ActivityPane.js';
+// 활동 소스 5체인 판정 — ActivityPane 과 같은 표를 쓴다 (여기서 주소를 도출해 넘긴다).
+import { sourcedChainOf } from './lib/activity-links.js';
 import { SendPane } from './screens/SendPane.js';
 import { TokenListPane } from './screens/TokenListPane.js';
 import { ExchangePane, type TtlAmmClientLike } from './screens/ExchangePane.js';
@@ -571,6 +573,20 @@ export function App() {
     }
   }, [accounts, activeChainKey, effectiveAdapter]);
 
+  // 활동 소스 5체인(solana/xrp/aptos/sui/cosmos:zion) 조회용 주소 — btcChainAddress
+  // 와 같은 이유·같은 방법. 활성 체인이 소스 대상이 아니면 null.
+  const srcChainAddress = useMemo<string | null>(() => {
+    if (sourcedChainOf(activeChainKey) === null) return null;
+    const acc = accounts.find((a) => a.active);
+    if (!acc) return null;
+    try {
+      return walletStore.getAccountAt(acc.idx, effectiveAdapter).address;
+    } catch {
+      // raw key 계정 등 미지원 조합 — 화면은 미지원 안내로 떨어진다.
+      return null;
+    }
+  }, [accounts, activeChainKey, effectiveAdapter]);
+
   // 부팅 시 자동 복원 시도(extension 은 autoRestoreAllowed=true).
   useEffect(() => {
     let cancelled = false;
@@ -817,12 +833,16 @@ export function App() {
         />
       )}
 
-      {/* 활동 내역 — EVM 체인 + BTC(Electrum). 그 밖은 화면 안에서 미지원 안내. */}
+      {/* 활동 내역 — EVM + BTC(Electrum) + 소스 5체인(solana/xrp/aptos/sui/zion).
+          tron·ton 은 화면 안에서 미지원 안내. 탐색기 링크는 ChainSpec.explorer 가
+          판정한다 — multichain 로드 전(TTL fallback)엔 spec 이 없어 링크가 없다. */}
       {unlocked && mode === 'activity' && (
         <ActivityPane
           onBack={() => setMode('home')}
           address={accounts.find((a) => a.active)?.address ?? null}
           btcAddress={btcChainAddress}
+          chainAddress={srcChainAddress}
+          explorer={activeSpec?.explorer ?? null}
           adapter={effectiveAdapter}
           chainKey={activeChainKey}
           nativeSymbol={effectiveSymbol}

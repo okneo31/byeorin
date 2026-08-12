@@ -17,6 +17,9 @@ import type {
   ZionPool,
   ZionSwapQuote,
 } from '@byeorin/wallet-sdk/multichain';
+// 활동 소스가 있는 비-EVM 체인 목록 — ActivityPane 의 SOURCED 맵과 같은 5종.
+// 이 체인들만 활성 체인 주소(chainAddress)를 도출해 넘긴다.
+const ACTIVITY_SOURCE_CHAIN_KEYS = ['solana', 'xrp', 'aptos', 'sui', 'cosmos:zion'] as const;
 import {
   Addressbook,
   LocalStorageBackend,
@@ -490,6 +493,21 @@ export function App() {
     }
   }, [accounts, activeChainKey, effectiveAdapter]);
 
+  // 활동 소스 5종(solana/xrp/aptos/sui/cosmos:zion)용 활성 체인 주소.
+  // btcChainAddress 와 같은 이유 — accounts[].address 는 EVM 기준 주소라
+  // 이 체인들의 조회에 쓸 수 없다. 활성 체인 어댑터로 다시 뽑는다.
+  const activityChainAddress = useMemo<string | null>(() => {
+    if (!(ACTIVITY_SOURCE_CHAIN_KEYS as readonly string[]).includes(activeChainKey)) return null;
+    const acc = accounts.find((a) => a.active);
+    if (!acc) return null;
+    try {
+      return walletStore.getAccountAt(acc.idx, effectiveAdapter).address;
+    } catch {
+      // raw key 계정 등 미지원 조합 — 화면은 미지원 안내로 떨어진다.
+      return null;
+    }
+  }, [accounts, activeChainKey, effectiveAdapter]);
+
   // 부팅. 앱은 항상 잠긴 상태로 시작한다 — 금고가 있어도 비밀번호 없이는
   // tryAutoRestore 가 false 를 돌려준다(autoRestoreAllowed 가 캐시 유무로
   // 결정되므로). 여기서는 로딩 플래그만 내린다.
@@ -797,15 +815,17 @@ export function App() {
         />
       )}
 
-      {/* 활동 내역 — EVM(ActivityLog) · BTC(Electrum) 두 경로. 나머지 체인은
-          화면 안에서 미지원 안내. */}
+      {/* 활동 내역 — EVM(ActivityLog) · BTC(Electrum) · 소스 5종
+          (solana/xrp/aptos/sui/cosmos:zion). 나머지 체인은 화면 안에서 미지원 안내. */}
       {unlocked && mode === 'activity' && (
         <ActivityPane
           onBack={() => setMode('home')}
           address={accounts.find((a) => a.active)?.address ?? null}
           btcAddress={btcChainAddress}
+          chainAddress={activityChainAddress}
           adapter={effectiveAdapter}
           chainKey={activeChainKey}
+          explorer={activeSpec?.explorer ?? null}
           nativeSymbol={effectiveSymbol}
           nativeDecimals={effectiveDecimals}
           tokens={sendTokens}

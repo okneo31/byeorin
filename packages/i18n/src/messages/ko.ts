@@ -240,6 +240,23 @@ export const ko: Catalog = {
   'activity.btc.relay_down': '비트코인 서버에 연결하지 못했습니다.',
   'activity.btc.failed': '비트코인 기록을 불러오지 못했습니다.',
   'activity.btc.mempool': '대기 중',
+
+  // 비-EVM 활동 소스(solana·xrp·aptos·sui·cosmos) 공통 — 5체인이 같은 키를 쓴다.
+  // 소스가 구조적으로 못 주는 필드는 지어내지 않고 omit 고지 문구로 화면에 적는다.
+  'activity.src.lead': '이 체인의 거래 기록입니다.',
+  'activity.src.failed': '기록을 불러오지 못했습니다.',
+  'activity.src.network': '서버에 연결하지 못했습니다.',
+  'activity.src.timeout': '조회 시간이 초과되었습니다.',
+  'activity.src.status_unknown': '미확인',
+  'activity.src.self': '자기 거래',
+  'activity.src.omit.timestamp': '이 체인 조회로는 시간을 알 수 없어 표시하지 않습니다.',
+  'activity.src.omit.direction': '이 체인 조회로는 보냄/받음 방향을 알 수 없어 표시하지 않습니다.',
+  'activity.src.omit.counterparty': '이 체인 조회로는 상대 주소를 알 수 없어 표시하지 않습니다.',
+  'activity.src.omit.amount': '이 체인 조회로는 금액을 알 수 없어 표시하지 않습니다.',
+  'activity.src.omit.memo': '이 체인 조회로는 메모를 알 수 없어 표시하지 않습니다.',
+  // Aptos 고유: fullnode 는 이 계정이 보낸 거래만 준다 — 받은 이력은 못 본다.
+  'activity.src.aptos.sent_only': '보낸 거래만 표시합니다 — Aptos 노드는 받은 거래 목록을 주지 않습니다.',
+
   'activity.outgoing': '보냄',
   'activity.incoming': '받음',
   'activity.label.token': '토큰',

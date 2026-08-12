@@ -32,6 +32,13 @@ import {
   type WalletAccount,
 } from '@byeorin/wallet-sdk';
 import type { BtcActivityRow } from '@byeorin/wallet-sdk/btc-history';
+// 값은 dynamic import(무거운 모듈 — 어댑터 8종을 끈다), 타입만 정적으로 가져온다.
+import type { ChainExplorer, ChainKey } from '@byeorin/wallet-sdk/multichain';
+import type {
+  ActivitySourceChain,
+  ChainActivityRow,
+  OmittedField,
+} from '@byeorin/wallet-sdk/activity-sources';
 import { AmountDisplay, Button, Card } from '@byeorin/design-system';
 import { useT } from '@byeorin/i18n/react';
 import { walletStore } from '../wallet-store.js';
@@ -39,8 +46,6 @@ import { walletStore } from '../wallet-store.js';
 interface Props {
   onBack: () => void;
 }
-
-const EXPLORER = TTL_CHAIN.blockExplorers?.default?.url ?? 'https://scan.ttl1.top';
 
 function fmtTime(unix: number): string {
   if (!unix || !Number.isFinite(unix)) return '-';
@@ -195,6 +200,272 @@ function pillKindOf(status: string | undefined): PillKind {
   return 'done';
 }
 
+// ─── 비-EVM 활동 소스 5종 (SDK activity-sources 트랙) ────────────────────────
+//
+// BTC 카드와 같은 원칙으로 EVM 목록과 상태·조회 경로를 전혀 공유하지 않는 별도
+// 카드다. 조회는 사용자가 버튼을 눌렀을 때만 한다 — 제3자 RPC 에 내 주소를
+// 알리는 일이라, 요청하지 않은 시점에 먼저 보내지 않는다.
+//
+// 웹 셸에는 체인 선택기가 없어 "어느 주소의 이력인가" 가 화면에 달리 나올 곳이
+// 없다. 그래서 파생한 조회 대상 주소를 카드 안에 그대로 명시한다(주소 표시 =
+// 최소한의 정직 — BTC 카드가 직전 라운드에 받은 지적의 재발 방지).
+interface SourceCardDef {
+  chainKey: ChainKey;
+  src: ActivitySourceChain;
+  /** 카드 제목. 체인 고유명사 — 번역하지 않는다 (BTC 카드의 'Bitcoin' 과 같다). */
+  label: string;
+}
+
+const SOURCE_CARDS: readonly SourceCardDef[] = [
+  { chainKey: 'solana', src: 'solana', label: 'Solana' },
+  { chainKey: 'xrp', src: 'xrp', label: 'XRP Ledger' },
+  { chainKey: 'aptos', src: 'aptos', label: 'Aptos' },
+  { chainKey: 'sui', src: 'sui', label: 'Sui' },
+  { chainKey: 'cosmos:zion', src: 'cosmos', label: 'Zion' },
+];
+
+function ChainSourceCard({ def, account }: { def: SourceCardDef; account: WalletAccount | null }) {
+  const t = useT();
+  // requested: 사용자가 조회를 눌렀는가. 누르기 전에는 네트워크를 건드리지 않는다.
+  const [requested, setRequested] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [addr, setAddr] = useState<string | null>(null);
+  const [explorer, setExplorer] = useState<Pick<ChainExplorer, 'txUrl'> | null>(null);
+  const [decimals, setDecimals] = useState<number | null>(null);
+  const [rows, setRows] = useState<ChainActivityRow[] | null>(null);
+  const [omitted, setOmitted] = useState<readonly OmittedField[]>([]);
+  const [truncated, setTruncated] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // 첫 조회와 재시도가 같은 경로다.
+  const load = useCallback(() => {
+    setRequested(true);
+    setReloadKey((k) => k + 1);
+  }, []);
+
+  useEffect(() => {
+    if (!requested || !account) return;
+    let cancelled = false;
+    setLoading(true);
+    setErr(null);
+    setRows(null);
+    void (async () => {
+      // 1) 체인 주소 파생 + spec 메타(탐색기·자릿수). raw private key 로 들여온
+      //    계정 등은 여기서 실패한다 — 미지원 안내로 떨어지고 네트워크는 0회.
+      let address: string;
+      try {
+        const { findChainSpec } = await import('@byeorin/wallet-sdk/multichain');
+        const spec = findChainSpec(def.chainKey);
+        if (!spec) throw new Error(`${def.chainKey} chain spec 없음`);
+        const chainAccount = await walletStore.getAccount(spec.build());
+        address = chainAccount.address;
+        if (cancelled) return;
+        setAddr(address);
+        setExplorer(spec.explorer);
+        setDecimals(spec.nativeDecimals);
+      } catch {
+        if (!cancelled) {
+          setErr(t('activity.unsupported_chain'));
+          setLoading(false);
+        }
+        return;
+      }
+      if (cancelled) return;
+
+      // 2) 조회. fetch 소스는 던지지 않는다 — 실패도 값으로 온다.
+      //    **import 도 try 안에 둔다** — 밖에 두면 청크 로드 실패가 unhandled
+      //    rejection 이 되어 setLoading(false) 에 못 가고 스피너가 영영 돈다.
+      try {
+        const mod = await import('@byeorin/wallet-sdk/activity-sources');
+        if (cancelled) return;
+        const fn = {
+          solana: mod.fetchSolanaActivity,
+          xrp: mod.fetchXrpActivity,
+          aptos: mod.fetchAptosActivity,
+          sui: mod.fetchSuiActivity,
+          cosmos: mod.fetchCosmosActivity,
+        }[def.src];
+        const r = await fn({ address });
+        if (cancelled) return;
+        if (r.ok) {
+          setRows(r.rows);
+          setOmitted(r.omitted);
+          setTruncated(r.truncated);
+        } else {
+          setRows([]);
+          setErr(
+            t(
+              r.failure === 'timeout' ? 'activity.src.timeout'
+              : r.failure === 'network' ? 'activity.src.network'
+              : 'activity.src.failed',
+            ),
+          );
+        }
+      } catch {
+        // 여기 오는 건 청크 로드 실패뿐이다.
+        if (!cancelled) {
+          setRows([]);
+          setErr(t('activity.src.failed'));
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [requested, account, reloadKey, def, t]);
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <strong>{def.label}</strong>
+        <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+          {t('common.refresh')}
+        </Button>
+      </div>
+      <p className="nd-muted">{t('activity.src.lead')}</p>
+      {/* 조회 대상 주소 — 이 카드가 어느 주소의 이력인지 화면에 명시한다. */}
+      {addr !== null && (
+        <p className="nd-muted">
+          {t('account.address_label')}: <span className="nd-hash">{addr}</span>
+        </p>
+      )}
+      {/* Aptos 구조 한계 — fullnode 는 보낸 거래만 준다. 상시 고지. */}
+      {def.src === 'aptos' && <p className="nd-muted">{t('activity.src.aptos.sent_only')}</p>}
+      {/* 이 소스가 구조적으로 못 주는 필드 — 지어내지 않고 화면에 적는다. */}
+      {rows !== null &&
+        omitted.map((f) => (
+          <p key={f} className="nd-muted">
+            {t(`activity.src.omit.${f}`)}
+          </p>
+        ))}
+
+      {loading && <div className="nd-muted">{t('common.loading_ellipsis')}</div>}
+
+      {!loading && err !== null && (
+        <>
+          <div className="nd-error">{err}</div>
+          <Button variant="ghost" size="sm" onClick={load}>
+            {t('activity.retry')}
+          </Button>
+        </>
+      )}
+
+      {!loading && err === null && rows && rows.length === 0 && (
+        <div className="web-activity__empty">
+          <div className="web-activity__empty-icon" aria-hidden="true">·</div>
+          <p className="nd-muted" style={{ margin: 0 }}>
+            {t('activity.empty')}
+          </p>
+        </div>
+      )}
+
+      {!loading && err === null && rows && rows.length > 0 && (
+        <>
+          <p className="nd-muted">
+            {truncated
+              ? t('activity.count_with_max', { n: rows.length })
+              : t('activity.count', { n: rows.length })}
+          </p>
+          <ul className="web-activity">
+            {rows.map((row) => {
+              // 메모는 TTL 과 동일 파이프라인 — validateMemo 로 거른 뒤 renderMemo.
+              const memo =
+                row.memo !== undefined && validateMemo(row.memo).ok ? row.memo : null;
+              const url = explorer?.txUrl(row.id) ?? null;
+              return (
+                <li key={row.id} className="web-activity__item">
+                  <div className="web-activity__expanded">
+                    <div className="web-activity__direction">
+                      {row.status === 'unknown' ? (
+                        <span className="web-pill web-pill--pending">
+                          {t('activity.src.status_unknown')}
+                        </span>
+                      ) : (
+                        <span
+                          className={`web-pill web-pill--${row.status === 'success' ? 'done' : 'fail'}`}
+                        >
+                          {row.status === 'success'
+                            ? t('activity.status_confirmed')
+                            : t('activity.status_fail')}
+                        </span>
+                      )}
+                      {row.direction !== undefined && (
+                        <span>
+                          {row.direction === 'self'
+                            ? t('activity.src.self')
+                            : row.direction === 'out'
+                              ? t('activity.outgoing')
+                              : t('activity.incoming')}
+                        </span>
+                      )}
+                      {/* 시간이 없으면 0으로 지어내지 않는다 — 블록 번호로, 그것도
+                          없으면 식별자만 남는다. */}
+                      {row.timestamp !== undefined ? (
+                        <span className="nd-muted">{fmtTime(row.timestamp)}</span>
+                      ) : row.blockNumber !== undefined ? (
+                        <span className="nd-muted">
+                          {t('activity.block_number', { n: Number(row.blockNumber) })}
+                        </span>
+                      ) : null}
+                    </div>
+                    {row.counterparty !== undefined && (
+                      <div className="web-activity__counterparty" title={row.counterparty}>
+                        {shortAddr(row.counterparty)}
+                      </div>
+                    )}
+                    {/* 금액은 소스가 판별한 네이티브 금액이 있을 때만 그린다 —
+                        없으면 금액 줄 자체를 안 그린다. */}
+                    {row.amount !== undefined && row.symbol !== undefined && decimals !== null && (
+                      <div className="web-activity__amount">
+                        <span>
+                          {row.direction === 'out' ? '-' : row.direction === 'in' ? '+' : ''}
+                          <AmountDisplay
+                            value={row.amount}
+                            decimals={decimals}
+                            symbol={row.symbol}
+                            maxDecimals={4}
+                            size="sm"
+                          />
+                        </span>
+                      </div>
+                    )}
+                    <div>
+                      <strong>{t('activity.tx_hash_label')}: </strong>
+                      <span className="nd-hash">{row.id}</span>
+                    </div>
+                    {url !== null && (
+                      <div>
+                        <a href={url} target="_blank" rel="noreferrer">
+                          {t('activity.view_in_explorer')}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                  {memo !== null && (
+                    <div
+                      className={`web-activity__memo${
+                        memoHasLink(memo) ? ' web-activity__memo--has-link' : ''
+                      }`}
+                    >
+                      <span className="web-activity__memo-label">
+                        {t('activity.memo_label')}
+                      </span>{' '}
+                      <span className="web-activity__memo-text">{renderMemo(memo)}</span>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+    </Card>
+  );
+}
+
 export function Activity({ onBack }: Props) {
   const t = useT();
   const [account, setAccount] = useState<WalletAccount | null>(null);
@@ -203,6 +474,24 @@ export function Activity({ onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  // TTL 탐색기 — 예전의 'https://scan.ttl1.top' 하드코딩 대신 SDK evmExplorer(TTL_CHAIN).
+  // multichain 은 체인 어댑터 8종을 끄는 무거운 모듈이라 정적 import 하지 않는다
+  // (BTC 조회 경로와 같은 이유). 청크가 오기 전에는 링크만 잠시 안 그린다.
+  const [ttlExplorer, setTtlExplorer] = useState<Pick<ChainExplorer, 'txUrl'> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void import('@byeorin/wallet-sdk/multichain')
+      .then((m) => {
+        if (!cancelled) setTtlExplorer(m.evmExplorer(TTL_CHAIN));
+      })
+      .catch(() => {
+        // 청크 로드 실패 — 탐색기 링크만 못 그린다. 목록 자체는 영향 없다.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ── BTC 이력 (Electrum 트랙) — 위 EVM 상태와 공유하지 않는다 ──
   // btcRequested: 사용자가 조회를 눌렀는가. 누르기 전에는 네트워크를 건드리지 않는다.
@@ -434,15 +723,16 @@ export function Activity({ onBack }: Props) {
                         <strong>{t('activity.tx_hash_label')}: </strong>
                         <span className="nd-hash">{it.hash}</span>
                       </div>
-                      <div>
-                        <a
-                          href={`${EXPLORER}/tx/${it.hash}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {t('activity.view_in_explorer')}
-                        </a>
-                      </div>
+                      {(() => {
+                        const url = ttlExplorer?.txUrl(it.hash) ?? null;
+                        return url === null ? null : (
+                          <div>
+                            <a href={url} target="_blank" rel="noreferrer">
+                              {t('activity.view_in_explorer')}
+                            </a>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </li>
@@ -512,6 +802,15 @@ export function Activity({ onBack }: Props) {
           </ul>
         )}
       </Card>
+
+      {/*
+        비-EVM 활동 5종 — SDK activity-sources 트랙. BTC 카드처럼 각 카드가
+        자기 상태·조회 경로를 따로 가진다. 체인이 원래 주는 필드만 그리고,
+        못 주는 필드는 카드 위 고지로 적는다.
+      */}
+      {SOURCE_CARDS.map((def) => (
+        <ChainSourceCard key={def.chainKey} def={def} account={account} />
+      ))}
 
       <Button variant="ghost" className="nd-button--block" onClick={onBack}>
         {t('common.back')}

@@ -3,14 +3,15 @@
 // vitest.config.ts 가 `src/**/*.test.ts` 만 include 하고 environment 가 'node' 라
 // 렌더 테스트(jsdom/testing-library)는 이 워크스페이스에 없다. 그래서 화면 로직
 // 중 **판정에 해당하는 부분**을 순수 함수로 뽑아 여기서 검증한다:
-// 방향 판정, 축약, 금액 포맷, 상대 시간 구간, TTL 전용 탐색기 링크.
+// 방향 판정, 축약, 금액 포맷, 상대 시간 구간.
+// (탐색기 링크 판정은 TTL 하드코딩 삭제로 activity-links.ts 로 옮겨갔다 —
+// 검증도 entrypoints/popup/lib/activity-links.test.ts 로 이동.)
 
 import { describe, expect, it } from 'vitest';
 import type { Activity } from '@byeorin/wallet-sdk';
 import {
   absoluteTime,
   activityMemo,
-  explorerTxUrl,
   formatAmount,
   isEvmChainKey,
   isOutgoing,
@@ -44,23 +45,6 @@ describe('isEvmChainKey', () => {
     expect(isEvmChainKey('cosmos:zion')).toBe(false);
     expect(isEvmChainKey('solana:mainnet')).toBe(false);
     expect(isEvmChainKey('')).toBe(false);
-  });
-});
-
-describe('explorerTxUrl', () => {
-  it('TTL 에서만 scan.ttl1.top 링크를 만든다', () => {
-    expect(explorerTxUrl('evm:ttl', '0xabc')).toBe('https://scan.ttl1.top/tx/0xabc');
-  });
-
-  it('다른 EVM 체인에는 TTL 탐색기를 붙이지 않는다', () => {
-    expect(explorerTxUrl('evm:ethereum', '0xabc')).toBeNull();
-    expect(explorerTxUrl('evm:polygon', '0xabc')).toBeNull();
-    expect(explorerTxUrl('cosmos:zion', '0xabc')).toBeNull();
-  });
-
-  it('해시가 비면 링크를 안 만든다 (RPC fallback 의 0x 자리표시)', () => {
-    expect(explorerTxUrl('evm:ttl', '0x')).toBeNull();
-    expect(explorerTxUrl('evm:ttl', '')).toBeNull();
   });
 });
 

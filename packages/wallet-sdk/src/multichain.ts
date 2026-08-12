@@ -12,6 +12,7 @@
 // 어카운트 도출/잔액/송금은 여전히 ChainAdapter / Wallet 의 책임 — 본 모듈은
 // "어떤 어댑터를 어떻게 만드는가" 만 안다.
 
+import type { Chain as ViemChain } from 'viem/chains';
 import type { ChainAdapter } from './chains/chain.js';
 import { EvmAdapter } from './chains/evm.js';
 import { EVM_CHAINS, type EvmChainKey } from './chains/registry.js';
@@ -64,6 +65,18 @@ export type ChainKey =
   | 'sui'
   | `cosmos:${string}`;
 
+/** 체인 탐색기. URL 은 템플릿이 아니라 함수다 — 체인마다 경로 규칙이 다르다. */
+export interface ChainExplorer {
+  /** 표시 이름 ('TTL Scan', 'Etherscan', 'Mempool.space' ...). */
+  name: string;
+  /** 홈 URL (화면에 안 씀, 출처 기록용). */
+  baseUrl: string;
+  /** tx 해시/서명/digest → URL. 빈 해시·'0x' 등 못 만드는 입력이면 null. */
+  txUrl(hash: string): string | null;
+  /** 주소 → URL. 못 만드는 입력이면 null. */
+  addressUrl(address: string): string | null;
+}
+
 /**
  * 한 체인의 "이름 + 메타 + 어댑터 생성법". UI 는 ChainSpec 배열을 받아 셀렉터를
  * 그리고, 사용자가 고른 체인의 `build()` 로 어댑터를 만든다.
@@ -77,9 +90,151 @@ export interface ChainSpec {
   nativeSymbol: string;
   /** 네이티브 자산 decimals — 잔액(bigint base unit) → 표시값 변환용. */
   nativeDecimals: number;
+  /**
+   * 탐색기. 실측(2026-08-12)에서 죽었거나 미확인인 체인은 null — 죽은 링크를
+   * 만들지 않는다. (avalanche: snowtrace.io 가 사이트 전체 403.)
+   */
+  explorer: ChainExplorer | null;
   /** 새 ChainAdapter 인스턴스를 만든다. 호출마다 새 인스턴스. */
   build(): ChainAdapter;
 }
+
+// ─── 탐색기 표 ────────────────────────────────────────────────────────────────
+// href 전용 — 앱이 이 URL 로 fetch 하지 않는다. 사용자 클릭 링크로만 쓴다.
+// 경로는 전부 2026-08-12 GET 실측(공개 RPC 최신 블록의 실존 tx/주소 표본)으로
+// 확정된 것만 넣었다. 못 확인한 경로는 null 을 반환한다.
+
+/**
+ * viem chain 의 blockExplorers.default 에서 etherscan 계열 공통 경로
+ * (`/tx/{hash}` · `/address/{addr}`) 탐색기를 만든다. blockExplorers 가 없으면
+ * null. txUrl 은 빈 해시·'0x' 에 null (기존 셸 explorerTxUrl 규칙 승계).
+ *
+ * TTL Scan 의 /address 라우트는 SPA 라 HTTP 코드로 판정 불가 — 라우터 코드
+ * (scan.ttl1.top/js/app.js: `navigate('/address/' + ...)`, `api('/address/' + addr)`)
+ * 로 실재 라우트임을 확인했다.
+ */
+export function evmExplorer(chain: ViemChain): ChainExplorer | null {
+  const def = chain.blockExplorers?.default;
+  if (!def) return null;
+  const base = def.url.replace(/\/+$/, '');
+  return {
+    name: def.name,
+    baseUrl: base,
+    txUrl: (hash) => (!hash || hash === '0x' ? null : `${base}/tx/${hash}`),
+    addressUrl: (address) => (address ? `${base}/address/${address}` : null),
+  };
+}
+
+// EVM 실측 예외 (2026-08-12 curl, 브라우저 UA 재시도 포함):
+//   avalanche — snowtrace.io 루트까지 403. 산 링크를 못 확인 → 탐색기 자체 없음.
+//   arbitrum  — /tx 는 200, /address 는 실존 EOA·시스템주소 전부 403(봇차단 추정,
+//               브라우저 실사용 미확인) → addressUrl 만 막는다.
+const EVM_EXPLORER_UNAVAILABLE: ReadonlySet<EvmChainKey> = new Set(['avalanche']);
+const EVM_ADDRESS_URL_UNAVAILABLE: ReadonlySet<EvmChainKey> = new Set(['arbitrum']);
+
+/** EVM_CHAINS 의 키 하나에 대한 탐색기 — 실측 예외를 적용한 최종형. */
+function evmExplorerFor(key: EvmChainKey): ChainExplorer | null {
+  if (EVM_EXPLORER_UNAVAILABLE.has(key)) return null;
+  const ex = evmExplorer(EVM_CHAINS[key]);
+  if (ex === null) return null;
+  if (EVM_ADDRESS_URL_UNAVAILABLE.has(key)) return { ...ex, addressUrl: () => null };
+  return ex;
+}
+
+// 비-EVM 7종. 경로·상태코드는 실측표(2026-08 실존 표본 200 확인) 그대로.
+const NON_EVM_EXPLORERS: Record<
+  'btc' | 'xrp' | 'solana' | 'tron' | 'ton' | 'aptos' | 'sui',
+  ChainExplorer
+> = {
+  btc: {
+    name: 'Mempool.space',
+    baseUrl: 'https://mempool.space',
+    txUrl: (h) => (h ? `https://mempool.space/tx/${h}` : null),
+    addressUrl: (a) => (a ? `https://mempool.space/address/${a}` : null),
+  },
+  xrp: {
+    // 해시는 대문자 hex 64자 — xrplcluster.com ledger 응답 그대로.
+    name: 'XRPL Explorer',
+    baseUrl: 'https://livenet.xrpl.org',
+    txUrl: (h) =>
+      /^[0-9a-fA-F]{64}$/.test(h)
+        ? `https://livenet.xrpl.org/transactions/${h.toUpperCase()}`
+        : null,
+    addressUrl: (a) => (a ? `https://livenet.xrpl.org/accounts/${a}` : null),
+  },
+  solana: {
+    name: 'Solana Explorer',
+    baseUrl: 'https://explorer.solana.com',
+    txUrl: (sig) => (sig ? `https://explorer.solana.com/tx/${sig}` : null),
+    addressUrl: (a) => (a ? `https://explorer.solana.com/address/${a}` : null),
+  },
+  tron: {
+    // # fragment 라우팅 — 서버는 경로 무관 동일 셸을 준다.
+    name: 'Tronscan',
+    baseUrl: 'https://tronscan.org',
+    txUrl: (h) => (h ? `https://tronscan.org/#/transaction/${h}` : null),
+    addressUrl: (a) => (a ? `https://tronscan.org/#/address/${a}` : null),
+  },
+  ton: {
+    // tonviewer 경로는 hex 해시다. toncenter getTransactions 의
+    // transaction_id.hash 는 base64 — hex 로 변환해서 넣어야 한다.
+    name: 'Tonviewer',
+    baseUrl: 'https://tonviewer.com',
+    txUrl: (h) => {
+      const hex = tonTxHashToHex(h);
+      return hex === null ? null : `https://tonviewer.com/transaction/${hex}`;
+    },
+    addressUrl: (a) => (a ? `https://tonviewer.com/${a}` : null),
+  },
+  aptos: {
+    name: 'Aptos Explorer',
+    baseUrl: 'https://explorer.aptoslabs.com',
+    txUrl: (h) =>
+      h ? `https://explorer.aptoslabs.com/txn/${h}?network=mainnet` : null,
+    addressUrl: (a) =>
+      a ? `https://explorer.aptoslabs.com/account/${a}?network=mainnet` : null,
+  },
+  sui: {
+    name: 'Suiscan',
+    baseUrl: 'https://suiscan.xyz',
+    txUrl: (d) => (d ? `https://suiscan.xyz/mainnet/tx/${d}` : null),
+    addressUrl: (a) => (a ? `https://suiscan.xyz/mainnet/account/${a}` : null),
+  },
+};
+
+/**
+ * TON tx 해시 → hex 64자. 이미 hex 면 소문자 정규화, base64(43~44자, toncenter
+ * 응답 형식)면 디코드해 32바이트 hex 로. 둘 다 아니면 null.
+ */
+function tonTxHashToHex(hash: string): string | null {
+  if (/^[0-9a-fA-F]{64}$/.test(hash)) return hash.toLowerCase();
+  if (!/^[0-9a-zA-Z+/_-]{43}={0,2}$/.test(hash)) return null;
+  try {
+    // base64url 변형(-,_)도 toncenter v3 에서 온다 — 표준형으로 바꿔 디코드.
+    const bin = atob(hash.replace(/-/g, '+').replace(/_/g, '/'));
+    if (bin.length !== 32) return null;
+    let hex = '';
+    for (let i = 0; i < bin.length; i++) {
+      hex += bin.charCodeAt(i).toString(16).padStart(2, '0');
+    }
+    return hex;
+  } catch {
+    return null;
+  }
+}
+
+// ZION 탐색기 — 실측(2026-08-12): https://zion1.top/explorer/tx/{대문자 hex 64자}
+// 는 실존 해시와 가짜 해시의 응답 본문이 다르다(서버가 tx 별 렌더링) → 실재 라우트.
+// /explorer/address·/explorer/account 는 404 — 주소 페이지가 없다 → addressUrl null.
+const ZION_EXPLORER: ChainExplorer = {
+  name: 'ZION Explorer',
+  baseUrl: 'https://zion1.top/explorer',
+  txUrl: (h) =>
+    /^[0-9a-fA-F]{64}$/.test(h)
+      ? `https://zion1.top/explorer/tx/${h.toUpperCase()}`
+      : null,
+  addressUrl: () => null,
+};
 
 // 비-EVM 단일 인스턴스 체인의 네이티브 자산 메타. 모두 널리 알려진 표준값.
 //   BTC satoshi=1e8 · XRP drops=1e6 · SOL lamports=1e9 · TRX sun=1e6
@@ -119,6 +274,8 @@ export function cosmosChainSpec(
     curve: 'secp256k1',
     nativeSymbol: opts.nativeSymbol,
     nativeDecimals: opts.decimals ?? 6,
+    // 외부 Cosmos 체인은 탐색기를 지정받지 않는다 — 링크 미표시.
+    explorer: null,
     build: () => new CosmosAdapter(opts),
   };
 }
@@ -167,6 +324,7 @@ export const ZION_CHAIN_SPEC: ChainSpec = {
   curve: 'secp256k1',
   nativeSymbol: 'kWR',
   nativeDecimals: 6,
+  explorer: ZION_EXPLORER,
   build: () => new CosmosAdapter(ZION_ADAPTER_OPTIONS),
 };
 
@@ -191,6 +349,7 @@ export const DEFAULT_CHAINS: readonly ChainSpec[] = [
     curve: 'secp256k1',
     nativeSymbol: EVM_CHAINS[k].nativeCurrency.symbol,
     nativeDecimals: EVM_CHAINS[k].nativeCurrency.decimals,
+    explorer: evmExplorerFor(k),
     build: () => new EvmAdapter({
       chain: EVM_CHAINS[k],
       ...(EVM_RPC_OVERRIDES[k] !== undefined ? { rpcUrl: EVM_RPC_OVERRIDES[k] } : {}),
@@ -202,6 +361,7 @@ export const DEFAULT_CHAINS: readonly ChainSpec[] = [
     curve: 'secp256k1',
     nativeSymbol: NON_EVM_NATIVE.btc.symbol,
     nativeDecimals: NON_EVM_NATIVE.btc.decimals,
+    explorer: NON_EVM_EXPLORERS.btc,
     build: () => new BtcAdapter(),
   },
   {
@@ -210,6 +370,7 @@ export const DEFAULT_CHAINS: readonly ChainSpec[] = [
     curve: 'secp256k1',
     nativeSymbol: NON_EVM_NATIVE.xrp.symbol,
     nativeDecimals: NON_EVM_NATIVE.xrp.decimals,
+    explorer: NON_EVM_EXPLORERS.xrp,
     build: () => new XrpAdapter(),
   },
   {
@@ -218,6 +379,7 @@ export const DEFAULT_CHAINS: readonly ChainSpec[] = [
     curve: 'ed25519',
     nativeSymbol: NON_EVM_NATIVE.solana.symbol,
     nativeDecimals: NON_EVM_NATIVE.solana.decimals,
+    explorer: NON_EVM_EXPLORERS.solana,
     // 무인자 기본값 = SOLANA_MAINNET_RPC_URLS (publicnode → OnFinality → dRPC).
     // 읽기만 그 순서로 fallback 하고, 송금은 0번(publicnode) 고정이다 — blockhash 를
     // A 에서 받아 B 로 보내면 tx 가 깨진다.
@@ -233,6 +395,7 @@ export const DEFAULT_CHAINS: readonly ChainSpec[] = [
     curve: 'secp256k1',
     nativeSymbol: NON_EVM_NATIVE.tron.symbol,
     nativeDecimals: NON_EVM_NATIVE.tron.decimals,
+    explorer: NON_EVM_EXPLORERS.tron,
     build: () => new TronAdapter(),
   },
   {
@@ -241,6 +404,7 @@ export const DEFAULT_CHAINS: readonly ChainSpec[] = [
     curve: 'ed25519',
     nativeSymbol: NON_EVM_NATIVE.ton.symbol,
     nativeDecimals: NON_EVM_NATIVE.ton.decimals,
+    explorer: NON_EVM_EXPLORERS.ton,
     build: () => new TonAdapter(),
   },
   {
@@ -249,6 +413,7 @@ export const DEFAULT_CHAINS: readonly ChainSpec[] = [
     curve: 'ed25519',
     nativeSymbol: NON_EVM_NATIVE.aptos.symbol,
     nativeDecimals: NON_EVM_NATIVE.aptos.decimals,
+    explorer: NON_EVM_EXPLORERS.aptos,
     build: () => new AptosAdapter(),
   },
   {
@@ -257,6 +422,7 @@ export const DEFAULT_CHAINS: readonly ChainSpec[] = [
     curve: 'ed25519',
     nativeSymbol: NON_EVM_NATIVE.sui.symbol,
     nativeDecimals: NON_EVM_NATIVE.sui.decimals,
+    explorer: NON_EVM_EXPLORERS.sui,
     build: () => new SuiAdapter(),
   },
   ZION_CHAIN_SPEC,

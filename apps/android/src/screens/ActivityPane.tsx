@@ -6,7 +6,7 @@
 //
 //   1행: [보냄/받음] ······················· 상대 시간(절대 시간은 title)
 //   2행: 상대방 주소(축약) ················· ±금액 심볼
-//   3행: native/토큰 구분 · 상태 ·········· (TTL 만) 탐색기 링크
+//   3행: native/토큰 구분 · 상태 ·········· 탐색기 링크(spec.explorer 가 주면)
 //
 // 조회는 SDK 의 ActivityLog 를 그대로 쓴다. 재구현하지 않는다.
 // ActivityLog 는 루트 배럴(@byeorin/wallet-sdk)에서만 export 되는데, 루트 배럴은
@@ -26,6 +26,14 @@ import { useT } from '@byeorin/i18n/react';
 // BTC 이력은 셸 모듈 하나만 본다. 그 모듈이 SDK 를 dynamic import 로 감싸므로
 // 여기서 타입만 정적으로 가져와도 초기 번들에는 아무것도 실리지 않는다.
 import type { BtcActivityRow } from '../lib/btc-history-source.js';
+// 활동 소스 5종(solana/xrp/aptos/sui/cosmos:zion) — 값은 dynamic import,
+// 타입만 정적. 탐색기 타입도 마찬가지로 타입만 가져온다(런타임 코드 0).
+import type {
+  ActivitySourceChain,
+  ChainActivityRow,
+  OmittedField,
+} from '@byeorin/wallet-sdk/activity-sources';
+import type { ChainExplorer } from '@byeorin/wallet-sdk/multichain';
 
 // ────────── 상수 ──────────
 
@@ -45,13 +53,18 @@ const LIMIT = 20;
 // 은 "없는 것보다 낫다" 수준으로만 얕게 잡는다.
 const FALLBACK_LOOKBACK = 60;
 
-// TTL 탐색기. App.tsx 의 isTtl 규칙과 동일 — evm:ttl 에서만 노출한다.
-// (scan.ttl1.top 은 TTL 전용이라 다른 EVM 체인 해시를 붙이면 404 가 난다.)
-const TTL_CHAIN_KEY = 'evm:ttl';
-const TTL_EXPLORER = 'https://scan.ttl1.top';
-
 // BTC 체인 키 — multichain.ts:200 의 spec key 와 같은 문자열이어야 한다.
 const BTC_CHAIN_KEY = 'btc';
+
+// 체인키 → 활동 소스 판정. cosmos:zion 만 cosmos 소스에 매핑한다.
+// (탐색기 링크는 여기 없다 — 그건 spec.explorer 가 체인마다 준다.)
+const SOURCED: Record<string, ActivitySourceChain> = {
+  solana: 'solana',
+  xrp: 'xrp',
+  aptos: 'aptos',
+  sui: 'sui',
+  'cosmos:zion': 'cosmos',
+};
 
 // 온체인 보충 조회의 고유 컨트랙트 상한. 활동 20건이 전부 다른 토큰이면 주소당
 // 최대 3콜(symbol/decimals/balanceOf)이라 공개 RPC rate limit 을 친다.
@@ -62,13 +75,6 @@ const ONCHAIN_META_LIMIT = 8;
 /** 활성 체인이 EVM 인지. App.tsx 의 isEvm 과 같은 규칙. */
 export function isEvmChainKey(chainKey: string): boolean {
   return chainKey.startsWith('evm:');
-}
-
-/** TTL 탐색기 tx URL. TTL 이 아니면 null — 다른 체인에 TTL 링크를 붙이지 않는다. */
-export function explorerTxUrl(chainKey: string, hash: string): string | null {
-  if (chainKey !== TTL_CHAIN_KEY) return null;
-  if (!hash || hash === '0x') return null;
-  return `${TTL_EXPLORER}/tx/${hash}`;
 }
 
 /**
@@ -85,6 +91,26 @@ function readMemo(it: Activity): string | null {
   const raw = (it as Partial<{ memo: unknown }>).memo;
   if (typeof raw !== 'string') return null;
   return validateMemo(raw).ok ? raw : null;
+}
+
+/**
+ * 활동 소스 행의 메모 — readMemo 와 같은 규칙(validateMemo)로 거른다.
+ * 소스가 memo 를 안 주면(undefined) null. 렌더는 TTL 메모와 같은 파이프라인.
+ */
+function readSourceMemo(raw: string | undefined): string | null {
+  if (typeof raw !== 'string' || raw.length === 0) return null;
+  return validateMemo(raw).ok ? raw : null;
+}
+
+/**
+ * 활동 소스 행의 상태 → i18n 키. success/failed 는 기존 activity.status_* 를
+ * 재사용하고, 'unknown'(소스가 판정 필드를 못 받은 경우)만 전용 키를 쓴다 —
+ * 모르는 것을 '확정'으로 지어내지 않는다.
+ */
+export function srcStatusKey(status: ChainActivityRow['status']): string {
+  if (status === 'failed') return 'activity.status_failed';
+  if (status === 'success') return 'activity.status_confirmed';
+  return 'activity.src.status_unknown';
 }
 
 /** 메모 안 URL 의 <a> 클래스. 셸마다 이 상수만 다르다. */
@@ -298,6 +324,16 @@ export interface ActivityPaneProps {
    * address 는 기본 어댑터(EVM) 기준이라 BTC 조회에 쓸 수 없어서 따로 받는다.
    */
   btcAddress?: string | null;
+  /**
+   * 활동 소스 5종(solana/xrp/aptos/sui/cosmos:zion) 활성 시의 체인 주소.
+   * btcAddress 와 같은 이유로 호출부가 활성 체인 어댑터로 도출해 넘긴다.
+   */
+  chainAddress?: string | null;
+  /**
+   * 활성 체인의 탐색기(ChainSpec.explorer). null 이면 링크를 그리지 않는다 —
+   * 탐색기가 없는 체인(cosmos:zion)과 multichain 로드 전이 여기 해당한다.
+   */
+  explorer: Pick<ChainExplorer, 'txUrl'> | null;
   /** native 금액 표기용. */
   nativeSymbol: string;
   nativeDecimals: number;
@@ -311,6 +347,8 @@ export function ActivityPane({
   adapter,
   chainKey,
   btcAddress = null,
+  chainAddress = null,
+  explorer,
   nativeSymbol,
   nativeDecimals,
   tokens,
@@ -333,6 +371,14 @@ export function ActivityPane({
   const [btcRows, setBtcRows] = useState<BtcActivityRow[] | null>(null);
   const [btcLoading, setBtcLoading] = useState(false);
   const [btcErr, setBtcErr] = useState<string | null>(null);
+
+  // 활동 소스 5종(solana/xrp/aptos/sui/cosmos:zion) 상태 — EVM·BTC 상태와
+  // **공유하지 않는다**. 이유는 BTC 와 같다: 행 모양도 조회 수단도 다르다.
+  const srcChain = SOURCED[chainKey] ?? null;
+  const [srcRows, setSrcRows] = useState<ChainActivityRow[] | null>(null);
+  const [srcOmitted, setSrcOmitted] = useState<readonly OmittedField[]>([]);
+  const [srcLoading, setSrcLoading] = useState(false);
+  const [srcErr, setSrcErr] = useState<string | null>(null);
 
   // 조회 — App.tsx 의 잔액 로딩과 같은 패턴 (cancelled 플래그로 race 차단).
   // 체인/주소를 빠르게 바꾸면 늦게 도착한 응답이 최신 상태를 덮어쓸 수 있다.
@@ -458,11 +504,73 @@ export function ActivityPane({
     };
   }, [isBtc, btcAddress, reloadKey, t]);
 
+  // 활동 소스 5종 — SDK 의 activity-sources 서브패스를 dynamic import 로.
+  // fetch 계열 소스는 throw 하지 않는다(실패는 값) — 여기 catch 로 오는 건
+  // 청크 로드 실패뿐이다. BTC 경로와 같은 이유로 import 도 try 안에 둔다.
+  useEffect(() => {
+    if (!srcChain || !chainAddress) {
+      setSrcRows(null);
+      setSrcOmitted([]);
+      setSrcErr(null);
+      setSrcLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSrcLoading(true);
+    setSrcErr(null);
+    setSrcRows(null);
+    // 직전 체인의 고지가 새 체인 로딩 중에 남아 보이지 않도록 비운다.
+    setSrcOmitted([]);
+    setNow(Date.now());
+    void (async () => {
+      try {
+        const mod = await import('@byeorin/wallet-sdk/activity-sources');
+        if (cancelled) return;
+        const fn = {
+          solana: mod.fetchSolanaActivity,
+          xrp: mod.fetchXrpActivity,
+          aptos: mod.fetchAptosActivity,
+          sui: mod.fetchSuiActivity,
+          cosmos: mod.fetchCosmosActivity,
+        }[srcChain];
+        const r = await fn({ address: chainAddress, limit: LIMIT });
+        if (cancelled) return;
+        if (r.ok) {
+          setSrcRows(r.rows);
+          setSrcOmitted(r.omitted);
+        } else {
+          setSrcRows([]);
+          setSrcErr(
+            t(
+              r.failure === 'timeout'
+                ? 'activity.src.timeout'
+                : r.failure === 'network'
+                  ? 'activity.src.network'
+                  : 'activity.src.failed',
+            ),
+          );
+        }
+      } catch (e) {
+        // 소스 함수는 던지지 않는다 — 여기 오는 건 청크 로드 실패뿐이다.
+        if (!cancelled) {
+          setSrcRows([]);
+          setSrcErr(localizeShellError(t, e, t('activity.src.failed')));
+        }
+      } finally {
+        if (!cancelled) setSrcLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [srcChain, chainAddress, reloadKey, t]);
+
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
-  // 비-EVM·비-BTC 체인 — ActivityLog 는 EVM 전용, Electrum 은 BTC 전용이므로
-  // 조회 자체를 시도하지 않는다. (BTC 주소를 못 뽑은 경우도 여기로 떨어진다.)
-  if (!isEvm && !(isBtc && btcAddress)) {
+  // 활동 조회 수단이 없는 체인(tron/ton — 제3자 인덱서 필요, 정책 미결정)과
+  // 주소를 못 뽑은 경우 — 조회 자체를 시도하지 않고 그 사실을 화면에 적는다.
+  const isSourced = srcChain !== null && !!chainAddress;
+  if (!isEvm && !(isBtc && btcAddress) && !isSourced) {
     return (
       <section className="card">
         <h2 className="create-step__title">{t('activity.title')}</h2>
@@ -540,10 +648,174 @@ export function ActivityPane({
                         : t('activity.btc.mempool')}
                     </span>
                   </span>
-                  {/* 탐색기 링크 없음 — explorerTxUrl 은 TTL 전용이다. */}
+                  {/* 탐색기 링크 — spec.explorer(mempool.space)가 만들어 줄 때만. */}
+                  {(() => {
+                    const btcUrl = explorer?.txUrl(row.txid) ?? null;
+                    return btcUrl ? (
+                      <a
+                        href={btcUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="activity-row__link small"
+                      >
+                        {t('activity.view_in_explorer')}
+                      </a>
+                    ) : null;
+                  })()}
                 </div>
               </li>
             ))}
+          </ul>
+        )}
+
+        <button className="btn-ghost" onClick={onBack}>
+          {t('common.back')}
+        </button>
+      </section>
+    );
+  }
+
+  // 활동 소스 5종 — 각 체인 공개 RPC 가 **원래 주는 것만** 그린다.
+  // 소스가 구조적으로 못 주는 필드(omitted)는 지어내지 않고 한 줄씩 고지한다.
+  if (isSourced) {
+    return (
+      <section className="card">
+        <h2 className="create-step__title">{t('activity.title')}</h2>
+        <p className="create-step__lead">{t('activity.src.lead')}</p>
+        {/* aptos 구조 한계 — fullnode 는 보낸 tx 만 준다. 항상 고지. */}
+        {chainKey === 'aptos' && (
+          <p className="muted small">{t('activity.src.aptos.sent_only')}</p>
+        )}
+        {srcOmitted.map((f) => (
+          <p key={f} className="muted small">
+            {t(`activity.src.omit.${f}`)}
+          </p>
+        ))}
+
+        <div className="activity-head">
+          <span className="muted small">
+            {srcLoading
+              ? t('common.loading_ellipsis')
+              : t('activity.count_with_max', { n: srcRows?.length ?? 0 })}
+          </span>
+          <button className="btn-ghost btn-sm" onClick={reload} disabled={srcLoading}>
+            {t('common.refresh')}
+          </button>
+        </div>
+
+        {srcErr && (
+          <>
+            <p className="error small" role="alert">
+              {srcErr}
+            </p>
+            <button className="btn-primary btn-sm" onClick={reload} disabled={srcLoading}>
+              {t('activity.retry')}
+            </button>
+          </>
+        )}
+
+        {srcLoading && <p className="muted small">{t('common.loading_ellipsis')}</p>}
+
+        {!srcLoading && !srcErr && srcRows !== null && srcRows.length === 0 && (
+          <p className="empty-state">{t('activity.empty')}</p>
+        )}
+
+        {!srcLoading && srcRows !== null && srcRows.length > 0 && (
+          <ul className="activity-list">
+            {srcRows.map((row) => {
+              const rel = row.timestamp !== undefined ? relativeParts(row.timestamp, now) : null;
+              const abs = row.timestamp !== undefined ? absoluteTime(row.timestamp) : null;
+              const url = explorer?.txUrl(row.id) ?? null;
+              const memo = readSourceMemo(row.memo);
+              return (
+                <li key={row.id} className="activity-row">
+                  <div className="activity-row__line">
+                    {/* 방향 — 소스가 판정한 경우에만. 모르면 안 그린다. */}
+                    {row.direction !== undefined && (
+                      <span
+                        className={`activity-row__dir activity-row__dir--${row.direction === 'out' ? 'out' : 'in'}`}
+                      >
+                        {row.direction === 'out'
+                          ? t('activity.outgoing')
+                          : row.direction === 'in'
+                            ? t('activity.incoming')
+                            : t('activity.src.self')}
+                      </span>
+                    )}
+                    <span className="activity-row__time muted small" title={abs ?? undefined}>
+                      {rel
+                        ? t(rel.key, { n: rel.n })
+                        : row.blockNumber !== undefined
+                          ? t('activity.block_number', { n: row.blockNumber.toString() })
+                          : ''}
+                    </span>
+                  </div>
+
+                  <div className="activity-row__line">
+                    <span
+                      className="activity-row__peer addr"
+                      title={row.counterparty ?? row.id}
+                    >
+                      {row.counterparty !== undefined
+                        ? shortenHex(row.counterparty)
+                        : shortenHex(row.id)}
+                    </span>
+                    {/* 금액 — 소스가 판별한 경우에만 그린다. 없으면 줄 자체가 없다. */}
+                    {row.amount !== undefined && (
+                      <span
+                        className={`activity-row__amount activity-row__amount--${row.direction === 'out' ? 'out' : 'in'}`}
+                      >
+                        {row.direction === 'out' ? '−' : row.direction === 'in' ? '+' : ''}
+                        {formatAmount(row.amount, nativeDecimals)}{' '}
+                        <span className="activity-row__symbol">
+                          {row.symbol ?? nativeSymbol}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 메모 — TTL 과 동일 파이프라인(validateMemo → renderMemo). */}
+                  {memo !== null && (
+                    <div className="activity-row__line activity-row__line--memo">
+                      <span className="muted small">{t('activity.memo_label')}</span>
+                      <span
+                        className={`activity-row__memo small${memoHasLink(memo) ? ' activity-row__memo--has-link' : ''}`}
+                      >
+                        {renderMemo(memo)}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="activity-row__line activity-row__line--foot">
+                    <span className="muted small" title={row.id}>
+                      {shortenHex(row.id)}
+                      {' · '}
+                      <span
+                        className={
+                          row.status === 'failed'
+                            ? 'activity-row__status activity-row__status--failed'
+                            : row.status === 'unknown'
+                              ? 'activity-row__status activity-row__status--pending'
+                              : 'activity-row__status'
+                        }
+                      >
+                        {t(srcStatusKey(row.status))}
+                      </span>
+                    </span>
+                    {url && (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="activity-row__link small"
+                      >
+                        {t('activity.view_in_explorer')}
+                      </a>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
 
@@ -611,7 +883,7 @@ export function ActivityPane({
             const symbol = it.token
               ? (meta?.symbol ?? shortenHex(it.token))
               : nativeSymbol;
-            const url = explorerTxUrl(chainKey, it.hash);
+            const url = explorer?.txUrl(it.hash) ?? null;
             const memo = readMemo(it);
             return (
               // RPC fallback 경로에서는 같은 hash 가 native/토큰 양쪽으로 잡힐 수
@@ -684,7 +956,7 @@ export function ActivityPane({
                       {t(statusKey(it.status))}
                     </span>
                   </span>
-                  {/* TTL 에서만 탐색기 링크 — App.tsx 의 isTtl 규칙과 동일. */}
+                  {/* 탐색기 링크 — spec.explorer 가 URL 을 만들어 줄 때만. */}
                   {url && (
                     <a
                       href={url}

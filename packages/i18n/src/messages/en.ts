@@ -232,6 +232,23 @@ export const en: Catalog = {
   'activity.btc.relay_down': 'Could not reach the Bitcoin server.',
   'activity.btc.failed': 'Could not load Bitcoin history.',
   'activity.btc.mempool': 'Pending',
+
+  // Non-EVM activity sources (solana·xrp·aptos·sui·cosmos) — 5 chains share these keys.
+  // Fields a source structurally cannot provide are never invented; we say so on screen.
+  'activity.src.lead': 'Transaction history on this chain.',
+  'activity.src.failed': 'Could not load history.',
+  'activity.src.network': 'Could not reach the server.',
+  'activity.src.timeout': 'The lookup timed out.',
+  'activity.src.status_unknown': 'Unknown',
+  'activity.src.self': 'Self',
+  'activity.src.omit.timestamp': 'Time is not available from this chain lookup, so it is not shown.',
+  'activity.src.omit.direction': 'Sent/received direction is not available from this chain lookup, so it is not shown.',
+  'activity.src.omit.counterparty': 'The counterparty address is not available from this chain lookup, so it is not shown.',
+  'activity.src.omit.amount': 'The amount is not available from this chain lookup, so it is not shown.',
+  'activity.src.omit.memo': 'Memos are not available from this chain lookup, so they are not shown.',
+  // Aptos-specific: the fullnode only returns transactions this account sent.
+  'activity.src.aptos.sent_only': 'Sent transactions only — the Aptos node does not list received ones.',
+
   'activity.outgoing': 'Sent',
   'activity.incoming': 'Received',
   'activity.label.token': 'Token',
